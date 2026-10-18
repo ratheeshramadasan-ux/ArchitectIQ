@@ -1,12 +1,12 @@
 ﻿import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -62,15 +62,26 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
-
-
+  
 class ProjectEnvironment(Base):
     __tablename__ = "project_environments"
-    __table_args__ = (UniqueConstraint("project_id", "environment"),)
+    __table_args__ = (
+        UniqueConstraint("project_id", "environment"),
+        CheckConstraint(
+            "environment IN ('DEV', 'TEST', 'UAT', 'PROD')",
+            name="ck_project_environments_allowed_environment",
+        ),
+    )
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"))
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id")
+    )
     environment: Mapped[str] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now
+        DateTime(timezone=True),
+        default=utc_now,
     )
