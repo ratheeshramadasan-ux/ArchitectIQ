@@ -1,17 +1,22 @@
 ﻿import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
-
 class Base(DeclarativeBase):
     pass
-
 
 class Tenant(Base):
     __tablename__ = "tenants"
@@ -37,19 +42,45 @@ class Organization(Base):
     )
 
 
+
 class Folder(Base):
     __tablename__ = "folders"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "organization_id",
+            name="uq_folders_id_organization",
+        ),
+        ForeignKeyConstraint(
+            ["parent_folder_id", "organization_id"],
+            ["folders.id", "folders.organization_id"],
+            name="fk_folders_parent_same_organization",
+        ),
+        CheckConstraint(
+            "parent_folder_id IS NULL OR parent_folder_id <> id",
+            name="ck_folders_no_self_parent",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("organizations.id")
+        ForeignKey("organizations.id"),
     )
+
     parent_folder_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("folders.id"), nullable=True
+        nullable=True,
     )
+
     name: Mapped[str] = mapped_column(String(200))
+
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utc_now
+        DateTime(timezone=True),
+        default=utc_now,
     )
 
 
