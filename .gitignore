@@ -1,0 +1,28 @@
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.pyc
+
+# Node.js
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local files
+.DS_Store
+Thumbs.db
+.vscode/

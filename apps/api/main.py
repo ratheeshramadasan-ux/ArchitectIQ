@@ -1,0 +1,23 @@
+﻿from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI(
+    title="ArchitectIQ Enterprise AI & Automation Studio",
+    version="0.1.0",
+    description="Enterprise AI and Automation Control Plane API",
+)
+
+
+class HealthResponse(BaseModel):
+    status: str
+    service: str
+    version: str
+
+
+@app.get("/health", response_model=HealthResponse, tags=["Health"])
+def health() -> HealthResponse:
+    return HealthResponse(
+        status="healthy",
+        service="architectiq-api",
+        version="0.1.0",
+    )
