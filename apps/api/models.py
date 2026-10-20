@@ -18,6 +18,74 @@ def utc_now() -> datetime:
 class Base(DeclarativeBase):
     pass
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    display_name: Mapped[str] = mapped_column(String(200))
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="ACTIVE",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ACTIVE', 'SUSPENDED', 'DISABLED')",
+            name="ck_users_allowed_status",
+        ),
+    )
+
+class TenantMembership(Base):
+    __tablename__ = "tenant_memberships"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "tenant_id",
+            name="uq_tenant_memberships_user_tenant",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'SUSPENDED', 'REVOKED')",
+            name="ck_tenant_memberships_allowed_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=False,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="ACTIVE",
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+    )
+
 class Tenant(Base):
     __tablename__ = "tenants"
 
@@ -40,7 +108,6 @@ class Organization(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
-
 
 
 class Folder(Base):
@@ -115,4 +182,40 @@ class ProjectEnvironment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,
+    )
+class UserExternalIdentity(Base):
+    __tablename__ = "user_external_identities"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "issuer",
+            "subject",
+            name="uq_user_external_identities_issuer_subject",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    issuer: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    subject: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
     )
