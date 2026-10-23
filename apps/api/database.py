@@ -31,6 +31,14 @@ iam_engine = create_engine(
     max_overflow=5,
 )
 
+audit_engine = create_engine(
+    settings.audit_database_url,
+    pool_pre_ping=True,
+    pool_size=2,
+    max_overflow=3,
+)
+
+
 IAMSessionLocal = sessionmaker(
     bind=iam_engine,
     autoflush=False,
@@ -49,6 +57,11 @@ RuntimeSessionLocal = sessionmaker(
     expire_on_commit=False,
 )
 
+AuditSessionLocal = sessionmaker(
+    bind=audit_engine,
+    autoflush=False,
+    expire_on_commit=False,
+)
 
 def get_admin_db() -> Iterator[Session]:
     """Provide a privileged database session for trusted internal operations only.
@@ -82,4 +95,14 @@ def tenant_session(tenant_id: UUID) -> Iterator[Session]:
             ),
             {"tenant_id": str(tenant_id)},
         )
+        yield session
+
+@contextmanager
+def audit_session() -> Iterator[Session]:
+    """Independent transaction for HTTP request audit writes.
+
+    Only use with the restricted audit-writer database identity.
+    Never reuse a tenant business transaction for audit persistence.
+    """
+    with AuditSessionLocal() as session, session.begin():
         yield session

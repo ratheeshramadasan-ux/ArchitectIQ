@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str
     app_database_url: str
     iam_database_url: str
+    audit_database_url: str
     redis_url: str
 
     native_jwt_secret: str | None = None

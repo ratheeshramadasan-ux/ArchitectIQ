@@ -5,6 +5,7 @@ from typing import Annotated
 
 import jwt
 from fastapi import Depends
+from fastapi import Request
 from fastapi import HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
@@ -200,21 +201,23 @@ def get_authenticated_user_id(
     return user_id
 
 def get_authorized_tenant_db(
+    request: Request,
     tenant_id: UUID,
     user_id: Annotated[
         UUID,
         Depends(get_authenticated_user_id),
     ],
 ) -> Iterator[Session]:
-    """Provide a tenant-scoped session after authentication and authorization."""
 
     try:
         with authorized_tenant_session(
             user_id=user_id,
             tenant_id=tenant_id,
         ) as session:
-            # Transaction-local identity for immutable audit attribution.
-            session.execute(text("SELECT set_config('architectiq.actor_id', :actor, true)"), {"actor": str(user_id)})
+
+            request.state.verified_actor_id = user_id
+            request.state.verified_tenant_id = tenant_id
+
             yield session
 
     except TenantAccessDenied as exc:
