@@ -1,4 +1,4 @@
-﻿from unittest.mock import patch
+from unittest.mock import patch
 
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
@@ -42,11 +42,11 @@ def test_invalid_bearer_token():
 
         response = client.get(
             "/test/protected",
-            headers={"Authorization": "Bearer invalid-token"},
+            headers={"Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.c2lnbmF0dXJl"},
         )
 
         assert response.status_code == 401
-        verifier.assert_called_once_with("invalid-token")
+        verifier.assert_called_once_with("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.c2lnbmF0dXJl")
 
 
 def test_valid_bearer_token():
@@ -61,7 +61,7 @@ def test_valid_bearer_token():
     ) as verifier:
         response = client.get(
             "/test/protected",
-            headers={"Authorization": "Bearer valid-test-token"},
+            headers={"Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.c2lnbmF0dXJl"},
         )
 
         assert response.status_code == 200
@@ -70,4 +70,4 @@ def test_valid_bearer_token():
             "subject": identity.subject,
         }
 
-        verifier.assert_called_once_with("valid-test-token")
+        verifier.assert_called_once_with("eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.c2lnbmF0dXJl")

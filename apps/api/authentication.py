@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 from typing import Annotated
 
@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
 from collections.abc import Iterator
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from iam import TenantAccessDenied, authorized_tenant_session
 
@@ -161,6 +162,16 @@ def get_verified_identity(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    # Native HS256 tokens are verified separately; external OIDC remains RS256-only.
+    from native_auth import validate_native_token
+    import jwt as _jwt
+    try:
+        _header = _jwt.get_unverified_header(credentials.credentials)
+    except _jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid access token")
+    if _header.get("alg") == "HS256":
+        user_id, _ = validate_native_token(credentials.credentials)
+        return VerifiedIdentity(issuer="architectiq-native", subject=str(user_id))
     return verify_access_token(credentials.credentials)
 
 def get_authenticated_user_id(
@@ -170,6 +181,9 @@ def get_authenticated_user_id(
     ],
 ) -> UUID:
     """Resolve a verified OIDC identity to an active internal user."""
+
+    if identity.issuer == "architectiq-native":
+        return UUID(identity.subject)
 
     user_id = resolve_external_identity(
         issuer=identity.issuer,
@@ -199,6 +213,8 @@ def get_authorized_tenant_db(
             user_id=user_id,
             tenant_id=tenant_id,
         ) as session:
+            # Transaction-local identity for immutable audit attribution.
+            session.execute(text("SELECT set_config('architectiq.actor_id', :actor, true)"), {"actor": str(user_id)})
             yield session
 
     except TenantAccessDenied as exc:

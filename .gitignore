@@ -26,3 +26,50 @@ test-results/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Python environments and caches
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Frontend dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+build/
+**/build/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases and backups
+backups/
+*.sql
+*.dump
+*.sqlite
+*.sqlite3
+
+# Temporary milestone installers
+architectiq-m3-integration/
+architectiq-m31-native-iam-patch/
+m3-bulk/
+patch/
+INSTALL-M3*.ps1
+ArchitectIQ-M3-*.zip
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

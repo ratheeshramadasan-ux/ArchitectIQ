@@ -1,4 +1,7 @@
-﻿from fastapi import FastAPI
+from tenant_discovery import router as tenant_discovery_router
+from native_auth import router as native_router
+from workspace import router as workspace_router
+from fastapi import FastAPI
 from pydantic import BaseModel
 
 app = FastAPI(
@@ -21,3 +24,10 @@ def health() -> HealthResponse:
         service="architectiq-api",
         version="0.1.0",
     )
+
+app.include_router(workspace_router)
+
+
+app.include_router(native_router)
+
+app.include_router(tenant_discovery_router)

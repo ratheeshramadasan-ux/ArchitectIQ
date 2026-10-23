@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     iam_database_url: str
     redis_url: str
 
+    native_jwt_secret: str | None = None
     oidc_issuer: str | None = None
     oidc_audience: str | None = None
     oidc_jwks_url: str | None = None
