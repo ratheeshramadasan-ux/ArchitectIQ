@@ -2,11 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Activity,
   Archive,
+  ArrowUpRight,
   Building2,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Folder,
   FolderPlus,
+  GitPullRequest,
   Layers3,
   LockKeyhole,
   Play,
@@ -20,6 +23,7 @@ import {
   Trash2,
   UserPlus,
   Users,
+  XCircle,
 } from 'lucide-react'
 
 type Node = {
@@ -82,6 +86,34 @@ type ProjectPermissions = {
   can_delete: boolean
 }
 
+type EnvironmentBinding = {
+  environment_id: string
+  environment_name: string
+  binding_id: string | null
+  is_enabled: boolean
+  config_overrides: Record<string, unknown>
+  updated_at: string | null
+}
+
+type PromotionRecord = {
+  id: string
+  project_id: string
+  source_environment_id: string
+  source_environment_name: string
+  target_environment_id: string
+  target_environment_name: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXECUTED' | 'CANCELLED'
+  notes: string | null
+  review_notes: string | null
+  drift_detected: boolean
+  drift_details: Record<string, { source: unknown; target: unknown }>
+  requested_by: string
+  reviewed_by: string | null
+  created_at: string
+  reviewed_at: string | null
+  executed_at: string | null
+}
+
 const endpoint = '/api/v1/tenants'
 
 export default function WorkspaceLive({
@@ -99,13 +131,25 @@ export default function WorkspaceLive({
   onChanged: () => void
   view?: string
 }) {
-  const [resourceTab, setResourceTab] = useState<'Overview' | 'Activity' | 'Access' | 'Jobs' | 'Triggers' | 'Settings'>('Overview')
+  const [resourceTab, setResourceTab] = useState<'Overview' | 'Environments' | 'Activity' | 'Access' | 'Jobs' | 'Triggers' | 'Settings'>('Overview')
   const [events, setEvents] = useState<AuditEvent[]>([])
   const [auditLoading, setAuditLoading] = useState(false)
   const [auditError, setAuditError] = useState('')
   const [auditLimit, setAuditLimit] = useState(25)
   const [auditOperation, setAuditOperation] = useState('ALL')
   const [auditRefresh, setAuditRefresh] = useState(0)
+
+  // Environment bindings and promotions state
+  const [bindings, setBindings] = useState<EnvironmentBinding[]>([])
+  const [promotions, setPromotions] = useState<PromotionRecord[]>([])
+  const [envLoading, setEnvLoading] = useState(false)
+  const [envError, setEnvError] = useState('')
+  const [envRefresh, setEnvRefresh] = useState(0)
+  const [promoSource, setPromoSource] = useState('')
+  const [promoTarget, setPromoTarget] = useState('')
+  const [promoNotes, setPromoNotes] = useState('')
+  const [editBindingEnv, setEditBindingEnv] = useState<string | null>(null)
+  const [editBindingConfig, setEditBindingConfig] = useState('')
 
   // Access management state
   const [members, setMembers] = useState<ProjectMember[]>([])
@@ -291,6 +335,114 @@ export default function WorkspaceLive({
       cancelled = true
     }
   }, [selectedKind, selectedId, token, tenant, call, metaRefresh])
+
+  // Environment bindings and promotions loader
+  useEffect(() => {
+    if (resourceTab !== 'Environments' || selectedKind !== 'project' || !selectedId || !token || !tenant) return
+    let cancelled = false
+    const load = async () => {
+      setEnvLoading(true)
+      setEnvError('')
+      try {
+        const [b, p] = await Promise.all([
+          call(`/projects/${selectedId}/environment-bindings`),
+          call(`/projects/${selectedId}/promotions`),
+        ])
+        if (!cancelled) {
+          setBindings(b)
+          setPromotions(p)
+          if (b.length >= 2) {
+            setPromoSource((prev) => prev || b[0].environment_id)
+            setPromoTarget((prev) => prev || b[1].environment_id)
+          }
+        }
+      } catch (e) {
+        if (!cancelled) setEnvError(e instanceof Error ? e.message : 'Failed to load environment bindings')
+      } finally {
+        if (!cancelled) setEnvLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [resourceTab, selectedKind, selectedId, token, tenant, call, envRefresh])
+
+  async function handleSaveBinding(envId: string, cfg: Record<string, unknown>, enabled: boolean) {
+    if (!selectedId || selectedKind !== 'project') return
+    setBusy(true)
+    setEnvError('')
+    try {
+      await call(`/projects/${selectedId}/environment-bindings/${envId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ config_overrides: cfg, is_enabled: enabled }),
+      })
+      setEditBindingEnv(null)
+      setEnvRefresh((x) => x + 1)
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setEnvError(e instanceof Error ? e.message : 'Failed to update binding')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRequestPromotion() {
+    if (!selectedId || selectedKind !== 'project' || !promoSource || !promoTarget) return
+    setBusy(true)
+    setEnvError('')
+    try {
+      await call(`/projects/${selectedId}/promotions`, {
+        method: 'POST',
+        body: JSON.stringify({
+          source_environment_id: promoSource,
+          target_environment_id: promoTarget,
+          notes: promoNotes.trim() || null,
+        }),
+      })
+      setPromoNotes('')
+      setEnvRefresh((x) => x + 1)
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setEnvError(e instanceof Error ? e.message : 'Failed to request promotion')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleReviewPromotion(promoId: string, action: 'APPROVE' | 'REJECT') {
+    setBusy(true)
+    setEnvError('')
+    try {
+      await call(`/promotions/${promoId}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ action }),
+      })
+      setEnvRefresh((x) => x + 1)
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setEnvError(e instanceof Error ? e.message : 'Failed to review promotion')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleExecutePromotion(promoId: string) {
+    if (!window.confirm('Execute this approved promotion? Configuration overrides will synchronize to the target environment.')) return
+    setBusy(true)
+    setEnvError('')
+    try {
+      await call(`/promotions/${promoId}/execute`, { method: 'POST' })
+      setEnvRefresh((x) => x + 1)
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setEnvError(e instanceof Error ? e.message : 'Failed to execute promotion')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function handleArchiveProject() {
     if (!selectedId || selectedKind !== 'project') return
@@ -678,6 +830,287 @@ export default function WorkspaceLive({
     )
   }
 
+  function environmentsPanel() {
+    if (selectedKind !== 'project') {
+      return (
+        <div className="resource-empty">
+          <Server size={22} />
+          <h4>Project Environment Bindings</h4>
+          <p>Environment overrides and promotion requests are managed at the project level. Select a project to inspect bindings.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="environments-console">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div>
+            <h4 style={{ margin: 0 }}>Governed Environment Bindings</h4>
+            <small style={{ color: 'rgba(255,255,255,0.6)' }}>
+              Configuration overrides and promotion release gates across DEV, TEST, UAT, and PROD.
+            </small>
+          </div>
+          <button
+            className="primary-button"
+            disabled={envLoading}
+            onClick={() => setEnvRefresh((x) => x + 1)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
+
+        {envError && <p role="alert" style={{ color: '#ff8c9b' }}>{envError}</p>}
+
+        {envLoading ? (
+          <p>Loading environment configuration...</p>
+        ) : (
+          <>
+            {/* Environment Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 24 }}>
+              {bindings.map((b) => (
+                <div
+                  key={b.environment_id}
+                  className="metric-card glass"
+                  style={{
+                    padding: 14,
+                    borderLeft: `4px solid ${
+                      b.environment_name === 'PROD'
+                        ? '#ef4444'
+                        : b.environment_name === 'UAT'
+                        ? '#f59e0b'
+                        : b.environment_name === 'TEST'
+                        ? '#3b82f6'
+                        : '#10b981'
+                    }`,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <h3 style={{ margin: 0, fontSize: 16 }}>{b.environment_name}</h3>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        background: b.is_enabled ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        color: b.is_enabled ? '#10b981' : '#ef4444',
+                      }}
+                    >
+                      {b.is_enabled ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                  </div>
+                  <pre
+                    style={{
+                      background: 'rgba(0,0,0,0.3)',
+                      padding: 8,
+                      borderRadius: 4,
+                      fontSize: 11,
+                      maxHeight: 90,
+                      overflowY: 'auto',
+                      color: 'rgba(255,255,255,0.85)',
+                    }}
+                  >
+                    {Object.keys(b.config_overrides).length
+                      ? JSON.stringify(b.config_overrides, null, 2)
+                      : '// No overrides'}
+                  </pre>
+                  {userPermissions?.can_edit && (
+                    <button
+                      className="primary-button"
+                      style={{ fontSize: 11, padding: '4px 8px', marginTop: 8, width: '100%' }}
+                      onClick={() => {
+                        setEditBindingEnv(b.environment_id)
+                        setEditBindingConfig(JSON.stringify(b.config_overrides, null, 2))
+                      }}
+                    >
+                      Edit Overrides
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Overrides editor modal/box */}
+            {editBindingEnv && (
+              <div style={{ background: 'rgba(0,0,0,0.3)', padding: 14, borderRadius: 8, marginBottom: 20, border: '1px solid rgba(255,255,255,0.1)' }}>
+                <h4>Edit Overrides ({bindings.find((b) => b.environment_id === editBindingEnv)?.environment_name})</h4>
+                <textarea
+                  value={editBindingConfig}
+                  onChange={(e) => setEditBindingConfig(e.target.value)}
+                  rows={4}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: 12, borderRadius: 4, padding: 8, background: '#111', color: '#fff', border: '1px solid #333' }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button
+                    className="primary-button"
+                    onClick={() => {
+                      try {
+                        const parsed = JSON.parse(editBindingConfig)
+                        const b = bindings.find((x) => x.environment_id === editBindingEnv)
+                        void handleSaveBinding(editBindingEnv, parsed, b?.is_enabled ?? true)
+                      } catch {
+                        setEnvError('Invalid JSON configuration')
+                      }
+                    }}
+                  >
+                    Save Configuration
+                  </button>
+                  <button className="primary-button" onClick={() => setEditBindingEnv(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {/* Request Promotion Section */}
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 8, marginBottom: 24, border: '1px solid rgba(255,255,255,0.08)' }}>
+              <h4 style={{ margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <GitPullRequest size={16} /> Request Environment Promotion
+              </h4>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <label>
+                  Source Environment
+                  <select
+                    value={promoSource}
+                    onChange={(e) => setPromoSource(e.target.value)}
+                  >
+                    {bindings.map((b) => (
+                      <option key={b.environment_id} value={b.environment_id}>{b.environment_name}</option>
+                    ))}
+                  </select>
+                </label>
+                <div style={{ paddingBottom: 8, color: 'rgba(255,255,255,0.5)' }}>
+                  <ArrowUpRight size={18} />
+                </div>
+                <label>
+                  Target Environment
+                  <select
+                    value={promoTarget}
+                    onChange={(e) => setPromoTarget(e.target.value)}
+                  >
+                    {bindings.map((b) => (
+                      <option key={b.environment_id} value={b.environment_id}>{b.environment_name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ flex: 1, minWidth: 200 }}>
+                  Release Notes
+                  <input
+                    value={promoNotes}
+                    onChange={(e) => setPromoNotes(e.target.value)}
+                    placeholder="e.g. Release v2.1 with performance optimizations"
+                  />
+                </label>
+                <button
+                  className="primary-button"
+                  disabled={busy || !userPermissions?.can_edit}
+                  onClick={handleRequestPromotion}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <GitPullRequest size={14} /> Submit Request
+                </button>
+              </div>
+            </div>
+
+            {/* Promotions History Table */}
+            <div>
+              <h4 style={{ margin: '0 0 12px 0' }}>Promotion History & Approvals</h4>
+              {promotions.length === 0 ? (
+                <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>No promotion requests recorded for this project.</p>
+              ) : (
+                <table className="activity-table" style={{ width: '100%', textAlign: 'left', fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      <th>Sequence</th>
+                      <th>Status</th>
+                      <th>Drift</th>
+                      <th>Notes</th>
+                      <th>Requested At</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {promotions.map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          <strong>{p.source_environment_name}</strong> &rarr; <strong>{p.target_environment_name}</strong>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontWeight: 600,
+                              background:
+                                p.status === 'EXECUTED'
+                                  ? '#065f46'
+                                  : p.status === 'APPROVED'
+                                  ? '#1e3a8a'
+                                  : p.status === 'REJECTED'
+                                  ? '#831843'
+                                  : '#78350f',
+                              color: '#fff',
+                            }}
+                          >
+                            {p.status}
+                          </span>
+                        </td>
+                        <td>
+                          {p.drift_detected ? (
+                            <span style={{ color: '#fbbf24', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              Drift ({Object.keys(p.drift_details).length} keys)
+                            </span>
+                          ) : (
+                            <span style={{ color: '#10b981', fontSize: 12 }}>In Sync</span>
+                          )}
+                        </td>
+                        <td>{p.notes || '—'}</td>
+                        <td>{new Date(p.created_at).toLocaleString()}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {p.status === 'PENDING' && userPermissions?.can_manage_members && (
+                              <>
+                                <button
+                                  className="primary-button"
+                                  style={{ padding: '2px 8px', fontSize: 11 }}
+                                  disabled={busy}
+                                  onClick={() => handleReviewPromotion(p.id, 'APPROVE')}
+                                >
+                                  <CheckCircle2 size={12} /> Approve
+                                </button>
+                                <button
+                                  className="danger-button"
+                                  style={{ padding: '2px 8px', fontSize: 11 }}
+                                  disabled={busy}
+                                  onClick={() => handleReviewPromotion(p.id, 'REJECT')}
+                                >
+                                  <XCircle size={12} /> Reject
+                                </button>
+                              </>
+                            )}
+                            {p.status === 'APPROVED' && userPermissions?.can_manage_members && (
+                              <button
+                                className="primary-button"
+                                style={{ padding: '2px 8px', fontSize: 11, background: '#059669' }}
+                                disabled={busy}
+                                onClick={() => handleExecutePromotion(p.id)}
+                              >
+                                Execute
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
   async function create() {
     if (!newName.trim()) return
     const parent = selected
@@ -915,8 +1348,21 @@ export default function WorkspaceLive({
             {selected && (
               <>
                 <div className="resource-tabs" role="tablist" aria-label="Resource management">
-                  {(['Overview', 'Activity', 'Access', 'Jobs', 'Triggers', 'Settings'] as const).map((tab) => {
-                    const Icon = tab === 'Activity' ? Activity : tab === 'Access' ? LockKeyhole : tab === 'Jobs' ? Play : tab === 'Triggers' ? Timer : tab === 'Settings' ? Settings2 : Layers3
+                  {(['Overview', 'Environments', 'Activity', 'Access', 'Jobs', 'Triggers', 'Settings'] as const).map((tab) => {
+                    const Icon =
+                      tab === 'Environments'
+                        ? Server
+                        : tab === 'Activity'
+                        ? Activity
+                        : tab === 'Access'
+                        ? LockKeyhole
+                        : tab === 'Jobs'
+                        ? Play
+                        : tab === 'Triggers'
+                        ? Timer
+                        : tab === 'Settings'
+                        ? Settings2
+                        : Layers3
                     return (
                       <button
                         key={tab}
@@ -1045,6 +1491,8 @@ export default function WorkspaceLive({
                         )}
                       </div>
                     )
+                  ) : resourceTab === 'Environments' ? (
+                    environmentsPanel()
                   ) : resourceTab === 'Activity' ? (
                     auditPanel()
                   ) : resourceTab === 'Access' ? (
