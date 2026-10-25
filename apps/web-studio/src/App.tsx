@@ -215,8 +215,8 @@ function App(){
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
  const isDarkTheme = dark || ['Obsidian Glass', 'Aurora Glass', 'Smoky Quartz', 'Midnight Glass'].includes(themeConfig.activeTheme) || !!themeConfig.activeBackground
- const brandLogo = isDarkTheme ? '/logo-dark.png' : '/logo-light.png'
- const brandShield = isDarkTheme ? '/shield-dark.png' : '/shield-light.png'
+ const brandLogo = isDarkTheme ? '/brand/logo-dark.png' : '/brand/logo-light.png'
+ const brandShield = isDarkTheme ? '/brand/shield-hd.png' : '/brand/shield-light.png'
 
  return (
   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>

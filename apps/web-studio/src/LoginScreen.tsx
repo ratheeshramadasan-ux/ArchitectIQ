@@ -100,7 +100,7 @@ export default function LoginScreen({
       <main className="iq-login">
         <form className="iq-login-card" onSubmit={submitCreateFirstTenant}>
           <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <img src="/logo-dark.png" alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+            <img src="/brand/logo-dark.png" alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
           </div>
           <h2>Create Your First Tenant</h2>
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted, #94a3b8)', marginBottom: 16 }}>
@@ -135,7 +135,7 @@ export default function LoginScreen({
     <main className="iq-login">
       <form className="iq-login-card" onSubmit={submitLogin}>
         <div style={{ textAlign: 'center', marginBottom: 12 }}>
-          <img src="/logo-dark.png" alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+          <img src="/brand/logo-dark.png" alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
         </div>
         <h2>Sign in</h2>
         <label>
