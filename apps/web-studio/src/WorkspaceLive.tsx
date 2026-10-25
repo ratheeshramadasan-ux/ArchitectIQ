@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   Archive,
@@ -15,14 +15,17 @@ import {
   Play,
   RefreshCw,
   RotateCcw,
+  Search,
   Server,
   Settings2,
   ShieldCheck,
+  Star,
   Tag,
   Timer,
   Trash2,
   UserPlus,
   Users,
+  X,
   XCircle,
 } from 'lucide-react'
 
@@ -116,6 +119,17 @@ type PromotionRecord = {
 
 const endpoint = '/api/v1/tenants'
 
+function findNodePath(nodes: Node[], targetId: string, current: Node[] = []): Node[] | null {
+  for (const n of nodes) {
+    if (n.id === targetId) return [...current, n]
+    if (n.children?.length) {
+      const found = findNodePath(n.children, targetId, [...current, n])
+      if (found) return found
+    }
+  }
+  return null
+}
+
 export default function WorkspaceLive({
   token,
   tenant,
@@ -185,6 +199,52 @@ export default function WorkspaceLive({
   const [moveTarget, setMoveTarget] = useState('')
   const [dragged, setDragged] = useState<Node | null>(null)
   const [kind, setKind] = useState<'organization' | 'folder' | 'project' | 'environment'>('organization')
+
+  // M4.4 UX States: Search filtering, favorites, context menu, virtualization
+  const [treeFilter, setTreeFilter] = useState('')
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => {
+    try {
+      const s = localStorage.getItem('architectiq_fav_' + tenant)
+      return s ? new Set(JSON.parse(s)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; node: Node } | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const treeContainerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('architectiq_fav_' + tenant, JSON.stringify([...favoriteIds]))
+    } catch {
+      // ignore
+    }
+  }, [favoriteIds, tenant])
+
+  const toggleFavorite = useCallback((id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    setFavoriteIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const handleClose = () => setContextMenu(null)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setContextMenu(null)
+    }
+    window.addEventListener('click', handleClose)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('click', handleClose)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   const base = `${endpoint}/${tenant}/workspace`
 
@@ -444,13 +504,14 @@ export default function WorkspaceLive({
     }
   }
 
-  async function handleArchiveProject() {
-    if (!selectedId || selectedKind !== 'project') return
-    if (!window.confirm('Are you sure you want to archive this project? It will be hidden from default workspace views.')) return
+  async function handleArchiveProject(targetNode?: Node) {
+    const node = targetNode || selected
+    if (!node || node.kind !== 'project') return
+    if (!window.confirm(`Are you sure you want to archive project "${node.name}"? It will be hidden from default workspace views.`)) return
     setBusy(true)
     setError('')
     try {
-      await call(`/projects/${selectedId}/archive`, { method: 'POST' })
+      await call(`/projects/${node.id}/archive`, { method: 'POST' })
       setMetaRefresh((x) => x + 1)
       await refresh()
       setAuditRefresh((x) => x + 1)
@@ -462,12 +523,13 @@ export default function WorkspaceLive({
     }
   }
 
-  async function handleRestoreProject() {
-    if (!selectedId || selectedKind !== 'project') return
+  async function handleRestoreProject(targetNode?: Node) {
+    const node = targetNode || selected
+    if (!node || node.kind !== 'project') return
     setBusy(true)
     setError('')
     try {
-      await call(`/projects/${selectedId}/restore`, { method: 'POST' })
+      await call(`/projects/${node.id}/restore`, { method: 'POST' })
       setMetaRefresh((x) => x + 1)
       await refresh()
       setAuditRefresh((x) => x + 1)
@@ -506,14 +568,15 @@ export default function WorkspaceLive({
     }
   }
 
-  async function handleDeleteFolder() {
-    if (!selectedId || selectedKind !== 'folder') return
-    if (!window.confirm('Are you sure you want to delete this folder? The folder must be completely empty.')) return
+  async function handleDeleteFolder(targetNode?: Node) {
+    const node = targetNode || selected
+    if (!node || node.kind !== 'folder') return
+    if (!window.confirm(`Are you sure you want to delete folder "${node.name}"? The folder must be completely empty.`)) return
     setBusy(true)
     setError('')
     try {
-      await call(`/folders/${selectedId}`, { method: 'DELETE' })
-      setSelected(null)
+      await call(`/folders/${node.id}`, { method: 'DELETE' })
+      if (selected?.id === node.id) setSelected(null)
       await refresh()
       setAuditRefresh((x) => x + 1)
       onChanged()
@@ -1209,66 +1272,155 @@ export default function WorkspaceLive({
     }
   }
 
-  function renderNode(n: Node, depth = 0): React.ReactNode {
-    const open = expanded.has(n.id)
-    return (
-      <div key={n.id}>
-        <button
-          draggable={n.kind === 'folder' || n.kind === 'project'}
-          onDragStart={(e) => {
-            if (n.kind === 'folder' || n.kind === 'project') {
-              setDragged(n)
-              e.dataTransfer.setData('text/plain', n.id)
-              e.dataTransfer.effectAllowed = 'move'
-            }
-          }}
-          onDragOver={(e) => {
-            if (dragged && (n.kind === 'folder' || n.kind === 'org')) e.preventDefault()
-          }}
-          onDrop={(e) => {
-            e.preventDefault()
-            if (dragged) void moveResource(dragged, n)
-          }}
-          onDragEnd={() => setDragged(null)}
-          className={`tree-row ${selected?.id === n.id ? 'tree-selected' : ''}`}
-          style={{ paddingLeft: 12 + depth * 17 }}
-          onClick={() => {
-            setSelected(n)
-            setResourceTab('Overview')
-            setExpanded((s) => {
-              const next = new Set(s)
-              if (next.has(n.id)) next.delete(n.id)
-              else next.add(n.id)
-              return next
-            })
-          }}
-        >
-          {n.children?.length ? (
-            open ? <ChevronDown size={15} /> : <ChevronRight size={15} />
-          ) : (
-            <span style={{ width: 15 }} />
-          )}
-          {n.kind === 'org' ? <Building2 size={16} /> : n.kind === 'folder' ? <Folder size={16} /> : n.kind === 'project' ? <Layers3 size={16} /> : <Server size={16} />}
-          <span>{n.name}</span>
-          {n.lifecycle_status === 'ARCHIVED' && (
-            <span
-              style={{
-                fontSize: 10,
-                padding: '1px 6px',
-                borderRadius: 4,
-                background: '#78350f',
-                color: '#fef3c7',
-                marginLeft: 6,
-                fontWeight: 600,
-              }}
-            >
-              ARCHIVED
-            </span>
-          )}
-        </button>
-        {open && n.children?.map((c) => renderNode(c, depth + 1))}
-      </div>
-    )
+  function filterTree(nodes: Node[], query: string, favOnly: boolean, favs: Set<string>): { filtered: Node[]; matchingIds: Set<string> } {
+    const matchingIds = new Set<string>()
+    const q = query.trim().toLowerCase()
+
+    function process(node: Node): Node | null {
+      const nameMatches = q ? node.name.toLowerCase().includes(q) || node.kind.toLowerCase().includes(q) : true
+      const favMatches = favOnly ? favs.has(node.id) : true
+
+      const matchingChildren: Node[] = []
+      if (node.children) {
+        for (const child of node.children) {
+          const processedChild = process(child)
+          if (processedChild) matchingChildren.push(processedChild)
+        }
+      }
+
+      const isDirectMatch = (q ? nameMatches : true) && (favOnly ? favMatches : true)
+      const hasMatchingChild = matchingChildren.length > 0
+
+      if (isDirectMatch || hasMatchingChild) {
+        if (isDirectMatch) matchingIds.add(node.id)
+        return {
+          ...node,
+          children: matchingChildren,
+        }
+      }
+      return null
+    }
+
+    const filtered: Node[] = []
+    for (const n of nodes) {
+      const res = process(n)
+      if (res) filtered.push(res)
+    }
+    return { filtered, matchingIds }
+  }
+
+  const { filtered: displayedTree, matchingIds } = useMemo(() => {
+    if (!treeFilter.trim() && !favoritesOnly) {
+      return { filtered: tree, matchingIds: new Set<string>() }
+    }
+    return filterTree(tree, treeFilter, favoritesOnly, favoriteIds)
+  }, [tree, treeFilter, favoritesOnly, favoriteIds])
+
+  const effectiveExpanded = useMemo(() => {
+    if (!treeFilter.trim() && !favoritesOnly) return expanded
+    const next = new Set(expanded)
+    for (const id of matchingIds) {
+      const path = findNodePath(tree, id)
+      if (path) {
+        for (const p of path) next.add(p.id)
+      }
+    }
+    return next
+  }, [expanded, treeFilter, favoritesOnly, matchingIds, tree])
+
+  type FlatRow = {
+    node: Node
+    depth: number
+    hasChildren: boolean
+    isOpen: boolean
+  }
+
+  function getFlatRows(nodes: Node[], depth = 0): FlatRow[] {
+    const rows: FlatRow[] = []
+    for (const n of nodes) {
+      const hasChildren = Boolean(n.children && n.children.length > 0)
+      const isOpen = effectiveExpanded.has(n.id)
+      rows.push({ node: n, depth, hasChildren, isOpen })
+      if (hasChildren && isOpen) {
+        rows.push(...getFlatRows(n.children, depth + 1))
+      }
+    }
+    return rows
+  }
+
+  const flatRows = getFlatRows(displayedTree)
+  const ROW_HEIGHT = 34
+  const containerHeight = 420
+  const buffer = 5
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - buffer)
+  const endIndex = Math.min(flatRows.length, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + buffer)
+  const visibleRows = flatRows.slice(startIndex, endIndex)
+  const topPadding = startIndex * ROW_HEIGHT
+  const bottomPadding = Math.max(0, (flatRows.length - endIndex) * ROW_HEIGHT)
+
+  const currentPath = selected ? findNodePath(tree, selected.id) || [selected] : []
+
+  const handleTreeKeyDown = (e: React.KeyboardEvent) => {
+    if (!flatRows.length) return
+    const currentIndex = flatRows.findIndex((r) => r.node.id === selected?.id)
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const nextIndex = currentIndex < 0 ? 0 : Math.min(flatRows.length - 1, currentIndex + 1)
+      const next = flatRows[nextIndex]
+      if (next) {
+        setSelected(next.node)
+        setResourceTab('Overview')
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prevIndex = currentIndex < 0 ? 0 : Math.max(0, currentIndex - 1)
+      const prev = flatRows[prevIndex]
+      if (prev) {
+        setSelected(prev.node)
+        setResourceTab('Overview')
+      }
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      if (currentIndex >= 0) {
+        const curr = flatRows[currentIndex]
+        if (curr.hasChildren && !curr.isOpen) {
+          setExpanded((prev) => new Set(prev).add(curr.node.id))
+        } else if (curr.hasChildren && curr.isOpen && currentIndex + 1 < flatRows.length) {
+          setSelected(flatRows[currentIndex + 1].node)
+        }
+      }
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      if (currentIndex >= 0) {
+        const curr = flatRows[currentIndex]
+        if (curr.hasChildren && curr.isOpen) {
+          setExpanded((prev) => {
+            const next = new Set(prev)
+            next.delete(curr.node.id)
+            return next
+          })
+        } else {
+          const path = findNodePath(tree, curr.node.id)
+          if (path && path.length > 1) {
+            setSelected(path[path.length - 2])
+          }
+        }
+      }
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      if (currentIndex >= 0) {
+        const curr = flatRows[currentIndex]
+        if (curr.hasChildren) {
+          setExpanded((prev) => {
+            const next = new Set(prev)
+            if (next.has(curr.node.id)) next.delete(curr.node.id)
+            else next.add(curr.node.id)
+            return next
+          })
+        }
+      }
+    }
   }
 
   const flatten = (items: Node[]): Node[] => items.flatMap((n) => [n, ...flatten(n.children || [])])
@@ -1317,6 +1469,51 @@ export default function WorkspaceLive({
               <h3>Resource hierarchy</h3>
               <small>Organization / folders / projects</small>
             </div>
+
+            <div className="tree-search-wrap">
+              <Search size={14} className="tree-search-icon" />
+              <input
+                type="search"
+                aria-label="Filter resource hierarchy"
+                placeholder="Filter hierarchy..."
+                value={treeFilter}
+                onChange={(e) => setTreeFilter(e.target.value)}
+                className="tree-search-input"
+              />
+              {treeFilter && (
+                <button
+                  type="button"
+                  className="tree-search-clear"
+                  aria-label="Clear filter"
+                  onClick={() => setTreeFilter('')}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
+            <div className="tree-filter-pills" role="tablist" aria-label="Filter mode">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!favoritesOnly}
+                className={`tree-filter-pill ${!favoritesOnly ? 'active' : ''}`}
+                onClick={() => setFavoritesOnly(false)}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={favoritesOnly}
+                className={`tree-filter-pill ${favoritesOnly ? 'active' : ''}`}
+                onClick={() => setFavoritesOnly(true)}
+              >
+                <Star size={11} fill={favoritesOnly ? '#fbbf24' : 'none'} color={favoritesOnly ? '#fbbf24' : 'currentColor'} />
+                Favorites ({favoriteIds.size})
+              </button>
+            </div>
+
             <div
               style={{
                 padding: '6px 12px 10px 12px',
@@ -1338,12 +1535,151 @@ export default function WorkspaceLive({
                 Show archived projects
               </label>
             </div>
-            {tree.length ? tree.map((n) => renderNode(n)) : <p>No workspace resources found.</p>}
+
+            <div
+              ref={treeContainerRef}
+              className="tree-virtual-container"
+              role="tree"
+              tabIndex={0}
+              aria-label="Resource hierarchy tree"
+              onScroll={(e) => setScrollTop((e.target as HTMLDivElement).scrollTop)}
+              onKeyDown={handleTreeKeyDown}
+            >
+              {flatRows.length > 0 ? (
+                <div style={{ paddingTop: topPadding, paddingBottom: bottomPadding }}>
+                  {visibleRows.map(({ node: n, depth, hasChildren, isOpen }) => (
+                    <div key={n.id} style={{ height: ROW_HEIGHT }}>
+                      <button
+                        draggable={n.kind === 'folder' || n.kind === 'project'}
+                        onDragStart={(e) => {
+                          if (n.kind === 'folder' || n.kind === 'project') {
+                            setDragged(n)
+                            e.dataTransfer.setData('text/plain', n.id)
+                            e.dataTransfer.effectAllowed = 'move'
+                          }
+                        }}
+                        onDragOver={(e) => {
+                          if (dragged && (n.kind === 'folder' || n.kind === 'org')) e.preventDefault()
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          if (dragged) void moveResource(dragged, n)
+                        }}
+                        onDragEnd={() => setDragged(null)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setContextMenu({
+                            x: Math.min(e.clientX, window.innerWidth - 220),
+                            y: Math.min(e.clientY, window.innerHeight - 260),
+                            node: n,
+                          })
+                        }}
+                        role="treeitem"
+                        aria-level={depth + 1}
+                        aria-selected={selected?.id === n.id}
+                        aria-expanded={hasChildren ? isOpen : undefined}
+                        className={`tree-row ${selected?.id === n.id ? 'tree-selected' : ''}`}
+                        style={{ paddingLeft: 12 + depth * 17 }}
+                        onClick={() => {
+                          setSelected(n)
+                          setResourceTab('Overview')
+                          if (hasChildren) {
+                            setExpanded((s) => {
+                              const next = new Set(s)
+                              if (next.has(n.id)) next.delete(n.id)
+                              else next.add(n.id)
+                              return next
+                            })
+                          }
+                        }}
+                      >
+                        {hasChildren ? (
+                          isOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />
+                        ) : (
+                          <span style={{ width: 15 }} />
+                        )}
+                        {n.kind === 'org' ? <Building2 size={16} /> : n.kind === 'folder' ? <Folder size={16} /> : n.kind === 'project' ? <Layers3 size={16} /> : <Server size={16} />}
+                        <span>{n.name}</span>
+                        {n.lifecycle_status === 'ARCHIVED' && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              background: '#78350f',
+                              color: '#fef3c7',
+                              marginLeft: 6,
+                              fontWeight: 600,
+                            }}
+                          >
+                            ARCHIVED
+                          </span>
+                        )}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className={`tree-row-favorite ${favoriteIds.has(n.id) ? 'favorited' : ''}`}
+                          aria-label={favoriteIds.has(n.id) ? `Unfavorite ${n.name}` : `Favorite ${n.name}`}
+                          onClick={(e) => toggleFavorite(n.id, e)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.stopPropagation()
+                              toggleFavorite(n.id)
+                            }
+                          }}
+                          title={favoriteIds.has(n.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Star size={13} fill={favoriteIds.has(n.id) ? '#fbbf24' : 'none'} />
+                        </span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ padding: '12px 6px', color: 'var(--muted)', fontSize: 13 }}>
+                  {treeFilter || favoritesOnly ? 'No matching resources found.' : 'No workspace resources found.'}
+                </p>
+              )}
+            </div>
           </aside>
           <div className="resource-main">
-            <div className="resource-pane-heading">
-              <h3>{selected?.name || 'Select a resource'}</h3>
-              <small>{selected ? `${selected.kind.toUpperCase()} · ${tenantName}` : 'Select a resource in the hierarchy to inspect it'}</small>
+            {selected && currentPath.length > 0 && (
+              <nav aria-label="Hierarchy breadcrumb" className="workspace-breadcrumbs">
+                {currentPath.map((item, idx) => (
+                  <span key={item.id} className="breadcrumb-segment">
+                    {idx > 0 && <span className="breadcrumb-separator">/</span>}
+                    <button
+                      type="button"
+                      className={`breadcrumb-link ${item.id === selected.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelected(item)
+                        setResourceTab('Overview')
+                      }}
+                      title={`Navigate to ${item.name}`}
+                    >
+                      {item.name}
+                    </button>
+                  </span>
+                ))}
+              </nav>
+            )}
+            <div className="resource-pane-heading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3>{selected?.name || 'Select a resource'}</h3>
+                <small>{selected ? `${selected.kind.toUpperCase()} · ${tenantName}` : 'Select a resource in the hierarchy to inspect it'}</small>
+              </div>
+              {selected && (
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={favoriteIds.has(selected.id) ? 'Remove favorite' : 'Add favorite'}
+                  onClick={() => toggleFavorite(selected.id)}
+                  title={favoriteIds.has(selected.id) ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Star size={18} color={favoriteIds.has(selected.id) ? '#fbbf24' : 'currentColor'} fill={favoriteIds.has(selected.id) ? '#fbbf24' : 'none'} />
+                </button>
+              )}
             </div>
             {selected && (
               <>
@@ -1449,7 +1785,7 @@ export default function WorkspaceLive({
                             <button
                               className="danger-button"
                               disabled={busy || !userPermissions?.can_delete}
-                              onClick={handleArchiveProject}
+                              onClick={() => handleArchiveProject()}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                             >
                               <Archive size={14} /> Archive Project
@@ -1458,7 +1794,7 @@ export default function WorkspaceLive({
                             <button
                               className="primary-button"
                               disabled={busy || !userPermissions?.can_delete}
-                              onClick={handleRestoreProject}
+                              onClick={() => handleRestoreProject()}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                             >
                               <RotateCcw size={14} /> Restore Project
@@ -1479,7 +1815,7 @@ export default function WorkspaceLive({
                             <button
                               className="danger-button"
                               disabled={busy}
-                              onClick={handleDeleteFolder}
+                              onClick={() => handleDeleteFolder()}
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                             >
                               <Trash2 size={14} /> Delete Empty Folder
@@ -1681,6 +2017,179 @@ export default function WorkspaceLive({
               )}
             </div>
           </div>
+        </div>
+      )}
+      {contextMenu && (
+        <div
+          className="context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+          role="menu"
+          aria-label="Resource actions"
+        >
+          {contextMenu.node.kind === 'org' && (
+            <button
+              type="button"
+              className="context-menu-item"
+              role="menuitem"
+              onClick={() => {
+                setSelected(contextMenu.node)
+                setResourceTab('Overview')
+                setContextMenu(null)
+              }}
+            >
+              <FolderPlus size={14} /> New Folder in Org
+            </button>
+          )}
+          {contextMenu.node.kind === 'folder' && (
+            <>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Overview')
+                  setContextMenu(null)
+                }}
+              >
+                <FolderPlus size={14} /> New Subfolder
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Overview')
+                  setContextMenu(null)
+                }}
+              >
+                <Layers3 size={14} /> New Project
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Overview')
+                  setContextMenu(null)
+                }}
+              >
+                <ArrowUpRight size={14} /> Move Folder
+              </button>
+              <div className="context-menu-separator" />
+              <button
+                type="button"
+                className="context-menu-item danger"
+                role="menuitem"
+                onClick={() => {
+                  const nodeToDelete = contextMenu.node
+                  setSelected(nodeToDelete)
+                  setContextMenu(null)
+                  void handleDeleteFolder(nodeToDelete)
+                }}
+              >
+                <Trash2 size={14} /> Delete Folder
+              </button>
+            </>
+          )}
+          {contextMenu.node.kind === 'project' && (
+            <>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Overview')
+                  setContextMenu(null)
+                }}
+              >
+                <Settings2 size={14} /> Project Overview
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Access')
+                  setContextMenu(null)
+                }}
+              >
+                <Users size={14} /> Manage Access
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Environments')
+                  setContextMenu(null)
+                }}
+              >
+                <GitPullRequest size={14} /> Environments & Promotions
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setSelected(contextMenu.node)
+                  setResourceTab('Overview')
+                  setContextMenu(null)
+                }}
+              >
+                <ArrowUpRight size={14} /> Move Project
+              </button>
+              <div className="context-menu-separator" />
+              {contextMenu.node.lifecycle_status === 'ARCHIVED' ? (
+                <button
+                  type="button"
+                  className="context-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    const nodeToRestore = contextMenu.node
+                    setSelected(nodeToRestore)
+                    setContextMenu(null)
+                    void handleRestoreProject(nodeToRestore)
+                  }}
+                >
+                  <RotateCcw size={14} /> Restore Project
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="context-menu-item danger"
+                  role="menuitem"
+                  onClick={() => {
+                    const nodeToArchive = contextMenu.node
+                    setSelected(nodeToArchive)
+                    setContextMenu(null)
+                    void handleArchiveProject(nodeToArchive)
+                  }}
+                >
+                  <Archive size={14} /> Archive Project
+                </button>
+              )}
+            </>
+          )}
+          <div className="context-menu-separator" />
+          <button
+            type="button"
+            className="context-menu-item"
+            role="menuitem"
+            onClick={() => {
+              toggleFavorite(contextMenu.node.id)
+              setContextMenu(null)
+            }}
+          >
+            <Star size={14} color={favoriteIds.has(contextMenu.node.id) ? '#fbbf24' : 'currentColor'} fill={favoriteIds.has(contextMenu.node.id) ? '#fbbf24' : 'none'} />
+            {favoriteIds.has(contextMenu.node.id) ? 'Remove Favorite' : 'Add to Favorites'}
+          </button>
         </div>
       )}
     </section>
