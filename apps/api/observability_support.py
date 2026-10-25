@@ -180,7 +180,7 @@ def get_observability_overview(
 
     # Active queues and worker throughput
     queues = db.query(WorkflowQueue).filter(WorkflowQueue.tenant_id == tenant_id).all()
-    active_workers = sum(1 for q in queues if q.status == "PROCESSING") if queues else 2
+    active_workers = sum(1 for q in queues if q.status == "PROCESSING")
 
     # Open incidents aggregation
     incidents = db.query(IncidentTicket).filter(
@@ -198,12 +198,12 @@ def get_observability_overview(
         SLABreachEvent.created_at >= cutoff_24h,
     ).scalar() or 0
 
-    sla_health = max(0.0, round(100.0 - (total_breaches * 3.5), 1))
+    sla_health = max(0.0, round(100.0 - (total_breaches * 3.5), 1)) if runs_count > 0 else 0.0
 
     return ObservabilityOverviewResponse(
-        throughput_24h=runs_count + 1420,
+        throughput_24h=runs_count,
         error_rate_pct=error_rate,
-        avg_queue_latency_ms=38.4,
+        avg_queue_latency_ms=0.0,
         active_workers_count=active_workers,
         sla_health_pct=sla_health,
         open_incidents=open_incidents,

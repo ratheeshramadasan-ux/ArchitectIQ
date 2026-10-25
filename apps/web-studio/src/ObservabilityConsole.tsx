@@ -336,8 +336,8 @@ export default function ObservabilityConsole({
                 <span>24H THROUGHPUT</span>
                 <Radio size={14} color="#60a5fa" />
               </div>
-              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? overview.throughput_24h.toLocaleString() : '1,420'}</strong>
-              <small style={{ color: '#4ade80', fontSize: 11 }}>Completed Executions</small>
+              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? overview.throughput_24h.toLocaleString() : '0'}</strong>
+              <small style={{ color: overview && overview.throughput_24h > 0 ? '#4ade80' : '#94a3b8', fontSize: 11 }}>Completed Executions</small>
             </div>
 
             <div className="glass" style={{ padding: 14, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -354,8 +354,8 @@ export default function ObservabilityConsole({
                 <span>QUEUE LATENCY</span>
                 <Clock size={14} color="#facc15" />
               </div>
-              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? `${overview.avg_queue_latency_ms}ms` : '38.4ms'}</strong>
-              <small style={{ color: '#4ade80', fontSize: 11 }}>Nominal Dispatch P95</small>
+              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? `${overview.avg_queue_latency_ms}ms` : '0ms'}</strong>
+              <small style={{ color: '#94a3b8', fontSize: 11 }}>Nominal Dispatch P95</small>
             </div>
 
             <div className="glass" style={{ padding: 14, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -363,8 +363,8 @@ export default function ObservabilityConsole({
                 <span>ACTIVE WORKERS</span>
                 <Cpu size={14} color="#c084fc" />
               </div>
-              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? overview.active_workers_count : 2}</strong>
-              <small style={{ color: '#c084fc', fontSize: 11 }}>Distributed Consumer Nodes</small>
+              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? overview.active_workers_count : 0}</strong>
+              <small style={{ color: '#94a3b8', fontSize: 11 }}>Distributed Consumer Nodes</small>
             </div>
 
             <div className="glass" style={{ padding: 14, borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -372,8 +372,8 @@ export default function ObservabilityConsole({
                 <span>SLA HEALTH SCORE</span>
                 <CheckCircle2 size={14} color="#4ade80" />
               </div>
-              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview ? `${overview.sla_health_pct}%` : '98.5%'}</strong>
-              <small style={{ color: '#4ade80', fontSize: 11 }}>Compliant with Enterprise Tier</small>
+              <strong style={{ fontSize: 20, fontWeight: 700 }}>{overview && overview.throughput_24h > 0 ? `${overview.sla_health_pct}%` : 'N/A'}</strong>
+              <small style={{ color: overview && overview.throughput_24h > 0 ? '#4ade80' : '#94a3b8', fontSize: 11 }}>{overview && overview.throughput_24h > 0 ? 'Compliant with Enterprise Tier' : 'No execution data'}</small>
             </div>
           </div>
 

@@ -232,6 +232,8 @@ function App(){
  const isExplorer = active === 'Explorer' || active === 'Projects' || active === 'Environments'
  const studio = groups[1].links.some(x => x.name === active)
  const isTenantMgmt = groups[2].links.some(x => x.name === active)
+ const liveThroughput = overviewData?.throughput_24h ?? 0
+ const hasRuns = liveThroughput > 0
 
  return (
   <div className={`app enterprise-app ${themeClass} ${dark ? 'theme-dark' : 'theme-light'}`} style={rootStyle}>
@@ -256,7 +258,7 @@ function App(){
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 700 }}>
        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent, #BA9731)' }} />
-        {tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        {tenants.find(t => t.id === tenant)?.name || 'No Tenant Selected'}
        </span>
        <ChevronDown size={14} style={{ opacity: 0.6 }} />
       </div>
@@ -345,7 +347,7 @@ function App(){
        </div>
        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', fontSize: '0.78rem' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38BDF8' }} />
-        <strong>{tenants.find(t => t.id === tenant)?.name || 'Citibank'}</strong>
+        <strong>{tenants.find(t => t.id === tenant)?.name || 'No Tenant Selected'}</strong>
         <span style={{ color: 'var(--muted)' }}>/</span>
         <span>{currentEnv === 'DEV' ? 'Development' : currentEnv}</span>
        </div>
@@ -366,7 +368,7 @@ function App(){
       <div className="topbar-actions">
        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingRight: 12, borderRight: '1px solid var(--border)', lineHeight: 1.2 }}>
         <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.08em' }}>IDENTITY</span>
-        <strong style={{ fontSize: '0.78rem' }}>Ratheesh Ramadasan (Platform Admin)</strong>
+        <strong style={{ fontSize: '0.78rem' }}>Platform Administrator</strong>
        </div>
        <button className="text-action" style={{ fontSize: '0.75rem', gap: 4 }} onClick={() => navigate('Theme / Icons')}>
         <Palette size={15} /> Appearance
@@ -429,9 +431,9 @@ function App(){
         </div>
         <div className="metrics-grid">
          {[
-          { label: 'Active projects', value: summaryData ? String(summaryData.active_projects).padStart(2, '0') : '--', sub: `Across ${summaryData?.folders ?? '--'} folders`, icon: Layers3 },
-          { label: 'Queue throughput', value: overviewData?.throughput_24h ? overviewData.throughput_24h.toLocaleString() : 'Active', sub: 'Durable state machine', icon: ListTodo },
-          { label: 'SLA Resilience', value: overviewData?.sla_health_pct ? `${overviewData.sla_health_pct}%` : '100%', sub: overviewData?.service_health || 'Operational', icon: Play },
+          { label: 'Active projects', value: summaryData ? String(summaryData.active_projects).padStart(2, '0') : '00', sub: `Across ${summaryData?.folders ?? 0} folders`, icon: Layers3 },
+          { label: 'Queue throughput', value: hasRuns ? liveThroughput.toLocaleString() : '00', sub: hasRuns ? 'Durable state machine' : '0 active items', icon: ListTodo },
+          { label: 'SLA Resilience', value: hasRuns ? `${overviewData?.sla_health_pct ?? 0}%` : 'N/A', sub: hasRuns ? (overviewData?.service_health || 'Operational') : 'No runs recorded', icon: Play },
           { label: 'Active Incidents', value: overviewData?.open_incidents ? String(Object.values(overviewData.open_incidents).reduce((a, b) => a + b, 0)).padStart(2, '0') : '00', sub: 'SEV tracking', icon: ClipboardCheck },
          ].map((m, i) => (
           <div className="metric-card glass" key={m.label}>
@@ -450,27 +452,49 @@ function App(){
            <span className="preview-pill"><span className="live-dot" /> TELEMETRY</span>
           </div>
           <div className="analytics-highlight">
-           <strong>{overviewData?.throughput_24h ? overviewData.throughput_24h.toLocaleString() : '0'}</strong>
-           <span className="trend-up">Active telemetry</span>
-           <small>Completed transactions (last 24h)</small>
+           <strong>{hasRuns ? liveThroughput.toLocaleString() : '00'}</strong>
+           <span className="trend-up" style={{ opacity: hasRuns ? 1 : 0.6 }}>
+            {hasRuns ? 'Active telemetry' : 'Idle'}
+           </span>
+           <small>{hasRuns ? 'Completed transactions (last 24h)' : 'No transactions recorded (last 24h)'}</small>
           </div>
-          <TrendChart />
+          {hasRuns ? (
+           <TrendChart />
+          ) : (
+           <div style={{ height: 225, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted, #94a3b8)', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 12, margin: '16px 0' }}>
+            <Activity size={32} style={{ opacity: 0.35, marginBottom: 8 }} />
+            <span style={{ fontSize: '0.92rem', fontWeight: 600 }}>No execution telemetry recorded</span>
+            <span style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: 4 }}>Deploy and run workflows to stream live performance throughput.</span>
+           </div>
+          )}
          </section>
          <section className="analytics-side glass">
           <div className="panel-head">
            <div><span className="section-overline">OPERATIONAL HEALTH</span><h3>Execution mix</h3></div>
            <span className="preview-pill"><span className="live-dot" /> LIVE</span>
           </div>
-          <div className="donut-chart">
-           <div className="donut-hole">
-            <strong>{overviewData?.sla_health_pct ? `${overviewData.sla_health_pct}%` : '100%'}</strong>
-            <small>SLA Health</small>
+          {hasRuns ? (
+           <>
+            <div className="donut-chart">
+             <div className="donut-hole">
+              <strong>{overviewData?.sla_health_pct ?? 0}%</strong>
+              <small>SLA Health</small>
+             </div>
+            </div>
+            <div className="donut-legend">
+             <span><i style={{ background: '#8e7bff' }} /> SLA Health <strong>{overviewData?.sla_health_pct ?? 0}%</strong></span>
+             <span><i style={{ background: '#43d6c6' }} /> Health status <strong>{overviewData?.service_health || 'Operational'}</strong></span>
+            </div>
+           </>
+          ) : (
+           <div style={{ height: 245, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--muted, #94a3b8)', textAlign: 'center', padding: '0 20px' }}>
+            <div style={{ width: 110, height: 110, borderRadius: '50%', border: '4px dashed rgba(255,255,255,0.12)', display: 'grid', placeItems: 'center', marginBottom: 14 }}>
+             <span style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--muted, #94a3b8)' }}>--</span>
+            </div>
+            <strong style={{ fontSize: '0.92rem', color: 'var(--fg, #e2e8f0)' }}>No execution data</strong>
+            <small style={{ fontSize: '0.8rem', color: 'var(--muted, #94a3b8)', marginTop: 4 }}>SLA health metrics calculate automatically as workflows execute.</small>
            </div>
-          </div>
-          <div className="donut-legend">
-           <span><i style={{ background: '#8e7bff' }} /> SLA Health <strong>{overviewData?.sla_health_pct ? `${overviewData.sla_health_pct}%` : '100%'}</strong></span>
-           <span><i style={{ background: '#43d6c6' }} /> Health status <strong>{overviewData?.service_health || 'Operational'}</strong></span>
-          </div>
+          )}
          </section>
         </div>
 
