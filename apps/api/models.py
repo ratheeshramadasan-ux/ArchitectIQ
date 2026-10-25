@@ -5,6 +5,8 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
+    func,
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
@@ -806,3 +808,74 @@ class ProjectTemplate(Base):
     category: Mapped[str] = mapped_column(String(60), default="AUTOMATION", server_default="AUTOMATION", nullable=False)
     package_bundle: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+# ---------------------------------------------------------
+# Milestone M11: Observability, Telemetry & Support Runbooks
+# ---------------------------------------------------------
+
+class SystemMetric(Base):
+    __tablename__ = "system_metrics"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    metric_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    metric_value: Mapped[float] = mapped_column(Float, nullable=False)
+    dimensions: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class IncidentTicket(Base):
+    __tablename__ = "incident_tickets"
+    __table_args__ = (
+        CheckConstraint("severity IN ('SEV-1', 'SEV-2', 'SEV-3', 'SEV-4')", name="ck_incident_tickets_severity"),
+        CheckConstraint("status IN ('OPEN', 'INVESTIGATING', 'MITIGATED', 'RESOLVED')", name="ck_incident_tickets_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), default="SEV-3", server_default="SEV-3", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="OPEN", server_default="OPEN", nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    affected_resource_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    resolution_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, server_default=func.now(), nullable=False)
+
+
+class SLABreachEvent(Base):
+    __tablename__ = "sla_breach_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    expected_sla_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    actual_duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    breach_severity: Mapped[str] = mapped_column(String(20), default="WARNING", server_default="WARNING", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class Runbook(Base):
+    __tablename__ = "runbooks"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slug", name="uq_runbooks_tenant_slug"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), default="REMEDIATION", server_default="REMEDIATION", nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    steps: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    is_automated: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    last_executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, server_default=func.now(), nullable=False)
+
