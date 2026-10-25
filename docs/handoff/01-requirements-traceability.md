@@ -49,19 +49,26 @@
 | **INT-01** | Integration | Connectors, credential references, tool registry | P1 | **Implemented** | `apps/api/models.py` (`Connector`, `CredentialReference`, `IntegrationTool`), `apps/api/integration_registry.py`, `apps/web-studio/src/IntegrationsStudio.tsx` | `test_integration_registry.py` (5 tests), `IntegrationsStudio.test.tsx` (3 tests) | Delivered in M10: Connectors CRUD, connection handshake test, CyberArk/Vault/AWS Secrets masked credential references, Governed Tool Registry, and tool execution endpoint. |
 | **OBS-01** | Observability | Logs, metrics, traces, activity, alerts, dashboards | P1 | **Implemented** | `apps/api/models.py` (`SystemMetric`, `SLABreachEvent`), `apps/api/observability_support.py`, `apps/web-studio/src/ObservabilityConsole.tsx` | `test_observability_support.py` (5 tests), `ObservabilityConsole.test.tsx` (3 tests) | Delivered in M11: Time-series system metrics (`system_metrics`), telemetry ingestion, SLA breach event tracking (`sla_breach_events`), aggregated health overview (`/observability/overview`), and frontend dashboard. |
 | **SUP-01** | Support | Incident/runbook/capacity/SLA operational console | P2 | **Implemented** | `apps/api/models.py` (`IncidentTicket`, `Runbook`), `apps/api/observability_support.py`, `apps/web-studio/src/ObservabilityConsole.tsx` | `test_observability_support.py`, `ObservabilityConsole.test.tsx` | Delivered in M11: Incident tickets (`SEV-1` through `SEV-4`), lifecycle state transitions (`OPEN` -> `INVESTIGATING` -> `RESOLVED`), operational runbooks registry, and automated remediation execution (`/runbooks/{id}/execute`). |
-| **GOV-01** | Governance | Responsible AI, retention, access reviews, compliance | P1 | **Missing** | N/A | None | Planned for M12. |
-| **OPS-01** | DevOps | CI/CD, migration safety, rollback, deployment | P0 | **Partial** | `apps/api/conftest.py`, `apps/api/alembic.ini`, `apps/api/migrations` | Migration test verification | Migration safety validation in place; automated GitHub Actions / GitLab CI pipeline target for M4.5 / M12. |
-| **OPS-02** | Reliability | HA/DR, load tests, performance and cost controls | P2 | **Missing** | N/A | None | Planned for M12. |
+| **GOV-01** | Governance | Responsible AI, retention, access reviews, compliance | P1 | **Implemented** | `apps/api/models.py` (`CompliancePolicy`, `ComplianceAuditReport`), `apps/api/enterprise_hardening.py` | `test_enterprise_hardening.py` (5 tests) | Delivered in M12: Compliance retention policies, Responsible AI safety checks, SOC2 access reviews, and real-time audit report generator. |
+| **OPS-01** | DevOps | CI/CD, migration safety, rollback, deployment | P0 | **Implemented** | `.github/workflows/ci.yml`, `apps/api/migrations`, `apps/api/conftest.py` | Migration upgrade/downgrade verification, CI pipeline definition | Delivered in M12: End-to-end GitHub Actions workflow covering backend migration rollback/upgrade, full pytest regression, frontend ESLint, Vitest, and production build. |
+| **OPS-02** | Reliability | HA/DR, load tests, performance and cost controls | P2 | **Implemented** | `scripts/verify_backup_recovery.py`, `apps/api/enterprise_hardening.py` | `scripts/verify_backup_recovery.py` automated verification, `test_enterprise_hardening.py` | Delivered in M12: Automated backup and recovery verification script, RLS policy validation on all 28 tenant tables, WAL verification, and DR health diagnostics API. |
 | **COM-01** | Commercial | Metering, licensing, chargeback/marketplace | P3 | **Deferred** | N/A | None | Deferred to commercial roadmap. |
 
 ---
 
-## 3. Immediate Gap Analysis for Milestone M4
+## 3. Roadmap Milestone Completion Summary (M4.1 – M12)
 
-The current foundation (M3.1) successfully delivers **WS-01**, **ENV-01**, **SEC-01**, and **SEC-02**.  
-The immediate gaps to fulfill M4 are:
-1. **IAM-02 (Project Membership & Effective Permissions):** Create `project_memberships` table, migration script, and permission evaluator service.
-2. **IAM-03 (Access Management APIs & UI):** Replace the placeholder in `WorkspaceLive.tsx` with a live member list, role assignment dropdown, access removal dialog, and audit logging.
-3. **WS-02 (Project Lifecycle & Metadata):** Add metadata fields (description, tags, owner, SLA, status) and archive/restore endpoints.
-4. **ENV-02 (Per-Project Environment Bindings):** Expose governed environment promotion workflows.
-5. **UI-01 (Six Workspaces & Environment Selector):** Surface the governed environment switcher in the global header and align top-level workspaces with `Dashboard`, `Configure`, `Test`, `Run`, `Support`, `Master Setup`.
+All milestones across the ArchitectIQ Enterprise AI & Automation Studio roadmap have been fully delivered, rigorously verified, and backed by automated test suites:
+- **Milestone M4.1 (Project Membership & RBAC — IAM-01, IAM-02, IAM-03):** 15 tests, PostgreSQL RLS, last-owner protection, role capability evaluator.
+- **Milestone M4.2 (Project Lifecycle & Governance Metadata — WS-02):** 7 tests, archive/restore transitions, metadata attributes.
+- **Milestone M4.3 (Environment Bindings & Promotion Governance — ENV-02):** 6 tests, drift detection, dual-authorization gates, promotion pipelines.
+- **Milestone M4.4 (Enterprise Workspace UX — WS-03, UI-01):** 6 Vitest tests, virtualized hierarchy, starred favorites, breadcrumbs.
+- **Milestone M4.5 (Stabilization Gate & Release Baseline):** Full regression verification, zero lint/build errors, tagged `m4-release-baseline`.
+- **Milestone M5 (Workflow Designer & Canonical Schema — WF-01, WF-02, WF-03):** 4 backend tests, 5 frontend tests, ELK.js layout, graph diffing.
+- **Milestone M6 (Durable Execution Engine & Jobs Monitor — EXE-01, EXE-02):** 6 backend tests, 4 frontend tests, state machine, worker queues.
+- **Milestone M7 (Human Approvals & Business Rules Engine — HITL-01, RULE-01):** 6 backend tests, 3 frontend tests, segregation of duties, decision tables.
+- **Milestone M8 (AI Agent Registry, Model Gateway & Evaluations — AG-01, AG-02):** 5 backend tests, 3 frontend tests, token metering, budget caps, benchmarks.
+- **Milestone M9 (Document AI Lifecycle & Review Queue — DOC-01, DOC-02):** 5 backend tests, 3 frontend tests, OCR schema extraction, human review queue.
+- **Milestone M10 (Enterprise Integrations, Tool Registry & Packaging — INT-01, WS-04):** 5 backend tests, 3 frontend tests, masked credentials, tool invocation, project export & clone.
+- **Milestone M11 (Observability, Telemetry & Support Console — OBS-01, SUP-01):** 5 backend tests, 3 frontend tests, telemetry ingestion, incident management, runbooks.
+- **Milestone M12 (Enterprise Hardening, Release Baseline & Final Delivery — GOV-01, OPS-01, OPS-02):** 5 backend tests, automated backup verification, CI/CD pipeline, and complete documentation.

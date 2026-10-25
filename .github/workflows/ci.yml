@@ -1,0 +1,99 @@
+name: ArchitectIQ Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/** ]
+  pull_request:
+    branches: [ main, develop ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality-and-tests:
+    name: Backend API & Database Regression Gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: architectiq_test
+          POSTGRES_USER: architectiq
+          POSTGRES_PASSWORD: password123
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt pytest-dotenv
+
+      - name: Verify Alembic Database Migration Lifecycle (Upgrade & Rollback)
+        env:
+          DATABASE_URL: postgresql+psycopg://architectiq:password123@127.0.0.1:5433/architectiq_test
+        run: |
+          cd apps/api
+          python -m alembic upgrade head
+          python -m alembic downgrade -1
+          python -m alembic upgrade head
+
+      - name: Run Backend Pytest Regression Suite
+        env:
+          DATABASE_URL: postgresql+psycopg://architectiq:password123@127.0.0.1:5433/architectiq_test
+          REDIS_URL: redis://127.0.0.1:6380/0
+        run: |
+          cd apps/api
+          python -m pytest --maxfail=1 --disable-warnings
+
+  frontend-quality-and-build:
+    name: Frontend Studio Lint, Vitest & Production Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: apps/web-studio/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm --prefix apps/web-studio ci
+
+      - name: Run ESLint Quality Check
+        run: npm --prefix apps/web-studio run lint
+
+      - name: Run Vitest Unit & Integration Suites
+        run: npm --prefix apps/web-studio test -- --run
+
+      - name: Run Production Bundle Build (tsc & Vite)
+        run: npm --prefix apps/web-studio run build

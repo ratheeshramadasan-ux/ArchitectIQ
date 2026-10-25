@@ -20,6 +20,7 @@ from agent_gateway import router as agent_gateway_router
 from document_ai import router as document_ai_router
 from integration_registry import router as integration_registry_router
 from observability_support import router as observability_support_router
+from enterprise_hardening import router as enterprise_hardening_router
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/workspace", tags=["Workspace"])
 router.include_router(project_rbac_router)
@@ -31,6 +32,7 @@ router.include_router(agent_gateway_router)
 router.include_router(document_ai_router)
 router.include_router(integration_registry_router)
 router.include_router(observability_support_router)
+router.include_router(enterprise_hardening_router)
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
 
 class NameIn(BaseModel):

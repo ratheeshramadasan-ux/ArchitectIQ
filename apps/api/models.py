@@ -879,3 +879,40 @@ class Runbook(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, server_default=func.now(), nullable=False)
 
+
+
+# ---------------------------------------------------------
+# Milestone M12: Enterprise Hardening & Compliance
+# ---------------------------------------------------------
+
+class CompliancePolicy(Base):
+    __tablename__ = "compliance_policies"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_compliance_policies_tenant_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    policy_type: Mapped[str] = mapped_column(String(50), default="DATA_RETENTION", server_default="DATA_RETENTION", nullable=False)
+    rules: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    retention_days: Mapped[int] = mapped_column(Integer, default=90, server_default=text("90"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, server_default=func.now(), nullable=False)
+
+
+class ComplianceAuditReport(Base):
+    __tablename__ = "compliance_audit_reports"
+    __table_args__ = (
+        CheckConstraint("verdict IN ('COMPLIANT', 'NON_COMPLIANT', 'FLAGGED_FOR_REVIEW')", name="ck_compliance_audit_verdict"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    generated_by: Mapped[str] = mapped_column(String(120), default="system-auditor", server_default="system-auditor", nullable=False)
+    verdict: Mapped[str] = mapped_column(String(30), default="COMPLIANT", server_default="COMPLIANT", nullable=False)
+    findings: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    score_pct: Mapped[float] = mapped_column(Float, default=100.0, server_default=text("100.0"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
