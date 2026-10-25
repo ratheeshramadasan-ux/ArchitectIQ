@@ -17,34 +17,6 @@ import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarC
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
 
-function NextGenLogo({ size = 30 }: { size?: number }) {
-  const s = size
-  const r = s * 0.13
-  const cr = s * 0.21
-  const cx = s * 0.5
-  const cy = s * 0.5
-  const dist = s * 0.33
-  const nodes = Array.from({ length: 6 }, (_, i) => {
-    const angle = (Math.PI / 3) * i - Math.PI / 2
-    return { x: cx + dist * Math.cos(angle), y: cy + dist * Math.sin(angle) }
-  })
-  return (
-    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`} fill="none" style={{ flexShrink: 0 }}>
-      {nodes.map((n, i) => (
-        <line key={`spoke-${i}`} x1={cx} y1={cy} x2={n.x} y2={n.y} stroke="currentColor" strokeOpacity="0.35" strokeWidth={s * 0.05} strokeLinecap="round" />
-      ))}
-      {nodes.map((n, i) => {
-        const nxt = nodes[(i + 1) % 6]
-        return <line key={`ring-${i}`} x1={n.x} y1={n.y} x2={nxt.x} y2={nxt.y} stroke="currentColor" strokeOpacity="0.22" strokeWidth={s * 0.032} strokeLinecap="round" />
-      })}
-      {nodes.map((n, i) => (
-        <circle key={`outer-${i}`} cx={n.x} cy={n.y} r={r} fill="currentColor" opacity={i % 2 === 0 ? 0.75 : 0.55} />
-      ))}
-      <circle cx={cx} cy={cy} r={cr} fill="currentColor" opacity={1} />
-      <circle cx={cx - cr * 0.22} cy={cy - cr * 0.22} r={cr * 0.3} fill="white" opacity="0.25" />
-    </svg>
-  )
-}
 
 const fontFamilies: Record<FontName, string> = {
   'Inter': "'Inter', sans-serif",
@@ -242,6 +214,9 @@ function App(){
  const isTenantMgmt = groups[2].links.some(x => x.name === active)
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
+ const isDarkTheme = dark || ['Obsidian Glass', 'Aurora Glass', 'Smoky Quartz', 'Midnight Glass'].includes(themeConfig.activeTheme) || !!themeConfig.activeBackground
+ const brandLogo = isDarkTheme ? '/logo-dark.png' : '/logo-light.png'
+ const brandShield = isDarkTheme ? '/shield-dark.png' : '/shield-light.png'
 
  return (
   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
@@ -259,13 +234,11 @@ function App(){
    <div className="shell-container">
     {mobile && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobile(false)} />}
     <aside className={`nextgen-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
-     <button className="sidebar-brand-btn" onClick={() => navigate('Dashboard')}>
-      <NextGenLogo size={28} />
-      {!collapsed && (
-       <div>
-        <div className="brand-title">ArchitectIQ</div>
-        <div className="brand-sub">ENTERPRISE AI &amp; AUTOMATION</div>
-       </div>
+     <button className="sidebar-brand-btn" onClick={() => navigate('Dashboard')} title="ArchitectIQ Home">
+      {collapsed ? (
+       <img src={brandShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
+      ) : (
+       <img src={brandLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
       )}
      </button>
 
@@ -360,8 +333,7 @@ function App(){
         <Menu size={18} />
        </button>
        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
-        <NextGenLogo size={22} />
-        <strong style={{ fontSize: '0.88rem', letterSpacing: '-0.02em', color: 'var(--foreground)' }}>ArchitectIQ</strong>
+        <img src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
        </div>
        <div className="topbar-tenant-pill">
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38BDF8' }} />
