@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -562,5 +563,70 @@ class BusinessRule(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
+class AIAgent(Base):
+    __tablename__ = "ai_agents"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "project_id", "slug", name="ai_agents_tenant_project_slug_key"),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'DRAFT', 'ARCHIVED')",
+            name="ck_ai_agents_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    model_provider: Mapped[str] = mapped_column(String(40), default="ollama", server_default="ollama", nullable=False)
+    model_name: Mapped[str] = mapped_column(String(100), default="qwen3-coder:30b", server_default="qwen3-coder:30b", nullable=False)
+    temperature: Mapped[float] = mapped_column(Numeric(3, 2), default=0.70, server_default=text("0.70"), nullable=False)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=4096, server_default=text("4096"), nullable=False)
+    tools_config: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    budget_limit_usd: Mapped[float] = mapped_column(Numeric(10, 4), default=100.0, server_default=text("100.0000"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 
+class AIAgentInvocation(Base):
+    __tablename__ = "ai_agent_invocations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('SUCCESS', 'FAILED', 'BUDGET_EXCEEDED')",
+            name="ck_ai_agent_invocations_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_agents.id", ondelete="CASCADE"), nullable=False)
+    caller_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    input_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    output_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    model_used: Mapped[str] = mapped_column(String(100), nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    completion_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    estimated_cost_usd: Mapped[float] = mapped_column(Numeric(10, 6), default=0.0, server_default=text("0.000000"), nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="SUCCESS", server_default="SUCCESS", nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class AIAgentEvaluation(Base):
+    __tablename__ = "ai_agent_evaluations"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    agent_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_agents.id", ondelete="CASCADE"), nullable=False)
+    eval_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    test_cases: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    results: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    pass_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0.0, server_default=text("0.00"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

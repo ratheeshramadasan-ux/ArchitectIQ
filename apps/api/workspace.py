@@ -16,6 +16,7 @@ from project_rbac import require_project_capability, router as project_rbac_rout
 from workflow_designer import router as workflow_designer_router
 from execution_engine import router as execution_engine_router
 from approvals_rules import router as approvals_rules_router
+from agent_gateway import router as agent_gateway_router
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/workspace", tags=["Workspace"])
 router.include_router(project_rbac_router)
@@ -23,6 +24,7 @@ router.include_router(project_promotions_router)
 router.include_router(workflow_designer_router)
 router.include_router(execution_engine_router)
 router.include_router(approvals_rules_router)
+router.include_router(agent_gateway_router)
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
 
 class NameIn(BaseModel):
