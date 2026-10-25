@@ -180,7 +180,7 @@ def get_observability_overview(
 
     # Active queues and worker throughput
     queues = db.query(WorkflowQueue).filter(WorkflowQueue.tenant_id == tenant_id).all()
-    active_workers = sum(q.active_workers for q in queues) if queues else 2
+    active_workers = sum(1 for q in queues if q.status == "PROCESSING") if queues else 2
 
     # Open incidents aggregation
     incidents = db.query(IncidentTicket).filter(
