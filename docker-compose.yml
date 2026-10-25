@@ -2,34 +2,20 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:17
     container_name: architectiq-postgres
     environment:
-      POSTGRES_DB: architectiq_dev
+      POSTGRES_DB: architectiq_test
       POSTGRES_USER: architectiq
-      POSTGRES_PASSWORD: password123
+      POSTGRES_PASSWORD: "Mad@7878"
     ports:
       - "5433:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U architectiq"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: architectiq-redis
     ports:
       - "6380:6379"
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   api:
     build:
@@ -37,17 +23,15 @@ services:
       dockerfile: Dockerfile
     container_name: architectiq-api
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      - postgres
+      - redis
     environment:
-      DATABASE_URL: postgresql+psycopg://architectiq:password123@postgres:5432/architectiq_dev
+      DATABASE_URL: postgresql+psycopg://architectiq:Mad%407878@postgres:5432/architectiq_test
       REDIS_URL: redis://redis:6379/0
-      APP_DATABASE_URL: postgresql+psycopg://architectiq_app:password123@postgres:5432/architectiq_dev
-      IAM_DATABASE_URL: postgresql+psycopg://architectiq_iam_login:password123@postgres:5432/architectiq_dev
-      AUDIT_DATABASE_URL: postgresql+psycopg://architectiq_audit_writer:password123@postgres:5432/architectiq_dev
-      NATIVE_JWT_SECRET: super-secret-jwt-signing-key-for-containers-32b
+      APP_DATABASE_URL: postgresql+psycopg://architectiq_app:Gmd19O4-j7F9cBrAQhzJ-IglPdXIGiSUd_eYcPS9xtqojgmZ@postgres:5432/architectiq_test
+      IAM_DATABASE_URL: postgresql+psycopg://architectiq_iam_login:wITaFsh0sbUDL4UwlU8G6dVLFBbyKfF57LInULvs4wmwJhYw1KztWuXQMZZuMzA0@postgres:5432/architectiq_test
+      AUDIT_DATABASE_URL: postgresql+psycopg://architectiq_audit_writer:Mad%407878@postgres:5432/architectiq_test
+      NATIVE_JWT_SECRET: XrMxVsb414/3Pr3YxHz/JmCumkY3HsISj9VbLF6s7ejz/4Cni6WUjDN8qzAFWPKi
     ports:
       - "8000:8000"
 
@@ -59,8 +43,4 @@ services:
     depends_on:
       - api
     ports:
-      - "3000:80"
-
-volumes:
-  pgdata:
-  redisdata:
+      - "8080:80"
