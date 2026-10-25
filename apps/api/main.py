@@ -1,6 +1,7 @@
 from tenant_discovery import router as tenant_discovery_router
 from native_auth import router as native_router
 from workspace import router as workspace_router
+from project_rbac import router as project_rbac_router
 from request_audit import RequestAuditMiddleware
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -27,6 +28,8 @@ def health() -> HealthResponse:
     )
 
 app.include_router(workspace_router)
+
+app.include_router(project_rbac_router)
 
 app.include_router(native_router)
 

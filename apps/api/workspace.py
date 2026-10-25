@@ -3,14 +3,15 @@ from typing import Annotated, Literal
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from authentication import get_authorized_tenant_db
-from models import Folder, Organization, Project, ProjectEnvironment
+from models import Folder, Organization, Project, ProjectEnvironment, ProjectMembership
+from project_rbac import require_project_capability
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/workspace", tags=["Workspace"])
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
@@ -108,10 +109,22 @@ def create_folder(tenant_id: UUID, body: FolderIn, db: Db):
     return record(obj, organization_id=str(obj.organization_id), parent_folder_id=str(obj.parent_folder_id) if obj.parent_folder_id else None)
 
 @router.post("/projects", status_code=201)
-def create_project(tenant_id: UUID, body: ProjectIn, db: Db):
+def create_project(tenant_id: UUID, body: ProjectIn, db: Db, request: Request):
     require(db, Folder, body.folder_id)
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
     obj = Project(id=uuid4(), folder_id=body.folder_id, name=body.name)
-    db.add(obj); safe_flush(db)
+    db.add(obj)
+    if actor_id:
+        owner = ProjectMembership(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            project_id=obj.id,
+            user_id=actor_id,
+            role="OWNER",
+            granted_by=actor_id,
+        )
+        db.add(owner)
+    safe_flush(db)
     return record(obj, folder_id=str(obj.folder_id))
 
 @router.post("/projects/{project_id}/environments", status_code=201)
@@ -130,8 +143,14 @@ def rename_folder(tenant_id: UUID, resource_id: UUID, body: RenameIn, db: Db):
     obj = require(db, Folder, resource_id); obj.name = body.name; safe_flush(db); return record(obj)
 
 @router.patch("/projects/{resource_id}")
-def rename_project(tenant_id: UUID, resource_id: UUID, body: RenameIn, db: Db):
-    obj = require(db, Project, resource_id); obj.name = body.name; safe_flush(db); return record(obj)
+def rename_project(tenant_id: UUID, resource_id: UUID, body: RenameIn, db: Db, request: Request):
+    obj = require(db, Project, resource_id)
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
+    if actor_id:
+        require_project_capability(db, resource_id, actor_id, tenant_id, "can_edit")
+    obj.name = body.name
+    safe_flush(db)
+    return record(obj)
 
 
 @router.get("/organizations/{organization_id}/settings")
@@ -228,9 +247,12 @@ def move_folder(tenant_id: UUID, resource_id: UUID, body: MoveFolderIn, db: Db):
 
 
 @router.patch("/projects/{resource_id}/move")
-def move_project(tenant_id: UUID, resource_id: UUID, body: MoveProjectIn, db: Db):
+def move_project(tenant_id: UUID, resource_id: UUID, body: MoveProjectIn, db: Db, request: Request):
     """Move a project within its organization, retaining its stable ID."""
     project = require(db, Project, resource_id)
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
+    if actor_id:
+        require_project_capability(db, resource_id, actor_id, tenant_id, "can_edit")
     source = require(db, Folder, project.folder_id)
     destination = require(db, Folder, body.folder_id)
     if source.organization_id != destination.organization_id:

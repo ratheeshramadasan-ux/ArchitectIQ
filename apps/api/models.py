@@ -1,4 +1,4 @@
-﻿import uuid
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
@@ -219,3 +219,62 @@ class UserExternalIdentity(Base):
         default=utc_now,
         nullable=False,
     )
+
+
+class ProjectMembership(Base):
+    __tablename__ = "project_memberships"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "user_id",
+            name="uq_project_memberships_project_user",
+        ),
+        CheckConstraint(
+            "role IN ('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')",
+            name="ck_project_memberships_role",
+        ),
+        ForeignKeyConstraint(
+            ["user_id", "tenant_id"],
+            ["tenant_memberships.user_id", "tenant_memberships.tenant_id"],
+            name="fk_project_memberships_tenant_user",
+            ondelete="CASCADE",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+
+    granted_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
