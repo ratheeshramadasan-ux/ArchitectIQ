@@ -97,7 +97,8 @@ flowchart LR
 | **M9: Document AI Lifecycle** | Intelligent document processing | Ingestion, page splitting, OCR adapter, annotation UI, field extraction schemas, human validation queue. | M6, M8 |
 | **M10: Enterprise Integrations** | Connectors & catalog | REST, GraphQL, DB, SFTP connectors, secret references (CyberArk / Vault), reusable component marketplace. | M5, M8 |
 | **M11: Observability & Support** | Operational command center | ECharts telemetry dashboards, structured OpenTelemetry traces, SLA risk monitors, diagnostic runbooks. | M6, M8, M9 |
-| **M12: Enterprise Hardening** | Production release | Penetration testing, automated CI/CD pipeline, backup/restore drills, high-availability verification, final docs. | M11 |
+| **M12: Enterprise Hardening** | Compliance & audit release | Penetration testing, automated CI/CD pipeline, backup/restore drills, high-availability verification, final docs. | M11 |
+| **M13: Platform Validation** | Production readiness & verification | 6-Studio independent audit, 6 E2E scenarios, security adversarial suite, performance benchmarks, clean migration & DR audit, containerization. | M12 |
 
 ---
 

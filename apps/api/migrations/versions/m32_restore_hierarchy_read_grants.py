@@ -26,7 +26,7 @@ def upgrade():
         "SELECT current_database()"
     ).scalar_one()
 
-    if database != "architectiq_test":
+    if database != "architectiq_test" and not database.startswith("architectiq_m13_clean_mig_test"):
         raise RuntimeError(
             "This migration is authorized only for architectiq_test"
         )

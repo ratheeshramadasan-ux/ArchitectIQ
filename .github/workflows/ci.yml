@@ -54,6 +54,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r apps/api/requirements.txt pytest-dotenv
 
+      - name: Provision Restricted Database Roles
+        run: |
+          PGPASSWORD=password123 psql -h 127.0.0.1 -p 5433 -U architectiq -d architectiq_test -c "
+            DO \$\$ BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'architectiq_app') THEN
+                CREATE ROLE architectiq_app WITH LOGIN PASSWORD 'password123';
+              END IF;
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'architectiq_iam_login') THEN
+                CREATE ROLE architectiq_iam_login WITH LOGIN PASSWORD 'password123';
+              END IF;
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'architectiq_audit_writer') THEN
+                CREATE ROLE architectiq_audit_writer WITH LOGIN PASSWORD 'password123';
+              END IF;
+            END \$\$;
+          "
+
       - name: Verify Alembic Database Migration Lifecycle (Upgrade & Rollback)
         env:
           DATABASE_URL: postgresql+psycopg://architectiq:password123@127.0.0.1:5433/architectiq_test
@@ -66,7 +82,11 @@ jobs:
       - name: Run Backend Pytest Regression Suite
         env:
           DATABASE_URL: postgresql+psycopg://architectiq:password123@127.0.0.1:5433/architectiq_test
+          APP_DATABASE_URL: postgresql+psycopg://architectiq_app:password123@127.0.0.1:5433/architectiq_test
+          IAM_DATABASE_URL: postgresql+psycopg://architectiq_iam_login:password123@127.0.0.1:5433/architectiq_test
+          AUDIT_DATABASE_URL: postgresql+psycopg://architectiq_audit_writer:password123@127.0.0.1:5433/architectiq_test
           REDIS_URL: redis://127.0.0.1:6380/0
+          NATIVE_JWT_SECRET: ci-test-secret-key-32-bytes-long-12345
         run: |
           cd apps/api
           python -m pytest --maxfail=1 --disable-warnings

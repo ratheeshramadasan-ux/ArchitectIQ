@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: architectiq-postgres
+    environment:
+      POSTGRES_DB: architectiq_dev
+      POSTGRES_USER: architectiq
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U architectiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: architectiq-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: architectiq-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://architectiq:password123@postgres:5432/architectiq_dev
+      REDIS_URL: redis://redis:6379/0
+      APP_DATABASE_URL: postgresql+psycopg://architectiq_app:password123@postgres:5432/architectiq_dev
+      IAM_DATABASE_URL: postgresql+psycopg://architectiq_iam_login:password123@postgres:5432/architectiq_dev
+      AUDIT_DATABASE_URL: postgresql+psycopg://architectiq_audit_writer:password123@postgres:5432/architectiq_dev
+      NATIVE_JWT_SECRET: super-secret-jwt-signing-key-for-containers-32b
+    ports:
+      - "8000:8000"
+
+  web-studio:
+    build:
+      context: ./apps/web-studio
+      dockerfile: Dockerfile
+    container_name: architectiq-web-studio
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
+volumes:
+  pgdata:
+  redisdata:
