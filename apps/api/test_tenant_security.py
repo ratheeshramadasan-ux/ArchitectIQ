@@ -1,4 +1,4 @@
-﻿from sqlalchemy import text
+from sqlalchemy import text
 
 from database import RuntimeSessionLocal
 
@@ -41,6 +41,78 @@ from database import tenant_session
 
 TENANT_A = UUID("11111111-1111-4111-8111-111111111111")
 TENANT_B = UUID("22222222-2222-4222-8222-222222222222")
+
+import pytest
+from uuid import uuid5
+
+def _fixture_id(tenant_id, kind):
+    return uuid5(tenant_id, f"m31-isolation-{kind}")
+
+@pytest.fixture(scope="module", autouse=True)
+def isolated_tenant_hierarchies():
+    """Ensure repeatable RLS test hierarchies without removing referenced records.
+
+    Fixed IDs are reserved for this fixture. Existing tenant IDs are reused
+    only when their identifying fixture markers match exactly.
+    """
+    from database import engine
+
+    with engine.begin() as conn:
+        assert conn.scalar(text("SELECT current_database()")) == "architectiq_test"
+
+        for tid in (TENANT_A, TENANT_B):
+            marker = f"m31-{tid}"
+            existing = conn.execute(
+                text("SELECT name, slug FROM public.tenants WHERE id = :id"),
+                {"id": tid},
+            ).first()
+            if existing is not None:
+                assert existing.name == "M31 isolation fixture" and existing.slug == marker, (
+                    f"Refusing to reuse non-fixture tenant {tid}"
+                )
+            else:
+                conn.execute(
+                    text("""INSERT INTO public.tenants (id, name, slug, created_at)
+                            VALUES (:id, 'M31 isolation fixture', :slug, now())"""),
+                    {"id": tid, "slug": marker},
+                )
+
+            d = {kind: _fixture_id(tid, kind) for kind in (
+                "organizations", "folders", "projects", "project_environments"
+            )}
+            # ON CONFLICT handles rows from earlier runs. Existing rows must
+            # have the expected parent linkage; never overwrite their ownership.
+            rows = (
+                ("organizations", "tenant_id", tid,
+                 "INSERT INTO public.organizations (id, tenant_id, name, slug, created_at) "
+                 "VALUES (:id, :parent, 'M31 Org', 'm31', now()) ON CONFLICT (id) DO NOTHING"),
+                ("folders", "organization_id", d["organizations"],
+                 "INSERT INTO public.folders (id, organization_id, name, created_at) "
+                 "VALUES (:id, :parent, 'M31 Folder', now()) ON CONFLICT (id) DO NOTHING"),
+                ("projects", "folder_id", d["folders"],
+                 "INSERT INTO public.projects (id, folder_id, name, created_at) "
+                 "VALUES (:id, :parent, 'M31 Project', now()) ON CONFLICT (id) DO NOTHING"),
+                ("project_environments", "project_id", d["projects"],
+                 "INSERT INTO public.project_environments (id, project_id, environment, created_at) "
+                 "VALUES (:id, :parent, 'TEST', now()) ON CONFLICT (id) DO NOTHING"),
+            )
+            for table, parent_column, parent_id, statement in rows:
+                conn.execute(text(statement), {"id": d[table], "parent": parent_id})
+                actual_parent = conn.scalar(
+                    text(f"SELECT {parent_column} FROM public.{table} WHERE id = :id"),
+                    {"id": d[table]},
+                )
+                assert actual_parent == parent_id, (
+                    f"Fixture ownership mismatch in {table} for tenant {tid}"
+                )
+
+    # Deliberately retain fixture rows. Other tests create workspace_activity
+    # references, so removing the tenant would violate referential integrity.
+    # All retained rows are confined to architectiq_test.
+    yield
+
+
+
 
 
 def test_cross_tenant_rls_isolation():
