@@ -28,16 +28,43 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 4. Apply remediation runbook or reset downstream circuit breaker.
 5. Record root-cause analysis in resolution notes and click **Resolve Incident**.
 
-### 1.3 Database Backup & Disaster Recovery Verification
-**Trigger Condition:** Daily automated cron or prior to deployment.
+### 1.3 Database Backup & Disaster Recovery Verification (OPS-02)
+**Trigger Condition:** Pre-deployment verification gate, scheduled DR drills, or after database migrations.
+
+The verification suite separates non-destructive database health checks from isolated backup integrity and recovery tests.
+
+#### 1.3.1 Database Health & Catalog Inspection
 ```bash
-# Execute automated backup recovery script
+# Explicit target database connection string is required (hardcoded credentials prohibited).
+export TARGET_DATABASE_URL="postgresql://architectiq:Mad%407878@127.0.0.1:5433/architectiq_test"
+
+# Run schema-qualified catalog and restricted-role RLS verification:
+.venv/Scripts/python.exe scripts/verify_database_health.py
+```
+Verifies:
+- All 32 required enterprise tables present in schema `public`.
+- Row-Level Security enabled with policies defined on all 28 multi-tenant tables.
+- Runtime RLS isolation enforced under restricted `architectiq_app` role (default-deny and tenant context).
+- WAL settings inspection (`archive_mode`, `archive_command`, `wal_level`).
+
+#### 1.3.2 Isolated Backup Integrity & Disposable Restore Verification
+```bash
+# Authorization for disposable recovery database creation is mandatory:
+export TARGET_DATABASE_URL="postgresql://architectiq:Mad%407878@127.0.0.1:5433/architectiq_test"
+export ALLOW_DISPOSABLE_RECOVERY_DB="true"
+
+# Execute isolated backup creation and restore test:
 .venv/Scripts/python.exe scripts/verify_backup_recovery.py
 ```
-Expected output:
-- All 32 enterprise tables verified.
-- PostgreSQL Row-Level Security active on all 28 tenant tables.
-- WAL LSN verified. Exit code: 0.
+Verifies:
+1. **Security Guardrails:** Rejects missing credentials, rejects `architectiq_dev`, rejects production host/database names (`prod`/`production`).
+2. **Backup Artifact Integrity:** Generates PostgreSQL custom format dump (`-F c`), verifies `PGDMP` binary magic header, size threshold, and sha256 checksum.
+3. **Dedicated Recovery Environment:** Creates an isolated disposable database (`architectiq_recovery_disposable_<uuid>`).
+4. **Restored Integrity:** Verifies 32 restored tables, migration head `m120_enterprise_hardening`, 28 restored RLS policies, and runtime `architectiq_app` isolation on the restored database.
+5. **RTO/RPO Timing:** Evaluates recovery duration against SLA targets (RTO $\le 300$s; measured in $< 1.0$s).
+6. **WAL & PITR Status:** When `archive_mode` is `off`, reports `WAL_ARCHIVE_VERIFICATION: NOT CONFIGURED` and `POINT_IN_TIME_RECOVERY: NOT VERIFIED` rather than fabricating success.
+7. **Clean Teardown:** Terminates background connections and drops the disposable recovery database, leaving zero operational residue.
+8. **Structured Evidence:** Emits JSON report to `docs/ops/ops02_verification_evidence.json`.
 
 ---
 

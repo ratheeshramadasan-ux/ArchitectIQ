@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-10-25T20:36:06.482881+00:00",
+  "target_database": "127.0.0.1:5433/architectiq_test",
+  "TARGET_CONNECTION_SECURITY": "PASS",
+  "PROTECTED_TARGET_GUARD": "PASS",
+  "wal_settings": {
+    "archive_command": "(disabled)",
+    "archive_mode": "off",
+    "wal_level": "replica"
+  },
+  "current_wal_lsn": "0/7F90B78",
+  "WAL_ARCHIVE_VERIFICATION": "NOT CONFIGURED",
+  "POINT_IN_TIME_RECOVERY": "NOT VERIFIED (archive_mode is off; continuous WAL archiving required for PITR)",
+  "BACKUP_ARTIFACT_INTEGRITY": "PASS",
+  "backup_artifact": {
+    "size_bytes": 1230150,
+    "format": "PostgreSQL Custom Archive (v1.1)",
+    "sha256": "96827ef698bde0e17ee1cd3591511bfd7d3e5852d434a53da3caa9398acc4ab3",
+    "creation_duration_seconds": 0.185
+  },
+  "ISOLATED_RESTORE_EXECUTION": "PASS",
+  "restore_duration_seconds": 0.451,
+  "RESTORED_SCHEMA_VERIFICATION": "PASS",
+  "RESTORED_MIGRATION_HEAD": "PASS",
+  "RESTORED_RLS_CATALOG": "PASS",
+  "RESTORED_APP_ROLE_ISOLATION": "PASS",
+  "RECOVERY_TIME_OBJECTIVE_RTO": "PASS (Restored in 0.451s <= 300s SLA target)",
+  "RECOVERY_POINT_OBJECTIVE_RPO": "NOT CONFIGURED (archive_mode=off; snapshot RPO bounded by backup interval; continuous RPO <= 60s requires WAL archiving)",
+  "OVERALL_DISASTER_RECOVERY_VERDICT": "RESTORE_VERIFIED_STANDBY_PITR_NOT_CONFIGURED"
+}
