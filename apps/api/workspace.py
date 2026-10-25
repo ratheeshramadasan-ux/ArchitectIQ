@@ -14,11 +14,13 @@ from models import Folder, Organization, Project, ProjectEnvironment, ProjectMem
 from project_promotions import router as project_promotions_router
 from project_rbac import require_project_capability, router as project_rbac_router
 from workflow_designer import router as workflow_designer_router
+from execution_engine import router as execution_engine_router
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/workspace", tags=["Workspace"])
 router.include_router(project_rbac_router)
 router.include_router(project_promotions_router)
 router.include_router(workflow_designer_router)
+router.include_router(execution_engine_router)
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
 
 class NameIn(BaseModel):

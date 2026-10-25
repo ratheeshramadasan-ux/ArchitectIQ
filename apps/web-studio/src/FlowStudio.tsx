@@ -489,6 +489,25 @@ export default function FlowStudio({
     }
   }
 
+  // Trigger Run
+  const triggerTestRun = async () => {
+    if (!effectiveProjectId || !activeWorkflowId) return
+    setBusy(true)
+    setErrorMessage('')
+    try {
+      const res = await callApi(`/projects/${effectiveProjectId}/workflows/${activeWorkflowId}/runs`, {
+        method: 'POST',
+        body: JSON.stringify({ trigger_type: 'MANUAL', trigger_payload: {} }),
+      })
+      setStatusMessage(`Execution ${res.status}: ${res.id.slice(0, 8)} (${res.steps?.length || 0} steps)`)
+      setTimeout(() => setStatusMessage(''), 5000)
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : 'Execution failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   // Create new workflow
   const handleCreateWorkflow = async () => {
     if (!effectiveProjectId || !newWorkflowName.trim()) return
@@ -673,6 +692,16 @@ export default function FlowStudio({
             style={{ fontSize: 12, padding: '6px 12px', background: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <UploadCloud size={14} /> Publish
+          </button>
+
+          <button
+            type="button"
+            className="primary-button"
+            onClick={triggerTestRun}
+            disabled={busy || !activeWorkflowId}
+            style={{ fontSize: 12, padding: '6px 12px', background: '#3b82f6', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            <Play size={14} /> Run
           </button>
         </div>
       </header>
