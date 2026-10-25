@@ -70,6 +70,9 @@ const textSizeScales: Record<TextSize, string> = {
 }
 
 const themeStorageKey = 'nextgen.theme.config.v2'
+const GLASS_THEMES = ['Aurora Glass', 'Frosted Glass', 'Obsidian Glass', 'Silk Glass', 'Horizon Glass', 'Lavender Mist', 'Champagne Glass']
+const DARK_THEMES = ['Woodland', 'Midnight Aurora', 'Wraith', 'Next Gen Ultra', 'Deep Space', 'Cyberpunk Neon', 'Emerald Empire', 'Crimson Velvet', 'Oceanic Depth', 'Jet Black', 'Obsidian Glass', 'Aurora Glass']
+
 function loadThemeConfig(): ThemeConfig {
   try {
     const raw = JSON.parse(localStorage.getItem(themeStorageKey) || 'null')
@@ -81,6 +84,7 @@ function loadThemeConfig(): ThemeConfig {
     activeIconSet: 'Glassmorphic Hologram',
     activeTextSize: 'Small',
     panelOpacity: 0.85,
+    activeBackground: null,
   }
 }
 
@@ -195,8 +199,8 @@ function App(){
   })
  }
  const themeClass = `theme-${themeConfig.activeTheme.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-
- const dark = themeConfig.activeTheme.includes('Dark') || themeConfig.activeTheme === 'Obsidian Glass' || themeConfig.activeTheme === 'Next Gen Ultra' || themeConfig.activeTheme === 'Deep Space' || themeConfig.activeTheme === 'Cyberpunk Neon' || themeConfig.activeTheme === 'Jet Black' || themeConfig.activeTheme === 'Woodland' || themeConfig.activeTheme === 'Midnight Aurora' || themeConfig.activeTheme === 'Wraith' || themeConfig.activeTheme === 'Emerald Empire' || themeConfig.activeTheme === 'Crimson Velvet' || themeConfig.activeTheme === 'Oceanic Depth'
+ const isGlass = GLASS_THEMES.includes(themeConfig.activeTheme)
+ const dark = DARK_THEMES.includes(themeConfig.activeTheme)
 
  const matches = useMemo(() => flatLinks.filter(x => x.name.toLowerCase().includes(query.toLowerCase())), [query])
 
@@ -227,6 +231,10 @@ function App(){
   '--panel-opacity': themeConfig.panelOpacity,
   fontFamily: fontFamilies[themeConfig.activeFont] || "'Plus Jakarta Sans', sans-serif",
   fontSize: textSizeScales[themeConfig.activeTextSize] || '0.92rem',
+  backgroundImage: themeConfig.activeBackground ? `url('${themeConfig.activeBackground}')` : undefined,
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  backgroundAttachment: 'fixed',
  } as React.CSSProperties
 
  const isExplorer = active === 'Explorer' || active === 'Projects' || active === 'Environments'
@@ -236,40 +244,46 @@ function App(){
  const hasRuns = liveThroughput > 0
 
  return (
-  <div className={`app enterprise-app ${themeClass} ${dark ? 'theme-dark' : 'theme-light'}`} style={rootStyle}>
-   <div className="ambient-city-lights" />
-   <div className="shell">
+  <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
+   {themeConfig.activeBackground && (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
+   )}
+   {isGlass && !themeConfig.activeBackground && (
+    <div className="blob-container">
+     <div className="blob blob-1" />
+     <div className="blob blob-2" />
+     <div className="blob blob-3" />
+    </div>
+   )}
+
+   <div className="shell-container">
     {mobile && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobile(false)} />}
-    <aside className={`sidebar glass enterprise-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
-     <button className="brand" onClick={() => navigate('Dashboard')}>
-      <span className="brand-mark">
-       <NextGenLogo size={26} />
-      </span>
-      <span className="brand-copy">
-       <strong>Next Gen</strong>
-       <small>ENTERPRISE AI &amp; AUTOMATION</small>
-      </span>
+    <aside className={`nextgen-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
+     <button className="sidebar-brand-btn" onClick={() => navigate('Dashboard')}>
+      <NextGenLogo size={28} />
+      {!collapsed && (
+       <div>
+        <div className="brand-title">ArchitectIQ</div>
+        <div className="brand-sub">ENTERPRISE AI &amp; AUTOMATION</div>
+       </div>
+      )}
      </button>
 
-     <div style={{ padding: '0 8px', marginBottom: 12 }}>
-      <div style={{ fontSize: '0.66rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.08em', marginBottom: 4 }}>
-       WORKSPACE
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 700 }}>
+     <div className="sidebar-selector-box">
+      <div className="selector-tag">WORKSPACE</div>
+      <div className="selector-pill">
        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent, #BA9731)' }} />
-        {tenants.find(t => t.id === tenant)?.name || 'No Tenant Selected'}
+        {tenants.find(t => t.id === tenant)?.name || 'Citibank'}
        </span>
        <ChevronDown size={14} style={{ opacity: 0.6 }} />
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-       <span style={{ fontSize: '0.66rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.08em' }}>TENANT</span>
-       <span style={{ fontSize: '0.65rem', fontWeight: 900, background: 'var(--accent, #BA9731)', color: 'white', padding: '1px 6px', borderRadius: 4 }}>
-        {currentEnv}
-       </span>
+      <div className="selector-tenant-row">
+       <span className="selector-tag" style={{ margin: 0 }}>TENANT</span>
+       <span className="env-tag-badge">{currentEnv}</span>
       </div>
-      <div style={{ marginTop: 4, display: 'flex', gap: 4, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
        <select
         aria-label="Active tenant"
         value={tenant}
@@ -285,8 +299,8 @@ function App(){
         ))}
        </select>
        <button
-        className="icon-button"
-        style={{ padding: '2px 8px', fontSize: 14, fontWeight: 'bold', width: 28, height: 28 }}
+        className="topbar-icon-action"
+        style={{ width: 26, height: 26, fontSize: 13, fontWeight: 'bold' }}
         title="Create new tenant"
         aria-label="Create new tenant"
         onClick={() => setNewTenantModal(true)}
@@ -296,93 +310,93 @@ function App(){
       </div>
      </div>
 
-     <nav aria-label="Main navigation" className="enterprise-nav">
+     <nav aria-label="Main navigation" className="sidebar-nav-scroll">
       {groups.map(group => (
-       <div className="nav-group" key={group.title}>
-        <div className="sidebar-label">{group.title}</div>
-        {group.links.map(({ name, icon: Icon }) => (
-         <button
-          key={name}
-          title={name}
-          className={`nav-link ${active === name ? 'active' : ''}`}
-          onClick={() => navigate(name)}
-         >
-          <Icon size={17} />
-          <span>{name}</span>
-          {active === name && <span className="nav-dot" />}
-         </button>
-        ))}
+       <div key={group.title}>
+        <div className="nav-group-title">{group.title}</div>
+        <div className="nav-links-list">
+         {group.links.map(({ name, icon: Icon }) => (
+          <button
+           key={name}
+           title={name}
+           className={`nextgen-nav-item ${active === name ? 'active' : ''}`}
+           onClick={() => navigate(name)}
+          >
+           <Icon size={16} />
+           {!collapsed && <span>{name}</span>}
+           {active === name && <span className="nav-active-dot" />}
+          </button>
+         ))}
+        </div>
        </div>
       ))}
      </nav>
 
-     <div className="sidebar-bottom">
-      <button className="nav-link" onClick={() => navigate('Theme / Icons')}>
-       <Palette size={18} />
-       <span>Theme / Icons</span>
+     <div className="sidebar-foot">
+      <button className="nextgen-nav-item" onClick={() => navigate('Theme / Icons')}>
+       <Palette size={16} />
+       {!collapsed && <span>Theme / Icons</span>}
       </button>
-      <button className="nav-link collapse-action" onClick={() => setCollapsed(v => !v)}>
-       <PanelLeftClose size={18} />
-       <span>Collapse sidebar</span>
+      <button className="nextgen-nav-item" onClick={() => setCollapsed(v => !v)}>
+       <PanelLeftClose size={16} />
+       {!collapsed && <span>Collapse sidebar</span>}
       </button>
-      <div className="account">
-       <span className="avatar">A</span>
-       <span className="account-copy">
-        <strong>Enterprise Administrator</strong>
-        <small>admin@architectiq.io</small>
-       </span>
+      <div className="user-identity-card">
+       <span className="user-avatar-circle">A</span>
+       {!collapsed && (
+        <div className="user-names-stack">
+         <strong>Enterprise Administrator</strong>
+         <small>admin@architectiq.io</small>
+        </div>
+       )}
       </div>
      </div>
     </aside>
 
-    <div className="main-area">
-     <header className="topbar glass">
-      <div className="topbar-left">
-       <button className="icon-button mobile-menu" aria-label="Open navigation" onClick={() => setMobile(true)}>
-        <Menu size={20} />
+    <div className="nextgen-main-column">
+     <header className="nextgen-topbar">
+      <div className="topbar-left-cluster">
+       <button className="topbar-icon-action mobile-menu" aria-label="Open navigation" onClick={() => setMobile(true)}>
+        <Menu size={18} />
        </button>
-       <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingRight: 14, borderRight: '1px solid var(--border)' }}>
+       <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
         <NextGenLogo size={22} />
-        <strong style={{ fontSize: '0.92rem', letterSpacing: '-0.02em' }}>Next Gen</strong>
+        <strong style={{ fontSize: '0.88rem', letterSpacing: '-0.02em', color: 'var(--foreground)' }}>ArchitectIQ</strong>
        </div>
-       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px', borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)', fontSize: '0.78rem' }}>
+       <div className="topbar-tenant-pill">
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38BDF8' }} />
-        <strong>{tenants.find(t => t.id === tenant)?.name || 'No Tenant Selected'}</strong>
-        <span style={{ color: 'var(--muted)' }}>/</span>
+        <strong>{tenants.find(t => t.id === tenant)?.name || 'Citibank'}</strong>
+        <span style={{ color: 'var(--muted-foreground)' }}>/</span>
         <span>{currentEnv === 'DEV' ? 'Development' : currentEnv}</span>
        </div>
       </div>
 
-      <div style={{ flex: 1, maxWidth: 360, margin: '0 16px' }}>
-       <button
-        className="search-trigger"
-        style={{ width: '100%', padding: '7px 12px', minWidth: 0, borderRadius: 8, background: 'var(--card)', border: '1px solid var(--border)' }}
-        onClick={() => setSearch(true)}
-       >
-        <Search size={15} style={{ opacity: 0.6 }} />
-        <span style={{ fontSize: '0.78rem' }}>Search jobs, logs...</span>
-        <kbd style={{ fontSize: '0.68rem', padding: '1px 5px' }}>Ctrl K</kbd>
+      <div style={{ flex: 1, maxWidth: 360, margin: '0 12px' }}>
+       <button className="topbar-search-btn" onClick={() => setSearch(true)}>
+        <Search size={14} style={{ opacity: 0.6 }} />
+        <span>Search jobs, logs...</span>
+        <kbd>Ctrl K</kbd>
        </button>
       </div>
 
-      <div className="topbar-actions">
-       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', paddingRight: 12, borderRight: '1px solid var(--border)', lineHeight: 1.2 }}>
-        <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted)', letterSpacing: '0.08em' }}>IDENTITY</span>
-        <strong style={{ fontSize: '0.78rem' }}>Platform Administrator</strong>
+      <div className="topbar-right-cluster">
+       <div className="topbar-identity-box">
+        <span className="id-label">IDENTITY</span>
+        <span className="id-name">Platform Administrator</span>
        </div>
-       <button className="text-action" style={{ fontSize: '0.75rem', gap: 4 }} onClick={() => navigate('Theme / Icons')}>
-        <Palette size={15} /> Appearance
+       <button className="nextgen-nav-item" style={{ width: 'auto', padding: '6px 10px', fontSize: '0.75rem', gap: 5 }} onClick={() => navigate('Theme / Icons')}>
+        <Palette size={14} /> Appearance
        </button>
-       <button className="icon-button" title="Guide" onClick={() => navigate('Explorer')}>
-        <HelpCircle size={18} />
+       <button className="topbar-icon-action" title="Guide" onClick={() => navigate('Explorer')}>
+        <HelpCircle size={16} />
        </button>
-       <button className="icon-button" aria-label="Notifications" onClick={() => setNotification(v => !v)}>
-        <Bell size={18} />
+       <button className="topbar-icon-action" aria-label="Notifications" onClick={() => setNotification(v => !v)}>
+        <Bell size={16} />
        </button>
-       <div style={{ padding: '3px 8px', borderRadius: 6, background: 'var(--accent, #BA9731)', color: 'white', fontWeight: 900, fontSize: '0.7rem', letterSpacing: '0.06em' }}>
+       <div className="tenant-badge-pill">
         {tenants.find(t => t.id === tenant)?.name ? tenants.find(t => t.id === tenant)!.name.toUpperCase().slice(0, 8) : 'CITIBANK'}
        </div>
-       <button className="text-action" onClick={logout} style={{ fontSize: '0.75rem' }}>
+       <button className="signout-btn" onClick={logout}>
         Sign out
        </button>
       </div>
@@ -395,24 +409,30 @@ function App(){
       </div>
      )}
 
-     <main className="content enterprise-content">
+     <main className="dashboard-page-shell">
       {active === 'Theme / Icons' && (
        <ThemeAppearanceStudio config={themeConfig} onChange={updateTheme} />
       )}
 
       {active === 'Dashboard' && (
        <>
-        <section className="enterprise-hero glass">
+        <section className="glass-card panel-padded" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', overflow: 'hidden' }}>
          <div>
-          <div className="eyebrow"><span className="live-dot" /> NEXT GEN ENTERPRISE WORKSPACE</div>
-          <h1>Good to see you at <span>Next Gen.</span></h1>
-          <p>Design, orchestrate and govern enterprise automation in one connected command center.</p>
-          <div className="hero-actions">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.65rem', fontWeight: 800, color: 'var(--accent, #BA9731)', letterSpacing: '0.1em' }}>
+           <span className="live-dot" /> YOUR INTELLIGENT WORKSPACE
+          </div>
+          <h1 style={{ fontSize: '1.9rem', fontWeight: 800, letterSpacing: '-0.03em', margin: '10px 0 6px', color: 'var(--foreground)' }}>
+           Good to see you at <span style={{ color: 'var(--accent, #BA9731)' }}>ArchitectIQ.</span>
+          </h1>
+          <p style={{ color: 'var(--muted-foreground)', fontSize: '0.85rem', margin: 0, maxWidth: 540, lineHeight: 1.6 }}>
+           Design, orchestrate and govern enterprise automation in one connected command center.
+          </p>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
            <button className="primary-button" onClick={() => navigate('Explorer')}>
-            <FolderKanban size={17} /> Open workspace <ArrowRight size={16} />
+            <FolderKanban size={15} /> Open workspace <ArrowRight size={15} />
            </button>
            <button className="secondary-button" onClick={() => navigate('Flow Studio')}>
-            <Workflow size={17} /> Explore Flow Studio
+            <Workflow size={15} /> Explore Flow Studio
            </button>
           </div>
          </div>
@@ -535,7 +555,7 @@ function App(){
           { name: 'Agent Builder', icon: Bot, desc: 'Governed AI agents & tools' },
           { name: 'Document Studio', icon: FileText, desc: 'Intelligent document processing' },
           { name: 'App Studio', icon: AppWindow, desc: 'Enterprise app experiences' },
-          { name: 'Theme / Icons', icon: Palette, desc: 'Personalize Next Gen appearance' },
+          { name: 'Theme / Icons', icon: Palette, desc: 'Personalize ArchitectIQ appearance' },
           { name: 'Governance', icon: ShieldCheck, desc: 'Policies, risks & controls' },
          ].map(({ name, icon: Icon, desc }) => (
           <button className="launch-card glass" key={name} onClick={() => navigate(name)}>
@@ -574,16 +594,16 @@ function App(){
        <>
         <div className="page-heading">
          <div>
-          <span className="section-overline">NEXT GEN MODULE</span>
+          <span className="section-overline">ARCHITECTIQ MODULE</span>
           <h1>{active}</h1>
           <p>Enterprise orchestration, governance, and operational visibility.</p>
          </div>
-         <span className="preview-pill"><span className="live-dot" /> LIVE NEXT GEN</span>
+         <span className="preview-pill"><span className="live-dot" /> LIVE ARCHITECTIQ</span>
         </div>
         <div className="module-layout">
          <section className="workspace-panel glass module-primary">
           <div className="module-toolbar">
-           <span className="module-breadcrumb">Next Gen / {active}</span>
+           <span className="module-breadcrumb">ArchitectIQ / {active}</span>
            <div>
             <button className="tool-button" onClick={() => setSearch(true)}><Search size={15} /> Find</button>
             <button className="tool-button" onClick={() => navigate('Theme / Icons')}><Palette size={15} /> Appearance</button>
@@ -593,7 +613,7 @@ function App(){
            <div className="canvas-decoration"><div /><div /><div /></div>
            <span className="module-emblem">{(() => { const Icon = flatLinks.find(n => n.name === active)?.icon || Command; return <Icon size={37} /> })()}</span>
            <h2>{active} workspace</h2>
-           <p>Full Next Gen framework active. Real-time telemetry, execution tracking, and tenant isolation enabled.</p>
+           <p>Full ArchitectIQ framework active. Real-time telemetry, execution tracking, and tenant isolation enabled.</p>
            <button className="secondary-button" onClick={() => navigate('Explorer')}><FolderKanban size={17} /> Browse workspace</button>
           </div>
          </section>
@@ -610,7 +630,7 @@ function App(){
       )}
      </main>
      <footer className="footer">
-      <span>Next Gen · Enterprise AI &amp; Automation Studio</span>
+      <span>ArchitectIQ · Enterprise AI &amp; Automation Studio</span>
       <span>Tenant-scoped workspace · Live Telemetry</span>
      </footer>
     </div>
@@ -631,7 +651,7 @@ function App(){
         </button>
        )) : <p>No matching pages found.</p>}
       </div>
-      <div className="search-footer">Next Gen Enterprise Workspace</div>
+      <div className="search-footer">ArchitectIQ Enterprise Workspace</div>
      </div>
     </div>
    )}
@@ -640,7 +660,7 @@ function App(){
     <div className="search-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setNewTenantModal(false) }}>
      <div className="search-dialog glass" style={{ maxWidth: 440, padding: 24 }} role="dialog" aria-modal="true" aria-label="Create New Tenant">
       <h2 style={{ margin: '0 0 8px', fontSize: '1.25rem' }}>Create New Tenant</h2>
-      <p style={{ fontSize: '0.85rem', color: 'var(--muted, #94a3b8)', marginBottom: 16 }}>Add an isolated tenant organization to your Next Gen workspace.</p>
+      <p style={{ fontSize: '0.85rem', color: 'var(--muted, #94a3b8)', marginBottom: 16 }}>Add an isolated tenant organization to your ArchitectIQ workspace.</p>
       <form onSubmit={handleCreateTenant}>
        <label style={{ display: 'block', marginBottom: 12, fontSize: '0.85rem' }}>
         Tenant Name

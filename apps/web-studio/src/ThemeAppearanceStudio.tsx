@@ -17,6 +17,7 @@ import {
   Pipette,
   Layout,
   RotateCcw,
+  Eye,
   Gem,
   Cpu,
   Terminal,
@@ -77,20 +78,16 @@ export type TextSize = 'Tiny' | 'Small' | 'Regular' | 'Large' | 'Extra Large' | 
 
 export interface ThemeConfig {
   activeTheme: ThemeName
-  activeFont: FontName
   activeIconSet: IconSetName
+  activeFont: FontName
   activeTextSize: TextSize
   panelOpacity: number
+  activeBackground: string | null
   primaryColor?: string
   accentColor?: string
 }
 
-const themes: {
-  name: ThemeName
-  colors: string[]
-  desc: string
-  category: 'light' | 'dark' | 'glass'
-}[] = [
+export const themes: { name: ThemeName; colors: string[]; desc: string; category: 'light' | 'dark' | 'glass' }[] = [
   // Light
   { name: 'Sand Serenity', colors: ['#714329', '#E5D8C9', '#B08463'], desc: 'Warm beige and terracotta', category: 'light' },
   { name: 'Ink Wash', colors: ['#252525', '#F8F9FA', '#7D7D7D'], desc: 'Minimalist grayscale', category: 'light' },
@@ -121,7 +118,7 @@ const themes: {
   { name: 'Champagne Glass', colors: ['#0D0D0D', '#FEFEFE', '#BA9731'], desc: 'Black, cream & gold elegance', category: 'glass' },
 ]
 
-const iconSets: { name: IconSetName; icon: React.ElementType }[] = [
+export const iconSets: { name: IconSetName; icon: React.ElementType }[] = [
   { name: 'Standard', icon: Box },
   { name: 'Glow Aura', icon: Sparkles },
   { name: 'Minimal Thin', icon: MousePointer2 },
@@ -133,7 +130,7 @@ const iconSets: { name: IconSetName; icon: React.ElementType }[] = [
   { name: 'Neomorphic Tactile', icon: Fingerprint },
 ]
 
-const fonts: { name: FontName; family: string; desc: string; category: string }[] = [
+export const fonts: { name: FontName; family: string; desc: string; category: string }[] = [
   { name: 'Inter', family: "'Inter', sans-serif", desc: 'Top modern UI choice. Extremely readable at small sizes.', category: 'Dashboards, SaaS, Admin' },
   { name: 'Roboto', family: "'Roboto', sans-serif", desc: 'Google standard workhorse. Clean geometric structure.', category: 'Corporate, Web Apps' },
   { name: 'Open Sans', family: "'Open Sans', sans-serif", desc: 'Corporate default classic. Neutral and highly legible.', category: 'Government, Business' },
@@ -147,6 +144,53 @@ const fonts: { name: FontName; family: string; desc: string; category: string }[
   { name: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans', sans-serif", desc: 'Modern and airy. Great for clean dashboards.', category: 'Modern UI, Fintech' },
 ]
 
+export const backgroundWallpapers = [
+  { id: 'cyber-city', name: 'Cyber City' },
+  { id: 'nebula-dreams', name: 'Nebula Dreams' },
+  { id: 'emerald-forest', name: 'Emerald Forest' },
+  { id: 'minimalist-slate', name: 'Minimalist Slate' },
+  { id: 'aurora-peaks', name: 'Aurora Peaks' },
+  { id: 'silicon-valley', name: 'Silicon Valley' },
+  { id: 'ocean-depth', name: 'Ocean Depth' },
+  { id: 'sahara-sands', name: 'Sahara Sands' },
+  { id: 'arctic-aurora', name: 'Arctic Aurora' },
+  { id: 'frosted-glass', name: 'Frosted Glass' },
+]
+
+function ColorInput({
+  label,
+  value,
+  isActive,
+  onFocus,
+  onChange,
+}: {
+  label: string
+  value: string
+  isActive?: boolean
+  onFocus?: () => void
+  onChange: (v: string) => void
+}) {
+  return (
+    <div
+      onClick={onFocus}
+      className={`color-input-tile ${isActive ? 'active' : ''}`}
+    >
+      <div className="color-swatch-box" style={{ backgroundColor: value || 'transparent' }}>
+        <input
+          type="color"
+          value={value || '#BA9731'}
+          onChange={(e) => onChange(e.target.value)}
+          className="color-picker-native"
+        />
+      </div>
+      <div className="color-text-box">
+        <span className="color-label">{label}</span>
+        <span className="color-val">{value || 'Default'}</span>
+      </div>
+    </div>
+  )
+}
+
 export default function ThemeAppearanceStudio({
   config,
   onChange,
@@ -154,210 +198,258 @@ export default function ThemeAppearanceStudio({
   config: ThemeConfig
   onChange: (updated: Partial<ThemeConfig>) => void
 }) {
-  const [labPrimary, setLabPrimary] = useState(config.primaryColor || '#0D0D0D')
-  const [labAccent, setLabAccent] = useState(config.accentColor || '#BA9731')
+  const [labPrimary, setLabPrimary] = useState(config.primaryColor || '')
+  const [labPrimaryFg, setLabPrimaryFg] = useState('')
+  const [labAccent, setLabAccent] = useState(config.accentColor || '')
+  const [labAccentFg, setLabAccentFg] = useState('')
+  const [labBg, setLabBg] = useState('')
+  const [labFg, setLabFg] = useState('')
+  const [labCard, setLabCard] = useState('')
+  const [labCardFg, setLabCardFg] = useState('')
+  const [labBorder, setLabBorder] = useState('')
   const [labActive, setLabActive] = useState(false)
-  const [activeLabField, setActiveLabField] = useState<string | null>('primary')
+  const [activeLabField, setActiveLabField] = useState<string>('primary')
 
   const lightThemes = themes.filter((t) => t.category === 'light')
   const darkThemes = themes.filter((t) => t.category === 'dark')
   const glassThemes = themes.filter((t) => t.category === 'glass')
 
-  const currentTheme = themes.find((t) => t.name === config.activeTheme) || themes[themes.length - 1]
-
   const handlePaletteClick = (color: string) => {
     setLabActive(true)
-    if (activeLabField === 'primary') {
-      setLabPrimary(color)
-      onChange({ primaryColor: color })
-    } else if (activeLabField === 'accent') {
-      setLabAccent(color)
-      onChange({ accentColor: color })
+    switch (activeLabField) {
+      case 'primary':
+        setLabPrimary(color)
+        onChange({ primaryColor: color })
+        break
+      case 'primaryFg':
+        setLabPrimaryFg(color)
+        break
+      case 'accent':
+        setLabAccent(color)
+        onChange({ accentColor: color })
+        break
+      case 'accentFg':
+        setLabAccentFg(color)
+        break
+      case 'bg':
+        setLabBg(color)
+        break
+      case 'fg':
+        setLabFg(color)
+        break
+      case 'card':
+        setLabCard(color)
+        break
+      case 'cardFg':
+        setLabCardFg(color)
+        break
+      case 'border':
+        setLabBorder(color)
+        break
     }
   }
 
   const handleLabReset = () => {
     setLabActive(false)
-    setLabPrimary('#0D0D0D')
-    setLabAccent('#BA9731')
+    setLabPrimary('')
+    setLabPrimaryFg('')
+    setLabAccent('')
+    setLabAccentFg('')
+    setLabBg('')
+    setLabFg('')
+    setLabCard('')
+    setLabCardFg('')
+    setLabBorder('')
     setActiveLabField('primary')
     onChange({ primaryColor: undefined, accentColor: undefined })
   }
 
+  const currentTheme = themes.find((t) => t.name === config.activeTheme) || themes[themes.length - 1]
+
   return (
-    <div className="next-gen-appearance-studio">
-      {/* Page Header */}
-      <div className="next-gen-page-header">
-        <div className="header-left">
-          <div className="header-icon-box">
-            <Palette size={20} className="text-primary" />
+    <div className="nextgen-appearance-page">
+      {/* ─── Header ─── */}
+      <div className="appearance-top-header">
+        <div className="header-branding">
+          <div className="appearance-icon-badge">
+            <Palette className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="header-title">Appearance</h1>
-            <p className="header-subtitle">Customize how Next Gen looks across every module.</p>
+            <h1 className="appearance-page-title">Appearance</h1>
+            <p className="appearance-page-desc">Customize how ArchitectIQ looks across every module.</p>
           </div>
         </div>
-        <div className="header-badge">
-          <span className="live-dot" />
+        <div className="appearance-active-pill">
+          <Eye size={12} />
           <span>{config.activeTheme.toUpperCase()}</span>
         </div>
       </div>
 
-      {/* 3-Column Core Grid */}
-      <div className="next-gen-theme-grid">
-        {/* Column 1: Theme Palette */}
-        <section className="next-gen-glass-card theme-palette-col">
-          <div className="card-section-title">
-            <Palette size={14} />
-            <span>THEME PALETTE</span>
-          </div>
-
-          {/* Light Section */}
-          <div className="theme-subgroup">
-            <div className="subgroup-label">
-              <Sun size={13} className="text-amber-500" />
-              <span>LIGHT</span>
+      {/* ─── 3-Column Grid ─── */}
+      <div className="appearance-main-grid">
+        {/* Column 1: Theme Palette & Design Lab */}
+        <div className="appearance-col col-palette-lab">
+          {/* Theme Palette */}
+          <section className="glass-card panel-padded">
+            <div className="card-section-head">
+              <Palette size={13} className="text-muted-foreground" />
+              <h2>Theme Palette</h2>
             </div>
-            <div className="palette-grid">
-              {lightThemes.map((t) => {
-                const isSelected = config.activeTheme === t.name
-                return (
-                  <button
-                    key={t.name}
-                    className={`theme-swatch-card ${isSelected ? 'selected' : ''}`}
-                    onClick={() => onChange({ activeTheme: t.name })}
-                  >
-                    {isSelected && (
-                      <div className="selected-check">
-                        <Check size={10} strokeWidth={3} />
+
+            {/* Light Subgroup */}
+            <div className="theme-group">
+              <div className="group-heading">
+                <Sun size={13} className="text-amber-500" />
+                <h3>Light</h3>
+              </div>
+              <div className="swatches-grid">
+                {lightThemes.map((t) => {
+                  const isActive = config.activeTheme === t.name
+                  return (
+                    <button
+                      key={t.name}
+                      onClick={() => onChange({ activeTheme: t.name })}
+                      className={`theme-card-nextgen ${isActive ? 'active' : ''}`}
+                    >
+                      {isActive && (
+                        <div className="active-check-badge">
+                          <Check size={9} strokeWidth={3} />
+                        </div>
+                      )}
+                      <div className="color-dots-row">
+                        {t.colors.map((c, idx) => (
+                          <span key={idx} className="color-dot" style={{ backgroundColor: c }} />
+                        ))}
                       </div>
-                    )}
-                    <div className="swatch-dots">
-                      {t.colors.map((c, i) => (
-                        <span key={i} style={{ backgroundColor: c }} />
-                      ))}
-                    </div>
-                    <strong>{t.name}</strong>
-                    <small>{t.desc}</small>
-                  </button>
-                )
-              })}
+                      <span className="theme-card-name">{t.name}</span>
+                      <span className="theme-card-desc">{t.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Dark Section */}
-          <div className="theme-subgroup">
-            <div className="subgroup-label">
-              <Moon size={13} className="text-indigo-400" />
-              <span>DARK</span>
-            </div>
-            <div className="palette-grid">
-              {darkThemes.map((t) => {
-                const isSelected = config.activeTheme === t.name
-                return (
-                  <button
-                    key={t.name}
-                    className={`theme-swatch-card ${isSelected ? 'selected' : ''}`}
-                    onClick={() => onChange({ activeTheme: t.name })}
-                  >
-                    {isSelected && (
-                      <div className="selected-check">
-                        <Check size={10} strokeWidth={3} />
+            {/* Dark Subgroup */}
+            <div className="theme-group">
+              <div className="group-heading">
+                <Moon size={13} className="text-indigo-400" />
+                <h3>Dark</h3>
+              </div>
+              <div className="swatches-grid">
+                {darkThemes.map((t) => {
+                  const isActive = config.activeTheme === t.name
+                  return (
+                    <button
+                      key={t.name}
+                      onClick={() => onChange({ activeTheme: t.name })}
+                      className={`theme-card-nextgen ${isActive ? 'active' : ''}`}
+                    >
+                      {isActive && (
+                        <div className="active-check-badge">
+                          <Check size={9} strokeWidth={3} />
+                        </div>
+                      )}
+                      <div className="color-dots-row">
+                        {t.colors.map((c, idx) => (
+                          <span key={idx} className="color-dot" style={{ backgroundColor: c }} />
+                        ))}
                       </div>
-                    )}
-                    <div className="swatch-dots">
-                      {t.colors.map((c, i) => (
-                        <span key={i} style={{ backgroundColor: c }} />
-                      ))}
-                    </div>
-                    <strong>{t.name}</strong>
-                    <small>{t.desc}</small>
-                  </button>
-                )
-              })}
+                      <span className="theme-card-name">{t.name}</span>
+                      <span className="theme-card-desc">{t.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Glass Section */}
-          <div className="theme-subgroup">
-            <div className="subgroup-label">
-              <Gem size={13} className="text-fuchsia-400" />
-              <span>GLASS</span>
-            </div>
-            <div className="palette-grid">
-              {glassThemes.map((t) => {
-                const isSelected = config.activeTheme === t.name
-                return (
-                  <button
-                    key={t.name}
-                    className={`theme-swatch-card is-glass ${isSelected ? 'selected' : ''}`}
-                    onClick={() => onChange({ activeTheme: t.name })}
-                  >
-                    {isSelected && (
-                      <div className="selected-check">
-                        <Check size={10} strokeWidth={3} />
+            {/* Glass Subgroup */}
+            <div className="theme-group">
+              <div className="group-heading">
+                <Gem size={13} className="text-fuchsia-400" />
+                <h3>Glass</h3>
+              </div>
+              <div className="swatches-grid">
+                {glassThemes.map((t) => {
+                  const isActive = config.activeTheme === t.name
+                  return (
+                    <button
+                      key={t.name}
+                      onClick={() => onChange({ activeTheme: t.name })}
+                      className={`theme-card-nextgen is-glass ${isActive ? 'active' : ''}`}
+                    >
+                      {isActive && (
+                        <div className="active-check-badge">
+                          <Check size={9} strokeWidth={3} />
+                        </div>
+                      )}
+                      <div className="color-dots-row">
+                        {t.colors.map((c, idx) => (
+                          <span key={idx} className="color-dot" style={{ backgroundColor: c }} />
+                        ))}
                       </div>
-                    )}
-                    <div className="swatch-dots">
-                      {t.colors.map((c, i) => (
-                        <span key={i} style={{ backgroundColor: c }} />
-                      ))}
-                    </div>
-                    <strong>{t.name}</strong>
-                    <small>{t.desc}</small>
-                  </button>
-                )
-              })}
+                      <span className="theme-card-name">{t.name}</span>
+                      <span className="theme-card-desc">{t.desc}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Panel Transparency Slider */}
-          <div className="transparency-control-box">
-            <div className="transparency-header">
-              <span>PANEL TRANSPARENCY</span>
-              <span className="transparency-pill">{Math.round(config.panelOpacity * 100)}%</span>
+            {/* Panel Transparency Slider */}
+            <div className="transparency-slider-row">
+              <div className="slider-label-row">
+                <h3>Panel Transparency</h3>
+                <span className="transparency-val-pill">{Math.round(config.panelOpacity * 100)}%</span>
+              </div>
+              <div className="slider-track-wrap">
+                <Ghost size={13} className="text-muted-foreground" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={config.panelOpacity}
+                  onChange={(e) => onChange({ panelOpacity: parseFloat(e.target.value) })}
+                  className="nextgen-slider"
+                />
+                <Monitor size={13} className="text-muted-foreground" />
+              </div>
             </div>
-            <div className="slider-row">
-              <Ghost size={14} />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={config.panelOpacity}
-                onChange={(e) => onChange({ panelOpacity: parseFloat(e.target.value) })}
-                className="next-gen-range"
-              />
-              <Monitor size={14} />
-            </div>
-          </div>
+          </section>
 
-          {/* Design Lab */}
-          <div className="design-lab-box">
+          {/* Design Lab Card */}
+          <section className="glass-card panel-padded">
             <div className="design-lab-header">
-              <div className="flex-row gap-3">
-                <div className="lab-icon">
-                  <Pipette size={16} />
+              <div className="lab-title-group">
+                <div className="lab-icon-box">
+                  <Pipette size={18} />
                 </div>
                 <div>
-                  <strong>Design Lab</strong>
-                  <small>ADVANCED THEME ORCHESTRATION</small>
+                  <h2>Design Lab</h2>
+                  <p>ADVANCED THEME ORCHESTRATION</p>
                 </div>
               </div>
-              <div className="lab-actions">
+              <div className="lab-actions-group">
                 {labActive && (
-                  <button onClick={handleLabReset} className="lab-btn reset">
-                    <RotateCcw size={11} /> Reset
+                  <button onClick={handleLabReset} className="lab-btn-reset">
+                    <RotateCcw size={12} /> Reset Lab
                   </button>
                 )}
                 <button
                   onClick={() => {
                     setLabActive(true)
                     setLabPrimary('#6366F1')
+                    setLabPrimaryFg('#FFFFFF')
                     setLabAccent('#F43F5E')
+                    setLabAccentFg('#FFFFFF')
+                    setLabBg('#05050A')
+                    setLabFg('#E8E8F0')
+                    setLabCard('#12121A')
+                    setLabCardFg('#A0A0B0')
+                    setLabBorder('#222233')
                     onChange({ primaryColor: '#6366F1', accentColor: '#F43F5E' })
                   }}
-                  className="lab-btn preset"
+                  className="lab-preset-btn preset-indigo"
                 >
                   PRESET 1
                 </button>
@@ -365,88 +457,257 @@ export default function ThemeAppearanceStudio({
                   onClick={() => {
                     setLabActive(true)
                     setLabPrimary('#FF634A')
+                    setLabPrimaryFg('#FFFFFF')
                     setLabAccent('#D2D2D4')
+                    setLabAccentFg('#1A1A1A')
+                    setLabBg('#FAF9F6')
+                    setLabFg('#1A1A1A')
+                    setLabCard('#FFFFFF')
+                    setLabCardFg('#404040')
+                    setLabBorder('#E7E7E7')
                     onChange({ primaryColor: '#FF634A', accentColor: '#D2D2D4' })
                   }}
-                  className="lab-btn preset"
+                  className="lab-preset-btn preset-rose"
                 >
                   PRESET 2
                 </button>
               </div>
             </div>
 
-            <div className="lab-layers-row">
-              <div className="layer-group">
-                <span className="layer-title">
-                  <Zap size={12} /> ACTION LAYERS
-                </span>
-                <div className="color-input-pair">
-                  <button
-                    className={`color-chip-btn ${activeLabField === 'primary' ? 'active' : ''}`}
-                    onClick={() => setActiveLabField('primary')}
-                  >
-                    <span className="color-preview" style={{ backgroundColor: labPrimary }} />
-                    <span className="chip-label">Primary</span>
-                  </button>
-                  <button
-                    className={`color-chip-btn ${activeLabField === 'accent' ? 'active' : ''}`}
-                    onClick={() => setActiveLabField('accent')}
-                  >
-                    <span className="color-preview" style={{ backgroundColor: labAccent }} />
-                    <span className="chip-label">Accent</span>
-                  </button>
+            <div className="design-lab-body-grid">
+              <div className="lab-inputs-stack">
+                <div className="lab-layers-grid">
+                  {/* Action Layers */}
+                  <div className="layer-block">
+                    <div className="layer-header">
+                      <Zap size={12} />
+                      <span>ACTION LAYERS</span>
+                    </div>
+                    <div className="layer-pair">
+                      <ColorInput
+                        label="Primary Bg"
+                        value={labPrimary}
+                        isActive={activeLabField === 'primary'}
+                        onFocus={() => setActiveLabField('primary')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabPrimary(v)
+                          onChange({ primaryColor: v })
+                        }}
+                      />
+                      <ColorInput
+                        label="Primary Font"
+                        value={labPrimaryFg}
+                        isActive={activeLabField === 'primaryFg'}
+                        onFocus={() => setActiveLabField('primaryFg')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabPrimaryFg(v)
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Accent Layers */}
+                  <div className="layer-block">
+                    <div className="layer-header">
+                      <Sparkles size={12} />
+                      <span>ACCENT LAYERS</span>
+                    </div>
+                    <div className="layer-pair">
+                      <ColorInput
+                        label="Highlight Bg"
+                        value={labAccent}
+                        isActive={activeLabField === 'accent'}
+                        onFocus={() => setActiveLabField('accent')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabAccent(v)
+                          onChange({ accentColor: v })
+                        }}
+                      />
+                      <ColorInput
+                        label="Highlight Font"
+                        value={labAccentFg}
+                        isActive={activeLabField === 'accentFg'}
+                        onFocus={() => setActiveLabField('accentFg')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabAccentFg(v)
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Global Canvas */}
+                  <div className="layer-block">
+                    <div className="layer-header">
+                      <Layout size={12} />
+                      <span>GLOBAL CANVAS</span>
+                    </div>
+                    <div className="layer-pair">
+                      <ColorInput
+                        label="App Bg"
+                        value={labBg}
+                        isActive={activeLabField === 'bg'}
+                        onFocus={() => setActiveLabField('bg')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabBg(v)
+                        }}
+                      />
+                      <ColorInput
+                        label="Global Font"
+                        value={labFg}
+                        isActive={activeLabField === 'fg'}
+                        onFocus={() => setActiveLabField('fg')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabFg(v)
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* UI Containers */}
+                  <div className="layer-block">
+                    <div className="layer-header">
+                      <Layers size={12} />
+                      <span>UI CONTAINERS</span>
+                    </div>
+                    <div className="layer-pair">
+                      <ColorInput
+                        label="Card Bg"
+                        value={labCard}
+                        isActive={activeLabField === 'card'}
+                        onFocus={() => setActiveLabField('card')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabCard(v)
+                        }}
+                      />
+                      <ColorInput
+                        label="Card Font"
+                        value={labCardFg}
+                        isActive={activeLabField === 'cardFg'}
+                        onFocus={() => setActiveLabField('cardFg')}
+                        onChange={(v) => {
+                          setLabActive(true)
+                          setLabCardFg(v)
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Intelligent Palette */}
+                <div className="intelligent-palette-row">
+                  <div className="palette-strip-left">
+                    <div className="palette-labels">
+                      <span className="p-title">INTELLIGENT PALETTE</span>
+                      <span className="p-map">mapping to: {activeLabField || 'none'}</span>
+                    </div>
+                    <div className="palette-bubbles">
+                      {currentTheme.colors.map((c, idx) => (
+                        <button
+                          key={`${c}-${idx}`}
+                          onClick={() => handlePaletteClick(c)}
+                          className="swatch-bubble-btn"
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="border-color-input-wrap">
+                    <ColorInput
+                      label="Structural Borders"
+                      value={labBorder}
+                      isActive={activeLabField === 'border'}
+                      onFocus={() => setActiveLabField('border')}
+                      onChange={(v) => {
+                        setLabActive(true)
+                        setLabBorder(v)
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="layer-group">
-                <span className="layer-title">
-                  <Layout size={12} /> GLOBAL CANVAS
-                </span>
-                <div className="palette-strip">
-                  {currentTheme.colors.map((c, idx) => (
-                    <button
-                      key={idx}
-                      className="swatch-bubble"
-                      style={{ backgroundColor: c }}
-                      onClick={() => handlePaletteClick(c)}
+              {/* Micro Preview Box */}
+              <div className="lab-micro-preview-card">
+                <span className="preview-label">MICRO PREVIEW</span>
+                <div className="preview-icons-row">
+                  <Zap size={20} style={{ color: config.primaryColor || 'var(--primary)' }} />
+                  <Monitor size={20} style={{ color: config.primaryColor || 'var(--primary)' }} />
+                  <Fingerprint size={20} style={{ color: config.primaryColor || 'var(--primary)' }} />
+                </div>
+                <div className="preview-btns-col">
+                  <div
+                    className="preview-pill-primary"
+                    style={{
+                      backgroundColor: config.primaryColor || 'var(--primary)',
+                      color: labPrimaryFg || 'var(--primary-foreground, #FFFFFF)',
+                    }}
+                  >
+                    PRIMARY
+                  </div>
+                  <div
+                    className="preview-pill-accent"
+                    style={{
+                      borderColor: config.accentColor || 'var(--accent)',
+                      color: config.accentColor || 'var(--accent)',
+                    }}
+                  >
+                    ACCENT
+                  </div>
+                </div>
+                <div className="preview-status-meter">
+                  <div className="meter-track">
+                    <div
+                      className="meter-bar"
+                      style={{ backgroundColor: config.primaryColor || 'var(--primary)' }}
                     />
-                  ))}
+                  </div>
+                  <div className="meter-footer">
+                    <span>STATUS</span>
+                    <span style={{ color: config.primaryColor || 'var(--primary)' }}>LIVE</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
         {/* Column 2: Typography */}
-        <section className="next-gen-glass-card typography-col">
-          <div className="card-section-title">
-            <Type size={14} />
-            <span>TYPOGRAPHY</span>
+        <section className="glass-card panel-padded col-typography">
+          <div className="card-section-head">
+            <Type size={13} className="text-muted-foreground" />
+            <h2>Typography</h2>
           </div>
-          <div className="typography-cards-list">
+          <div className="typography-cards-grid">
             {fonts.map((f) => {
-              const isSelected = config.activeFont === f.name
+              const isActive = config.activeFont === f.name
               return (
                 <button
                   key={f.name}
-                  className={`font-card ${isSelected ? 'selected' : ''}`}
                   onClick={() => onChange({ activeFont: f.name })}
+                  className={`typography-card-nextgen ${isActive ? 'active' : ''}`}
                 >
-                  <div className="font-card-top">
-                    <div>
-                      <strong className="font-name">{f.name.toUpperCase()}</strong>
-                      <span className="font-category">{f.category.split(',')[0].toUpperCase()}</span>
+                  <div className="typo-top-row">
+                    <div className="typo-names">
+                      <span className="typo-name">{f.name.toUpperCase()}</span>
+                      <span className="typo-cat">{f.category.split(',')[0].toUpperCase()}</span>
                     </div>
-                    <span className="font-sample" style={{ fontFamily: f.family }}>
+                    <span className="typo-sample-ag" style={{ fontFamily: f.family }}>
                       Ag
                     </span>
                   </div>
-                  <p className="font-desc">{f.desc}</p>
-                  <div className="font-strategic">
-                    <span className="label">STRATEGIC USE:</span>
-                    <span className="val">{f.category.toUpperCase()}</span>
+                  <p className="typo-desc">{f.desc}</p>
+                  <div className="typo-strategic">
+                    <span className="s-label">STRATEGIC USE:</span>
+                    <span className="s-val">{f.category.toUpperCase()}</span>
                   </div>
-                  {isSelected && <span className="font-active-dot" />}
+                  {isActive && <div className="typo-pulse-dot" />}
                 </button>
               )
             })}
@@ -454,25 +715,25 @@ export default function ThemeAppearanceStudio({
         </section>
 
         {/* Column 3: Icon Style & Global Text Size */}
-        <div className="col-stack">
+        <div className="appearance-col col-icons-sizes">
           {/* Icon Style */}
-          <section className="next-gen-glass-card">
-            <div className="card-section-title">
-              <Sparkles size={14} />
-              <span>ICON STYLE</span>
+          <section className="glass-card panel-padded">
+            <div className="card-section-head">
+              <Sparkles size={13} className="text-muted-foreground" />
+              <h2>Icon Style</h2>
             </div>
-            <div className="icon-style-grid">
+            <div className="icons-style-grid">
               {iconSets.map((s) => {
-                const IconComponent = s.icon
-                const isSelected = config.activeIconSet === s.name
+                const IconComp = s.icon
+                const isActive = config.activeIconSet === s.name
                 return (
                   <button
                     key={s.name}
-                    className={`icon-style-card ${isSelected ? 'selected' : ''}`}
                     onClick={() => onChange({ activeIconSet: s.name })}
+                    className={`icon-style-btn-nextgen ${isActive ? 'active' : ''}`}
                   >
-                    <IconComponent size={18} className="icon-svg" />
-                    <span>{s.name.toUpperCase()}</span>
+                    <IconComp size={18} className={isActive ? 'text-primary' : 'text-muted-foreground'} />
+                    <span className="icon-style-name">{s.name.toUpperCase()}</span>
                   </button>
                 )
               })}
@@ -480,32 +741,32 @@ export default function ThemeAppearanceStudio({
           </section>
 
           {/* Global Text Size */}
-          <section className="next-gen-glass-card">
-            <div className="card-section-title">
-              <Type size={14} />
-              <span>GLOBAL TEXT SIZE</span>
+          <section className="glass-card panel-padded">
+            <div className="card-section-head">
+              <Type size={13} className="text-muted-foreground" />
+              <h2>Global Text Size</h2>
             </div>
-            <div className="text-size-grid">
+            <div className="text-sizes-grid">
               {[
-                { id: 'Tiny', label: 'TINY', desc: 'Ultra Compact', glyphSize: '1rem' },
-                { id: 'Small', label: 'SMALL', desc: 'Max Info Density', glyphSize: '1.25rem' },
-                { id: 'Regular', label: 'REGULAR', desc: 'Standard View', glyphSize: '1.45rem' },
-                { id: 'Large', label: 'LARGE', desc: 'High Visibility', glyphSize: '1.7rem' },
-                { id: 'Extra Large', label: 'EXTRA LARGE', desc: 'Accessibility+', glyphSize: '2rem' },
-                { id: 'Gigantic', label: 'GIGANTIC', desc: 'Kiosk Mode', glyphSize: '2.3rem' },
-              ].map((sz) => {
-                const isSelected = config.activeTextSize === sz.id
+                { id: 'Tiny', label: 'TINY', desc: 'Ultra Compact', glyphScale: '1rem' },
+                { id: 'Small', label: 'SMALL', desc: 'Max Info Density', glyphScale: '1.25rem' },
+                { id: 'Regular', label: 'REGULAR', desc: 'Standard View', glyphScale: '1.45rem' },
+                { id: 'Large', label: 'LARGE', desc: 'High Visibility', glyphScale: '1.7rem' },
+                { id: 'Extra Large', label: 'EXTRA LARGE', desc: 'Accessibility+', glyphScale: '2rem' },
+                { id: 'Gigantic', label: 'GIGANTIC', desc: 'Kiosk Mode', glyphScale: '2.3rem' },
+              ].map((s) => {
+                const isActive = config.activeTextSize === s.id
                 return (
                   <button
-                    key={sz.id}
-                    className={`text-size-card ${isSelected ? 'selected' : ''}`}
-                    onClick={() => onChange({ activeTextSize: sz.id as TextSize })}
+                    key={s.id}
+                    onClick={() => onChange({ activeTextSize: s.id as TextSize })}
+                    className={`text-size-btn-nextgen ${isActive ? 'active' : ''}`}
                   >
-                    <span className="size-sample" style={{ fontSize: sz.glyphSize }}>
+                    <span className="size-sample-glyph" style={{ fontSize: s.glyphScale }}>
                       Aa
                     </span>
-                    <strong>{sz.label}</strong>
-                    <small>{sz.desc}</small>
+                    <span className="size-label">{s.label}</span>
+                    <span className="size-sub">{s.desc}</span>
                   </button>
                 )
               })}
@@ -513,6 +774,55 @@ export default function ThemeAppearanceStudio({
           </section>
         </div>
       </div>
+
+      {/* ─── Row 4: Dashboard Background ─── */}
+      <section className="glass-card panel-padded background-gallery-card">
+        <div className="background-gallery-head">
+          <div className="head-title">
+            <Layers size={13} className="text-muted-foreground" />
+            <h2>Dashboard Background</h2>
+          </div>
+          {config.activeBackground && (
+            <button
+              onClick={() => onChange({ activeBackground: null })}
+              className="reset-bg-action"
+            >
+              Reset to Theme Default
+            </button>
+          )}
+        </div>
+        <div className="wallpaper-thumbnails-grid">
+          <button
+            onClick={() => onChange({ activeBackground: null })}
+            className={`wallpaper-thumb default-thumb ${!config.activeBackground ? 'active' : ''}`}
+          >
+            <div className="default-icon-wrap">
+              <RotateCcw size={16} />
+              <span>DEFAULT</span>
+            </div>
+          </button>
+          {backgroundWallpapers.map((bg) => {
+            const url = `/backgrounds/dashboard/${bg.id}.png`
+            const isActive = config.activeBackground === url
+            return (
+              <button
+                key={bg.id}
+                onClick={() => onChange({ activeBackground: url })}
+                className={`wallpaper-thumb ${isActive ? 'active' : ''}`}
+              >
+                <img src={url} alt={bg.name} className="wallpaper-img" />
+                <div className="wallpaper-overlay" />
+                <span className="wallpaper-name">{bg.name}</span>
+                {isActive && (
+                  <div className="wallpaper-check">
+                    <Check size={10} strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </section>
     </div>
   )
 }
