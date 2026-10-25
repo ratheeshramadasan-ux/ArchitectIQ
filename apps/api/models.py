@@ -701,3 +701,108 @@ class DocumentAnnotation(Base):
     annotated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     annotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class CredentialReference(Base):
+    __tablename__ = "credential_references"
+    __table_args__ = (
+        CheckConstraint(
+            "vault_provider IN ('VAULT', 'AWS_SECRETS_MANAGER', 'AZURE_KEY_VAULT', 'CYBERARK', 'INTERNAL_ENCRYPTED')",
+            name="ck_credential_references_provider",
+        ),
+        CheckConstraint(
+            "environment IN ('DEV', 'TEST', 'UAT', 'PROD')",
+            name="ck_credential_references_environment",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'EXPIRED', 'ROTATING')",
+            name="ck_credential_references_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    vault_provider: Mapped[str] = mapped_column(String(40), default="INTERNAL_ENCRYPTED", server_default="INTERNAL_ENCRYPTED", nullable=False)
+    vault_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    secret_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    environment: Mapped[str] = mapped_column(String(10), default="DEV", server_default="DEV", nullable=False)
+    masked_preview: Mapped[str] = mapped_column(String(60), default="********", server_default="********", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class Connector(Base):
+    __tablename__ = "connectors"
+    __table_args__ = (
+        UniqueConstraint("project_id", "slug", name="uq_connectors_project_slug"),
+        CheckConstraint(
+            "connector_type IN ('REST', 'GRAPHQL', 'DATABASE', 'KAFKA', 'WEBHOOK')",
+            name="ck_connectors_type",
+        ),
+        CheckConstraint(
+            "auth_type IN ('NONE', 'API_KEY', 'BEARER_TOKEN', 'BASIC', 'OAUTH2', 'VAULT_REFERENCE')",
+            name="ck_connectors_auth",
+        ),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'INACTIVE', 'MAINTENANCE')",
+            name="ck_connectors_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    credential_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("credential_references.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    connector_type: Mapped[str] = mapped_column(String(30), default="REST", server_default="REST", nullable=False)
+    base_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    auth_type: Mapped[str] = mapped_column(String(30), default="API_KEY", server_default="API_KEY", nullable=False)
+    headers_template: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=30, server_default=text("30"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class IntegrationTool(Base):
+    __tablename__ = "integration_tools"
+    __table_args__ = (
+        UniqueConstraint("project_id", "slug", name="uq_integration_tools_project_slug"),
+        CheckConstraint(
+            "method IN ('GET', 'POST', 'PUT', 'DELETE', 'PATCH')",
+            name="ck_integration_tools_method",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    connector_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("connectors.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    method: Mapped[str] = mapped_column(String(10), default="POST", server_default="POST", nullable=False)
+    endpoint_path: Mapped[str] = mapped_column(String(255), default="/", server_default="/", nullable=False)
+    parameters_schema: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    response_schema: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    rate_limit_per_minute: Mapped[int] = mapped_column(Integer, default=60, server_default=text("60"), nullable=False)
+    is_governed: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class ProjectTemplate(Base):
+    __tablename__ = "project_templates"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slug", name="uq_project_templates_tenant_slug"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(60), default="AUTOMATION", server_default="AUTOMATION", nullable=False)
+    package_bundle: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
