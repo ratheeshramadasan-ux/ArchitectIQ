@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Integer,
     JSON,
     String,
     Text,
@@ -370,4 +371,49 @@ class PromotionRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WorkflowDefinition(Base):
+    __tablename__ = "workflow_definitions"
+    __table_args__ = (
+        UniqueConstraint("project_id", "slug", name="uq_workflow_project_slug"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')",
+            name="ck_workflow_definitions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    slug: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    current_version: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT", server_default="DRAFT", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class WorkflowVersion(Base):
+    __tablename__ = "workflow_versions"
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "version", name="uq_workflow_version"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')",
+            name="ck_workflow_versions_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    workflow_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflow_definitions.id", ondelete="CASCADE"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{\"nodes\": [], \"edges\": [], \"variables\": [], \"metadata\": {}}'::jsonb"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT", server_default="DRAFT", nullable=False)
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
 
