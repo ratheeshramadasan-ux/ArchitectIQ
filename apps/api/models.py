@@ -630,3 +630,74 @@ class AIAgentEvaluation(Base):
     results: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
     pass_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=0.0, server_default=text("0.00"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class DocumentSchema(Base):
+    __tablename__ = "document_schemas"
+    __table_args__ = (
+        UniqueConstraint("project_id", "slug", name="uq_document_schemas_project_slug"),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'DRAFT', 'ARCHIVED')",
+            name="ck_document_schemas_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fields_schema: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    confidence_threshold: Mapped[float] = mapped_column(Numeric(3, 2), default=0.85, server_default=text("0.85"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('UPLOADED', 'PROCESSING', 'EXTRACTED', 'REVIEW_REQUIRED', 'COMPLETED', 'FAILED')",
+            name="ck_documents_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    schema_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("document_schemas.id", ondelete="SET NULL"), nullable=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="UPLOADED", server_default="UPLOADED", nullable=False)
+    classification: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    page_count: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"), nullable=False)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_entities: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    overall_confidence: Mapped[float] = mapped_column(Numeric(3, 2), default=0.0, server_default=text("0.00"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class DocumentAnnotation(Base):
+    __tablename__ = "document_annotations"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'ACCEPTED', 'CORRECTED', 'REJECTED')",
+            name="ck_document_annotations_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    field_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    extracted_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    corrected_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_corrected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING", nullable=False)
+    annotated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    annotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
