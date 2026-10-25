@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Activity,
+  Archive,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -10,16 +11,26 @@ import {
   LockKeyhole,
   Play,
   RefreshCw,
+  RotateCcw,
   Server,
   Settings2,
   ShieldCheck,
+  Tag,
   Timer,
   Trash2,
   UserPlus,
   Users,
 } from 'lucide-react'
 
-type Node = { id: string; name: string; kind: 'org' | 'folder' | 'project' | 'environment'; children: Node[] }
+type Node = {
+  id: string
+  name: string
+  kind: 'org' | 'folder' | 'project' | 'environment'
+  lifecycle_status?: 'ACTIVE' | 'ARCHIVED' | 'SUSPENDED'
+  criticality?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  data_classification?: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED'
+  children: Node[]
+}
 type AuditEvent = {
   id: string
   resource_kind: string
@@ -30,7 +41,29 @@ type AuditEvent = {
   old_values: Record<string, unknown> | null
   new_values: Record<string, unknown> | null
 }
-type Counts = { organizations: number; folders: number; projects: number; environments: number }
+type Counts = {
+  organizations: number
+  folders: number
+  projects: number
+  active_projects?: number
+  archived_projects?: number
+  environments: number
+}
+
+type ProjectMetadata = {
+  id: string
+  name: string
+  folder_id: string
+  lifecycle_status: 'ACTIVE' | 'ARCHIVED' | 'SUSPENDED'
+  description: string | null
+  tags: string[]
+  criticality: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  data_classification: 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED'
+  cost_center: string | null
+  archived_at: string | null
+  archived_by: string | null
+  created_at: string | null
+}
 
 type ProjectMember = {
   id: string
@@ -84,6 +117,18 @@ export default function WorkspaceLive({
   const [newMemberId, setNewMemberId] = useState('')
   const [newMemberRole, setNewMemberRole] = useState<'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER'>('VIEWER')
 
+  // Project lifecycle and metadata state
+  const [projectMeta, setProjectMeta] = useState<ProjectMetadata | null>(null)
+  const [metaLoading, setMetaLoading] = useState(false)
+  const [metaError, setMetaError] = useState('')
+  const [metaRefresh, setMetaRefresh] = useState(0)
+  const [showArchived, setShowArchived] = useState(false)
+  const [metaDesc, setMetaDesc] = useState('')
+  const [metaTags, setMetaTags] = useState('')
+  const [metaCriticality, setMetaCriticality] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM')
+  const [metaDataClass, setMetaDataClass] = useState<'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'RESTRICTED'>('INTERNAL')
+  const [metaCostCenter, setMetaCostCenter] = useState('')
+
   const [tree, setTree] = useState<Node[]>([])
   const [counts, setCounts] = useState<Counts | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -122,7 +167,10 @@ export default function WorkspaceLive({
     setBusy(true)
     setError('')
     try {
-      const [t, s] = await Promise.all([call('/tree'), call('/summary')])
+      const [t, s] = await Promise.all([
+        call(showArchived ? '/tree?include_archived=true' : '/tree'),
+        call('/summary'),
+      ])
       setTree(t)
       setCounts(s)
     } catch (e) {
@@ -130,7 +178,7 @@ export default function WorkspaceLive({
     } finally {
       setBusy(false)
     }
-  }, [call, tenant, token])
+  }, [call, tenant, token, showArchived])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -203,6 +251,126 @@ export default function WorkspaceLive({
       cancelled = true
     }
   }, [resourceTab, selectedKind, selectedId, token, tenant, call, accessRefresh])
+
+  // Project details & governance metadata loader
+  useEffect(() => {
+    let cancelled = false
+    if (selectedKind !== 'project' || !selectedId || !token || !tenant) {
+      return
+    }
+    const load = async () => {
+      setMetaLoading(true)
+      setMetaError('')
+      try {
+        const [meta, perms] = await Promise.all([
+          call(`/projects/${selectedId}`),
+          call(`/projects/${selectedId}/permissions`).catch(() => null),
+        ])
+        if (!cancelled) {
+          setProjectMeta(meta)
+          setMetaDesc(meta.description || '')
+          setMetaTags((meta.tags || []).join(', '))
+          setMetaCriticality(meta.criticality || 'MEDIUM')
+          setMetaDataClass(meta.data_classification || 'INTERNAL')
+          setMetaCostCenter(meta.cost_center || '')
+          if (perms) {
+            setUserPermissions(perms.permissions)
+            setCurrentUserRole(perms.role)
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setMetaError(e instanceof Error ? e.message : 'Failed to load project metadata')
+        }
+      } finally {
+        if (!cancelled) setMetaLoading(false)
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedKind, selectedId, token, tenant, call, metaRefresh])
+
+  async function handleArchiveProject() {
+    if (!selectedId || selectedKind !== 'project') return
+    if (!window.confirm('Are you sure you want to archive this project? It will be hidden from default workspace views.')) return
+    setBusy(true)
+    setError('')
+    try {
+      await call(`/projects/${selectedId}/archive`, { method: 'POST' })
+      setMetaRefresh((x) => x + 1)
+      await refresh()
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to archive project')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRestoreProject() {
+    if (!selectedId || selectedKind !== 'project') return
+    setBusy(true)
+    setError('')
+    try {
+      await call(`/projects/${selectedId}/restore`, { method: 'POST' })
+      setMetaRefresh((x) => x + 1)
+      await refresh()
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to restore project')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleSaveMetadata() {
+    if (!selectedId || selectedKind !== 'project') return
+    setBusy(true)
+    setError('')
+    try {
+      const parsedTags = metaTags.split(',').map((t) => t.trim()).filter(Boolean)
+      await call(`/projects/${selectedId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          description: metaDesc.trim() || null,
+          tags: parsedTags,
+          criticality: metaCriticality,
+          data_classification: metaDataClass,
+          cost_center: metaCostCenter.trim() || null,
+        }),
+      })
+      setMetaRefresh((x) => x + 1)
+      await refresh()
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to update metadata')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteFolder() {
+    if (!selectedId || selectedKind !== 'folder') return
+    if (!window.confirm('Are you sure you want to delete this folder? The folder must be completely empty.')) return
+    setBusy(true)
+    setError('')
+    try {
+      await call(`/folders/${selectedId}`, { method: 'DELETE' })
+      setSelected(null)
+      await refresh()
+      setAuditRefresh((x) => x + 1)
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete folder')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function handleAddMember() {
     if (!newMemberId.trim() || selectedKind !== 'project' || !selectedId) return
@@ -649,6 +817,21 @@ export default function WorkspaceLive({
           )}
           {n.kind === 'org' ? <Building2 size={16} /> : n.kind === 'folder' ? <Folder size={16} /> : n.kind === 'project' ? <Layers3 size={16} /> : <Server size={16} />}
           <span>{n.name}</span>
+          {n.lifecycle_status === 'ARCHIVED' && (
+            <span
+              style={{
+                fontSize: 10,
+                padding: '1px 6px',
+                borderRadius: 4,
+                background: '#78350f',
+                color: '#fef3c7',
+                marginLeft: 6,
+                fontWeight: 600,
+              }}
+            >
+              ARCHIVED
+            </span>
+          )}
         </button>
         {open && n.children?.map((c) => renderNode(c, depth + 1))}
       </div>
@@ -701,6 +884,27 @@ export default function WorkspaceLive({
               <h3>Resource hierarchy</h3>
               <small>Organization / folders / projects</small>
             </div>
+            <div
+              style={{
+                padding: '6px 12px 10px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                marginBottom: 8,
+              }}
+            >
+              <input
+                type="checkbox"
+                id="show-archived-toggle"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              <label htmlFor="show-archived-toggle" style={{ cursor: 'pointer', userSelect: 'none', color: 'rgba(255,255,255,0.8)' }}>
+                Show archived projects
+              </label>
+            </div>
             {tree.length ? tree.map((n) => renderNode(n)) : <p>No workspace resources found.</p>}
           </aside>
           <div className="resource-main">
@@ -729,7 +933,118 @@ export default function WorkspaceLive({
                 </div>
                 <div className="resource-tab-panel" role="tabpanel">
                   {resourceTab === 'Overview' ? (
-                    <p>Manage this {selected.kind} using the actions below. Changes are saved through the authenticated workspace API.</p>
+                    selected.kind === 'project' ? (
+                      metaLoading ? (
+                        <p>Loading project details...</p>
+                      ) : metaError ? (
+                        <p role="alert" style={{ color: '#ff8c9b' }}>{metaError}</p>
+                      ) : projectMeta ? (
+                        <div className="project-overview-panel">
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: 4,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              background:
+                                projectMeta.lifecycle_status === 'ACTIVE'
+                                  ? '#065f46'
+                                  : projectMeta.lifecycle_status === 'ARCHIVED'
+                                  ? '#78350f'
+                                  : '#831843',
+                              color: '#fff',
+                            }}
+                          >
+                            STATUS: {projectMeta.lifecycle_status}
+                          </span>
+                          <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, background: 'rgba(255,255,255,0.08)' }}>
+                            Criticality: <strong>{projectMeta.criticality}</strong>
+                          </span>
+                          <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, background: 'rgba(255,255,255,0.08)' }}>
+                            Classification: <strong>{projectMeta.data_classification}</strong>
+                          </span>
+                          {projectMeta.cost_center && (
+                            <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, background: 'rgba(255,255,255,0.08)' }}>
+                              Cost Center: <strong>{projectMeta.cost_center}</strong>
+                            </span>
+                          )}
+                        </div>
+
+                        {projectMeta.description && (
+                          <div style={{ margin: '12px 0', padding: 12, background: 'rgba(255,255,255,0.04)', borderRadius: 6 }}>
+                            <small style={{ color: 'rgba(255,255,255,0.6)', display: 'block', marginBottom: 4 }}>Description</small>
+                            <p style={{ margin: 0, fontSize: 14 }}>{projectMeta.description}</p>
+                          </div>
+                        )}
+
+                        {projectMeta.tags && projectMeta.tags.length > 0 && (
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', margin: '10px 0' }}>
+                            <Tag size={13} style={{ color: 'rgba(255,255,255,0.5)' }} />
+                            {projectMeta.tags.map((t) => (
+                              <span
+                                key={t}
+                                style={{
+                                  fontSize: 11,
+                                  padding: '2px 8px',
+                                  borderRadius: 12,
+                                  background: 'rgba(56, 189, 248, 0.15)',
+                                  color: '#38bdf8',
+                                }}
+                              >
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 12, marginTop: 18, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 14 }}>
+                          {projectMeta.lifecycle_status === 'ACTIVE' ? (
+                            <button
+                              className="danger-button"
+                              disabled={busy || !userPermissions?.can_delete}
+                              onClick={handleArchiveProject}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <Archive size={14} /> Archive Project
+                            </button>
+                          ) : (
+                            <button
+                              className="primary-button"
+                              disabled={busy || !userPermissions?.can_delete}
+                              onClick={handleRestoreProject}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <RotateCcw size={14} /> Restore Project
+                            </button>
+                          )}
+                          {!userPermissions?.can_delete && (
+                            <small style={{ color: 'rgba(255,255,255,0.5)', alignSelf: 'center' }}>
+                              (Requires project OWNER role to archive or restore)
+                            </small>
+                          )}
+                        </div>
+                      </div>
+                    ) : null) : (
+                      <div>
+                        <p>Manage this {selected.kind} using the actions below. Changes are saved through the authenticated workspace API.</p>
+                        {selected.kind === 'folder' && (
+                          <div style={{ marginTop: 16 }}>
+                            <button
+                              className="danger-button"
+                              disabled={busy}
+                              onClick={handleDeleteFolder}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                            >
+                              <Trash2 size={14} /> Delete Empty Folder
+                            </button>
+                            <small style={{ display: 'block', color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>
+                              Folders containing subfolders or projects cannot be deleted until emptied.
+                            </small>
+                          </div>
+                        )}
+                      </div>
+                    )
                   ) : resourceTab === 'Activity' ? (
                     auditPanel()
                   ) : resourceTab === 'Access' ? (
@@ -745,6 +1060,83 @@ export default function WorkspaceLive({
                       <Timer size={22} />
                       <h4>Triggers not yet available</h4>
                       <p>Scheduling and event triggers require the runtime orchestration service.</p>
+                    </div>
+                  ) : selected.kind === 'project' ? (
+                    <div className="project-settings-panel" style={{ padding: 6 }}>
+                      <h4>Project Governance & Metadata</h4>
+                      <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 14 }}>
+                        Configure enterprise criticality, data classification, and accounting cost center.
+                      </p>
+                      <div style={{ display: 'grid', gap: 12, maxWidth: 500 }}>
+                        <label>
+                          Description
+                          <textarea
+                            aria-label="Project description"
+                            value={metaDesc}
+                            onChange={(e) => setMetaDesc(e.target.value)}
+                            rows={3}
+                            style={{ width: '100%', borderRadius: 6, padding: 8, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }}
+                            placeholder="Brief purpose and scope of this automation project..."
+                          />
+                        </label>
+                        <label>
+                          Tags (comma-separated)
+                          <input
+                            aria-label="Project tags"
+                            value={metaTags}
+                            onChange={(e) => setMetaTags(e.target.value)}
+                            placeholder="finance, batch, external-api"
+                          />
+                        </label>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <label style={{ flex: 1 }}>
+                            Criticality
+                            <select
+                              aria-label="Project criticality"
+                              value={metaCriticality}
+                              onChange={(e) => setMetaCriticality(e.target.value as typeof metaCriticality)}
+                            >
+                              <option value="LOW">LOW</option>
+                              <option value="MEDIUM">MEDIUM</option>
+                              <option value="HIGH">HIGH</option>
+                              <option value="CRITICAL">CRITICAL</option>
+                            </select>
+                          </label>
+                          <label style={{ flex: 1 }}>
+                            Data Classification
+                            <select
+                              aria-label="Project data classification"
+                              value={metaDataClass}
+                              onChange={(e) => setMetaDataClass(e.target.value as typeof metaDataClass)}
+                            >
+                              <option value="PUBLIC">PUBLIC</option>
+                              <option value="INTERNAL">INTERNAL</option>
+                              <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                              <option value="RESTRICTED">RESTRICTED</option>
+                            </select>
+                          </label>
+                        </div>
+                        <label>
+                          Cost Center
+                          <input
+                            aria-label="Project cost center"
+                            value={metaCostCenter}
+                            onChange={(e) => setMetaCostCenter(e.target.value)}
+                            placeholder="e.g. CC-9042"
+                          />
+                        </label>
+                        <button
+                          className="primary-button"
+                          disabled={busy || !userPermissions?.can_edit}
+                          onClick={handleSaveMetadata}
+                          style={{ justifySelf: 'start', marginTop: 8 }}
+                        >
+                          Save Governance Metadata
+                        </button>
+                        {!userPermissions?.can_edit && (
+                          <small style={{ color: '#ff8c9b' }}>You need Editor or higher role to modify metadata.</small>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="resource-empty">

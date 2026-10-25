@@ -1,6 +1,6 @@
 """Tenant-isolated workspace API. Authentication is mandatory on every route."""
 from typing import Annotated, Literal
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -29,6 +29,19 @@ class FolderIn(NameIn):
 
 class ProjectIn(NameIn):
     folder_id: UUID
+    description: str | None = None
+    tags: list[str] = []
+    criticality: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] = "MEDIUM"
+    data_classification: Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"] = "INTERNAL"
+    cost_center: str | None = None
+
+class ProjectUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    tags: list[str] | None = None
+    criticality: Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"] | None = None
+    data_classification: Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"] | None = None
+    cost_center: str | None = Field(default=None, max_length=100)
 
 class EnvironmentIn(BaseModel):
     environment: Literal["DEV", "TEST", "UAT", "PROD"]
@@ -48,7 +61,21 @@ class MoveProjectIn(BaseModel):
 
 
 def record(obj, **extras):
-    result = {"id": str(obj.id), "name": obj.name} if hasattr(obj, "name") else {"id": str(obj.id)}
+    result = {"id": str(obj.id)}
+    if hasattr(obj, "name"):
+        result["name"] = obj.name
+    if isinstance(obj, Project):
+        result.update({
+            "lifecycle_status": obj.lifecycle_status,
+            "description": obj.description,
+            "tags": obj.tags or [],
+            "criticality": obj.criticality,
+            "data_classification": obj.data_classification,
+            "cost_center": obj.cost_center,
+            "archived_at": obj.archived_at.isoformat() if obj.archived_at else None,
+            "archived_by": str(obj.archived_by) if obj.archived_by else None,
+            "created_at": obj.created_at.isoformat() if obj.created_at else None,
+        })
     return {**result, **extras}
 
 def require(db, model, identifier):
@@ -64,14 +91,25 @@ def safe_flush(db):
         raise HTTPException(409, "Workspace constraint violation") from exc
 
 @router.get("/tree")
-def tree(tenant_id: UUID, db: Db):
+def tree(tenant_id: UUID, db: Db, include_archived: bool = False):
     orgs = db.scalars(select(Organization).order_by(Organization.name)).all()
     folders = db.scalars(select(Folder).order_by(Folder.name)).all()
-    projects = db.scalars(select(Project).order_by(Project.name)).all()
+    project_stmt = select(Project).order_by(Project.name)
+    if not include_archived:
+        project_stmt = project_stmt.where(Project.lifecycle_status != "ARCHIVED")
+    projects = db.scalars(project_stmt).all()
     envs = db.execute(text("SELECT id, organization_id, name FROM organization_environments ORDER BY name")).mappings().all()
     project_by_folder = {}
     for p in projects:
-        project_by_folder.setdefault(p.folder_id, []).append({"id": str(p.id), "name": p.name, "kind": "project", "children": []})
+        project_by_folder.setdefault(p.folder_id, []).append({
+            "id": str(p.id),
+            "name": p.name,
+            "kind": "project",
+            "lifecycle_status": p.lifecycle_status,
+            "criticality": p.criticality,
+            "data_classification": p.data_classification,
+            "children": [],
+        })
     folder_nodes = {f.id: {"id": str(f.id), "name": f.name, "kind": "folder", "children": []} for f in folders}
     root_folders = {}
     for f in folders:
@@ -90,6 +128,8 @@ def summary(tenant_id: UUID, db: Db):
     return {"organizations": db.scalar(select(func.count()).select_from(Organization)) or 0,
             "folders": db.scalar(select(func.count()).select_from(Folder)) or 0,
             "projects": db.scalar(select(func.count()).select_from(Project)) or 0,
+            "active_projects": db.scalar(select(func.count()).select_from(Project).where(Project.lifecycle_status == "ACTIVE")) or 0,
+            "archived_projects": db.scalar(select(func.count()).select_from(Project).where(Project.lifecycle_status == "ARCHIVED")) or 0,
             "environments": db.scalar(text("SELECT count(*) FROM organization_environments")) or 0}
 
 @router.post("/organizations", status_code=201)
@@ -113,7 +153,17 @@ def create_folder(tenant_id: UUID, body: FolderIn, db: Db):
 def create_project(tenant_id: UUID, body: ProjectIn, db: Db, request: Request):
     require(db, Folder, body.folder_id)
     actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
-    obj = Project(id=uuid4(), folder_id=body.folder_id, name=body.name)
+    obj = Project(
+        id=uuid4(),
+        folder_id=body.folder_id,
+        name=body.name,
+        description=body.description,
+        tags=body.tags or [],
+        criticality=body.criticality,
+        data_classification=body.data_classification,
+        cost_center=body.cost_center,
+        lifecycle_status="ACTIVE",
+    )
     db.add(obj)
     if actor_id:
         owner = ProjectMembership(
@@ -126,6 +176,14 @@ def create_project(tenant_id: UUID, body: ProjectIn, db: Db, request: Request):
         )
         db.add(owner)
     safe_flush(db)
+    return record(obj, folder_id=str(obj.folder_id))
+
+@router.get("/projects/{resource_id}")
+def get_project(tenant_id: UUID, resource_id: UUID, db: Db, request: Request):
+    obj = require(db, Project, resource_id)
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
+    if actor_id:
+        require_project_capability(db, resource_id, actor_id, tenant_id, "can_view")
     return record(obj, folder_id=str(obj.folder_id))
 
 @router.post("/projects/{project_id}/environments", status_code=201)
@@ -143,15 +201,72 @@ def rename_org(tenant_id: UUID, resource_id: UUID, body: RenameIn, db: Db):
 def rename_folder(tenant_id: UUID, resource_id: UUID, body: RenameIn, db: Db):
     obj = require(db, Folder, resource_id); obj.name = body.name; safe_flush(db); return record(obj)
 
+@router.delete("/folders/{resource_id}", status_code=204)
+def delete_folder(tenant_id: UUID, resource_id: UUID, db: Db):
+    """Safely delete an empty folder. Rejects non-empty folders with 409 Conflict."""
+    folder = require(db, Folder, resource_id)
+    project_count = db.scalar(
+        select(func.count()).select_from(Project).where(Project.folder_id == resource_id)
+    ) or 0
+    subfolder_count = db.scalar(
+        select(func.count()).select_from(Folder).where(Folder.parent_folder_id == resource_id)
+    ) or 0
+    if project_count > 0 or subfolder_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete folder with contents. Please remove all projects and subfolders first."
+        )
+    db.delete(folder)
+    safe_flush(db)
+
 @router.patch("/projects/{resource_id}")
-def rename_project(tenant_id: UUID, resource_id: UUID, body: RenameIn, db: Db, request: Request):
+def rename_project(tenant_id: UUID, resource_id: UUID, body: ProjectUpdateIn, db: Db, request: Request):
     obj = require(db, Project, resource_id)
     actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
     if actor_id:
         require_project_capability(db, resource_id, actor_id, tenant_id, "can_edit")
-    obj.name = body.name
+    if body.name is not None:
+        obj.name = body.name
+    if body.description is not None:
+        obj.description = body.description
+    if body.tags is not None:
+        obj.tags = body.tags
+    if body.criticality is not None:
+        obj.criticality = body.criticality
+    if body.data_classification is not None:
+        obj.data_classification = body.data_classification
+    if body.cost_center is not None:
+        obj.cost_center = body.cost_center
     safe_flush(db)
-    return record(obj)
+    return record(obj, folder_id=str(obj.folder_id))
+
+@router.post("/projects/{resource_id}/archive")
+def archive_project(tenant_id: UUID, resource_id: UUID, db: Db, request: Request):
+    obj = require(db, Project, resource_id)
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
+    if actor_id:
+        require_project_capability(db, resource_id, actor_id, tenant_id, "can_delete")
+    if obj.lifecycle_status == "ARCHIVED":
+        raise HTTPException(status_code=400, detail="Project is already archived")
+    obj.lifecycle_status = "ARCHIVED"
+    obj.archived_at = datetime.now(UTC)
+    obj.archived_by = actor_id
+    safe_flush(db)
+    return record(obj, folder_id=str(obj.folder_id))
+
+@router.post("/projects/{resource_id}/restore")
+def restore_project(tenant_id: UUID, resource_id: UUID, db: Db, request: Request):
+    obj = require(db, Project, resource_id)
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
+    if actor_id:
+        require_project_capability(db, resource_id, actor_id, tenant_id, "can_delete")
+    if obj.lifecycle_status == "ACTIVE":
+        raise HTTPException(status_code=400, detail="Project is already active")
+    obj.lifecycle_status = "ACTIVE"
+    obj.archived_at = None
+    obj.archived_by = None
+    safe_flush(db)
+    return record(obj, folder_id=str(obj.folder_id))
 
 
 @router.get("/organizations/{organization_id}/settings")

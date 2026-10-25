@@ -6,8 +6,11 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    JSON,
     String,
+    Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -153,10 +156,44 @@ class Folder(Base):
 
 class Project(Base):
     __tablename__ = "projects"
+    __table_args__ = (
+        CheckConstraint(
+            "lifecycle_status IN ('ACTIVE', 'ARCHIVED', 'SUSPENDED')",
+            name="ck_projects_lifecycle_status",
+        ),
+        CheckConstraint(
+            "criticality IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL')",
+            name="ck_projects_criticality",
+        ),
+        CheckConstraint(
+            "data_classification IN ('PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED')",
+            name="ck_projects_data_classification",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     folder_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("folders.id"))
     name: Mapped[str] = mapped_column(String(200))
+    lifecycle_status: Mapped[str] = mapped_column(
+        String(20), default="ACTIVE", server_default="ACTIVE", nullable=False
+    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list] = mapped_column(
+        JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False
+    )
+    criticality: Mapped[str] = mapped_column(
+        String(20), default="MEDIUM", server_default="MEDIUM", nullable=False
+    )
+    data_classification: Mapped[str] = mapped_column(
+        String(20), default="INTERNAL", server_default="INTERNAL", nullable=False
+    )
+    cost_center: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    archived_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now
     )
