@@ -14,16 +14,19 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # 0. Ensure IAM owner and application can read membership verification data
+    # 0. Least-privilege grants:
+    # - IAM owner requires SELECT on users and tenant_memberships to execute SECURITY DEFINER routines.
+    # - Application runtime receives column-level SELECT on non-sensitive user metadata only.
+    # - Application runtime receives EXECUTE on membership verification function, shielding tenant_memberships.
     op.execute("""
         GRANT SELECT ON TABLE public.users, public.tenant_memberships TO architectiq_iam_owner;
-        GRANT SELECT ON TABLE public.users TO architectiq_app;
-        GRANT SELECT (user_id, tenant_id, status) ON TABLE public.tenant_memberships TO architectiq_app;
+        GRANT SELECT (id, display_name, status) ON TABLE public.users TO architectiq_app;
+        GRANT EXECUTE ON FUNCTION public.architectiq_verify_tenant_membership(uuid, uuid) TO architectiq_app;
     """)
 
-    # 1. Create project_memberships table
+    # 1. Deterministic table creation (no IF NOT EXISTS)
     op.execute("""
-        CREATE TABLE IF NOT EXISTS public.project_memberships (
+        CREATE TABLE public.project_memberships (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id uuid NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
             project_id uuid NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
@@ -38,13 +41,20 @@ def upgrade() -> None:
         );
     """)
 
-    # 2. Database trigger with SECURITY DEFINER to guarantee tenant consistency between project and user
+    # 2. Hardened SECURITY DEFINER trigger with restricted search_path (pg_catalog, pg_temp)
+    # Handles both INSERT and UPDATE with immutability guarantees on project, tenant, and user.
     op.execute("""
         CREATE OR REPLACE FUNCTION public.architectiq_enforce_project_membership_tenant()
         RETURNS trigger AS $$
         DECLARE
             project_tenant_id uuid;
         BEGIN
+            IF TG_OP = 'UPDATE' THEN
+                IF NEW.project_id <> OLD.project_id OR NEW.user_id <> OLD.user_id OR NEW.tenant_id <> OLD.tenant_id THEN
+                    RAISE EXCEPTION 'Cannot reassign project_id, user_id, or tenant_id on existing project membership';
+                END IF;
+            END IF;
+
             SELECT o.tenant_id INTO project_tenant_id
             FROM public.projects p
             JOIN public.folders f ON f.id = p.folder_id
@@ -71,11 +81,10 @@ def upgrade() -> None:
 
             RETURN NEW;
         END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_catalog, pg_temp;
+        $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp;
     """)
 
     op.execute("""
-        DROP TRIGGER IF EXISTS trg_enforce_project_membership_tenant ON public.project_memberships;
         CREATE TRIGGER trg_enforce_project_membership_tenant
         BEFORE INSERT OR UPDATE ON public.project_memberships
         FOR EACH ROW
@@ -86,21 +95,46 @@ def upgrade() -> None:
     op.execute("ALTER TABLE public.project_memberships ENABLE ROW LEVEL SECURITY;")
 
     op.execute("""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'project_memberships' AND policyname = 'project_memberships_select_policy') THEN
-                CREATE POLICY project_memberships_select_policy ON public.project_memberships FOR SELECT TO architectiq_app USING (tenant_id = public.architectiq_current_tenant_id());
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'project_memberships' AND policyname = 'project_memberships_insert_policy') THEN
-                CREATE POLICY project_memberships_insert_policy ON public.project_memberships FOR INSERT TO architectiq_app WITH CHECK (tenant_id = public.architectiq_current_tenant_id());
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'project_memberships' AND policyname = 'project_memberships_update_policy') THEN
-                CREATE POLICY project_memberships_update_policy ON public.project_memberships FOR UPDATE TO architectiq_app USING (tenant_id = public.architectiq_current_tenant_id()) WITH CHECK (tenant_id = public.architectiq_current_tenant_id());
-            END IF;
-            IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'project_memberships' AND policyname = 'project_memberships_delete_policy') THEN
-                CREATE POLICY project_memberships_delete_policy ON public.project_memberships FOR DELETE TO architectiq_app USING (tenant_id = public.architectiq_current_tenant_id());
-            END IF;
-        END $$;
+        CREATE POLICY project_memberships_select_policy
+        ON public.project_memberships
+        FOR SELECT
+        TO architectiq_app
+        USING (
+            tenant_id = public.architectiq_current_tenant_id()
+        );
+    """)
+
+    op.execute("""
+        CREATE POLICY project_memberships_insert_policy
+        ON public.project_memberships
+        FOR INSERT
+        TO architectiq_app
+        WITH CHECK (
+            tenant_id = public.architectiq_current_tenant_id()
+        );
+    """)
+
+    op.execute("""
+        CREATE POLICY project_memberships_update_policy
+        ON public.project_memberships
+        FOR UPDATE
+        TO architectiq_app
+        USING (
+            tenant_id = public.architectiq_current_tenant_id()
+        )
+        WITH CHECK (
+            tenant_id = public.architectiq_current_tenant_id()
+        );
+    """)
+
+    op.execute("""
+        CREATE POLICY project_memberships_delete_policy
+        ON public.project_memberships
+        FOR DELETE
+        TO architectiq_app
+        USING (
+            tenant_id = public.architectiq_current_tenant_id()
+        );
     """)
 
     # 4. Grant runtime permissions to architectiq_app
@@ -116,6 +150,6 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER IF EXISTS trg_enforce_project_membership_tenant ON public.project_memberships;")
     op.execute("DROP FUNCTION IF EXISTS public.architectiq_enforce_project_membership_tenant();")
     op.execute("DROP TABLE IF EXISTS public.project_memberships;")
-    op.execute("REVOKE SELECT (user_id, tenant_id, status) ON TABLE public.tenant_memberships FROM architectiq_app;")
+    op.execute("REVOKE EXECUTE ON FUNCTION public.architectiq_verify_tenant_membership(uuid, uuid) FROM architectiq_app;")
     op.execute("REVOKE SELECT (id, display_name, status) ON TABLE public.users FROM architectiq_app;")
     op.execute("REVOKE SELECT ON TABLE public.users, public.tenant_memberships FROM architectiq_iam_owner;")

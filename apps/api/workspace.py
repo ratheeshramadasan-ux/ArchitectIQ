@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session
 
 from authentication import get_authorized_tenant_db
 from models import Folder, Organization, Project, ProjectEnvironment, ProjectMembership
-from project_rbac import require_project_capability
+from project_rbac import require_project_capability, router as project_rbac_router
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/workspace", tags=["Workspace"])
+router.include_router(project_rbac_router)
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
 
 class NameIn(BaseModel):

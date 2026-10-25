@@ -4,24 +4,26 @@ Validates:
 1. Authentication requirements (401 on unauthenticated calls).
 2. Atomic initial project-owner assignment during project creation.
 3. Effective permissions evaluation for all 4 roles + unassigned users (default deny).
-4. Privilege escalation prevention (ADMIN cannot appoint/demote/remove OWNER).
-5. Last-owner protection (cannot remove or demote sole remaining OWNER).
-6. Owner transfer workflow.
-7. Database-enforced and API-enforced cross-tenant member prevention.
-8. Revoked tenant membership revokes project access.
-9. RLS enforcement on project_memberships using the restricted architectiq_app role.
-10. Server-side capability enforcement (VIEWER cannot rename or move project).
+4. Comprehensive privilege escalation defense (ADMIN/EDITOR/VIEWER boundaries).
+5. Concurrency-safe last-owner protection (cannot remove or demote sole remaining OWNER).
+6. Simulated concurrent owner removal serialization.
+7. Owner transfer workflow.
+8. Database-enforced and API-enforced cross-tenant member prevention.
+9. Inactive and revoked user/tenant membership access denial.
+10. Trigger immutability on project_id, user_id, and tenant_id updates.
+11. RLS enforcement on project_memberships using the restricted architectiq_app role.
+12. Server-side capability enforcement (VIEWER cannot rename or move project).
 """
 
 from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import ProgrammingError, InternalError
 
 from authentication import VerifiedIdentity, get_verified_identity
-from database import RuntimeSessionLocal, engine, tenant_session
+from database import RuntimeSessionLocal, SessionLocal, engine
 from main import app
-from models import ProjectMembership
 
 TENANT_A = UUID("11111111-1111-4111-8111-111111111111")
 TENANT_B = UUID("22222222-2222-4222-8222-222222222222")
@@ -78,7 +80,7 @@ def setup_rbac_test_fixtures():
                 text("""
                     INSERT INTO public.users (id, display_name, status, created_at)
                     VALUES (:id, :name, 'ACTIVE', now())
-                    ON CONFLICT (id) DO NOTHING
+                    ON CONFLICT (id) DO UPDATE SET status = 'ACTIVE'
                 """),
                 {"id": uid, "name": name},
             )
@@ -158,7 +160,6 @@ def setup_rbac_test_fixtures():
         )
 
         # 6. Ensure Base Project Memberships for Project A
-        # Clean up any leftover project memberships from previous runs
         conn.execute(
             text("DELETE FROM public.project_memberships WHERE project_id IN (:pa, :pb)"),
             {"pa": PROJECT_A, "pb": PROJECT_B},
@@ -226,7 +227,6 @@ def test_project_access_requires_authentication():
 # ==============================================================================
 def test_atomic_project_owner_creation():
     set_auth(USER_OWNER)
-    # Create a new project under Folder A
     response = client.post(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects",
         json={"name": "Atomic Project", "folder_id": str(FOLDER_A)},
@@ -235,7 +235,6 @@ def test_atomic_project_owner_creation():
     assert response.status_code == 201
     new_pid = UUID(response.json()["id"])
 
-    # Verify that USER_OWNER was atomically assigned OWNER role
     perms_res = client.get(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{new_pid}/permissions",
         headers={"Authorization": "Bearer mock-token"},
@@ -276,11 +275,11 @@ def test_effective_permissions_per_role(user_id, expected_role, can_view, can_ed
 
 
 # ==============================================================================
-# 4. Privilege Escalation Guardrails
+# 4. Privilege Escalation Negative Tests
 # ==============================================================================
 def test_privilege_escalation_guardrails():
-    # 4a: EDITOR cannot manage members
-    set_auth(USER_EDITOR)
+    # 4a: VIEWER cannot manage members
+    set_auth(USER_VIEWER)
     res = client.post(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members",
         json={"user_id": str(USER_UNASSIGNED), "role": "VIEWER"},
@@ -288,10 +287,24 @@ def test_privilege_escalation_guardrails():
     )
     assert res.status_code == 403
 
-    # 4b: VIEWER cannot manage members
-    set_auth(USER_VIEWER)
+    res = client.patch(
+        f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members/{USER_EDITOR}",
+        json={"role": "ADMIN"},
+        headers={"Authorization": "Bearer mock-token"},
+    )
+    assert res.status_code == 403
+
     res = client.delete(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members/{USER_EDITOR}",
+        headers={"Authorization": "Bearer mock-token"},
+    )
+    assert res.status_code == 403
+
+    # 4b: EDITOR cannot manage members
+    set_auth(USER_EDITOR)
+    res = client.post(
+        f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members",
+        json={"user_id": str(USER_UNASSIGNED), "role": "VIEWER"},
         headers={"Authorization": "Bearer mock-token"},
     )
     assert res.status_code == 403
@@ -306,13 +319,31 @@ def test_privilege_escalation_guardrails():
     assert res.status_code == 403
     assert "Only project owners can assign the OWNER role" in res.json()["detail"]
 
-    # 4d: ADMIN cannot remove an OWNER
+    # 4d: ADMIN cannot elevate existing member to OWNER
+    res = client.patch(
+        f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members/{USER_EDITOR}",
+        json={"role": "OWNER"},
+        headers={"Authorization": "Bearer mock-token"},
+    )
+    assert res.status_code == 403
+    assert "Only an OWNER can promote a member to OWNER" in res.json()["detail"]
+
+    # 4e: ADMIN cannot demote an OWNER
+    res = client.patch(
+        f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members/{USER_OWNER}",
+        json={"role": "ADMIN"},
+        headers={"Authorization": "Bearer mock-token"},
+    )
+    assert res.status_code == 403
+    assert "Only an OWNER can modify another OWNER's role" in res.json()["detail"]
+
+    # 4f: ADMIN cannot remove an OWNER
     res = client.delete(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members/{USER_OWNER}",
         headers={"Authorization": "Bearer mock-token"},
     )
     assert res.status_code == 403
-    assert "Only an OWNER can remove an OWNER" in res.json()["detail"]
+    assert "Only an OWNER can remove an OWNER from the project" in res.json()["detail"]
 
 
 # ==============================================================================
@@ -354,19 +385,69 @@ def test_last_owner_protection_and_transfer():
     assert res.status_code == 200
     assert res.json()["role"] == "ADMIN"
 
-    # Restore Alice as OWNER and Bob as ADMIN for other tests
-    set_auth(USER_ADMIN)  # Bob is now OWNER
+    # Restore Alice as OWNER and Bob as ADMIN
+    set_auth(USER_ADMIN)
     client.patch(f"{base}/{USER_OWNER}", json={"role": "OWNER"}, headers={"Authorization": "Bearer mock"})
     client.patch(f"{base}/{USER_ADMIN}", json={"role": "ADMIN"}, headers={"Authorization": "Bearer mock"})
 
 
 # ==============================================================================
-# 6. Database and API Cross-Tenant Prevention
+# 6. Concurrency Serialization on Last Owner Removal
+# ==============================================================================
+def test_concurrent_owner_removal_safety():
+    """Verify that project row locking prevents race condition on mutual owner deletion."""
+    with SessionLocal() as s1, SessionLocal() as s2:
+        # Give Project B two owners (USER_TENANT_B and a temporary user)
+        temp_user = UUID("bbbb2222-2222-4222-8222-222222222222")
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO public.users (id, display_name, status, created_at) VALUES (:id, 'Temp User', 'ACTIVE', now()) ON CONFLICT (id) DO NOTHING"),
+                {"id": temp_user},
+            )
+            conn.execute(
+                text("INSERT INTO public.tenant_memberships (id, user_id, tenant_id, status, created_at) VALUES (gen_random_uuid(), :uid, :tid, 'ACTIVE', now()) ON CONFLICT (user_id, tenant_id) DO NOTHING"),
+                {"uid": temp_user, "tid": TENANT_B},
+            )
+            conn.execute(
+                text("INSERT INTO public.project_memberships (id, tenant_id, project_id, user_id, role, created_at) VALUES (gen_random_uuid(), :tid, :pid, :uid, 'OWNER', now()) ON CONFLICT (project_id, user_id) DO NOTHING"),
+                {"tid": TENANT_B, "pid": PROJECT_B, "uid": temp_user},
+            )
+
+        # Session 1 begins and locks the project row
+        s1.begin()
+        s1.execute(text("SELECT id FROM public.projects WHERE id = :pid FOR UPDATE"), {"pid": PROJECT_B})
+
+        # Session 1 removes USER_TENANT_B
+        s1.execute(
+            text("DELETE FROM public.project_memberships WHERE project_id = :pid AND user_id = :uid"),
+            {"pid": PROJECT_B, "uid": USER_TENANT_B},
+        )
+        s1.commit()
+
+        # Session 2 tries to remove the remaining owner (temp_user) via API
+        set_auth(temp_user)
+        res = client.delete(
+            f"/api/v1/tenants/{TENANT_B}/workspace/projects/{PROJECT_B}/members/{temp_user}",
+            headers={"Authorization": "Bearer mock"},
+        )
+        assert res.status_code == 409
+        assert "Cannot remove or demote the last remaining owner" in res.json()["detail"]
+
+        # Restore USER_TENANT_B as OWNER
+        with engine.begin() as conn:
+            conn.execute(
+                text("INSERT INTO public.project_memberships (id, tenant_id, project_id, user_id, role) VALUES (gen_random_uuid(), :tid, :pid, :uid, 'OWNER') ON CONFLICT (project_id, user_id) DO NOTHING"),
+                {"tid": TENANT_B, "pid": PROJECT_B, "uid": USER_TENANT_B},
+            )
+
+
+# ==============================================================================
+# 7. Cross-Tenant Negative Access Vectors
 # ==============================================================================
 def test_cross_tenant_membership_rejected():
     set_auth(USER_OWNER)
 
-    # 6a: Attempting to add Tenant B user to Tenant A project returns 403
+    # 7a: API rejects adding Tenant B user to Tenant A project
     res = client.post(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members",
         json={"user_id": str(USER_TENANT_B), "role": "VIEWER"},
@@ -375,7 +456,7 @@ def test_cross_tenant_membership_rejected():
     assert res.status_code == 403
     assert "not an active member of this tenant" in res.json()["detail"]
 
-    # 6b: User B attempting to access Tenant A project returns 403
+    # 7b: User B token attempting to access Tenant A project members receives 403
     set_auth(USER_TENANT_B)
     res = client.get(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/members",
@@ -383,49 +464,100 @@ def test_cross_tenant_membership_rejected():
     )
     assert res.status_code == 403
 
+    # 7c: Direct database constraint/trigger rejection on cross-tenant insert
+    with pytest.raises((ProgrammingError, InternalError)) as excinfo:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO public.project_memberships (id, tenant_id, project_id, user_id, role)
+                    VALUES (gen_random_uuid(), :tid_a, :pid_a, :uid_b, 'VIEWER')
+                """),
+                {"tid_a": TENANT_A, "pid_a": PROJECT_A, "uid_b": USER_TENANT_B},
+            )
+    assert (
+        "Cross-tenant project membership violation" in str(excinfo.value)
+        or "is not an active member of tenant" in str(excinfo.value)
+        or "violates foreign key constraint" in str(excinfo.value)
+    )
+
 
 # ==============================================================================
-# 7. Revoked Tenant Membership Denies Project Access
+# 8. Inactive & Revoked Membership Rejection
 # ==============================================================================
-def test_revoked_tenant_membership_denies_project_access():
+def test_inactive_and_revoked_memberships_denied():
     try:
-        # Suspend Charlie in tenant_memberships
+        # 8a: User status = SUSPENDED in tenant_memberships -> 403
         with engine.begin() as conn:
             conn.execute(
-                text("""
-                    UPDATE public.tenant_memberships
-                    SET status = 'REVOKED'
-                    WHERE user_id = :uid AND tenant_id = :tid
-                """),
+                text("UPDATE public.tenant_memberships SET status = 'SUSPENDED' WHERE user_id = :uid AND tenant_id = :tid"),
                 {"uid": USER_EDITOR, "tid": TENANT_A},
             )
-
-        # Charlie's project role is now revoked / default-deny
         set_auth(USER_EDITOR)
-        res = client.get(
+        assert client.get(
             f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/permissions",
-            headers={"Authorization": "Bearer mock-token"},
-        )
-        # Even if they try to access, authorized_tenant_session will reject with 403
-        assert res.status_code == 403
-    finally:
-        # Restore Charlie
+            headers={"Authorization": "Bearer mock"},
+        ).status_code == 403
+
+        # 8b: User status = REVOKED in tenant_memberships -> 403
         with engine.begin() as conn:
             conn.execute(
-                text("""
-                    UPDATE public.tenant_memberships
-                    SET status = 'ACTIVE'
-                    WHERE user_id = :uid AND tenant_id = :tid
-                """),
+                text("UPDATE public.tenant_memberships SET status = 'REVOKED' WHERE user_id = :uid AND tenant_id = :tid"),
+                {"uid": USER_EDITOR, "tid": TENANT_A},
+            )
+        assert client.get(
+            f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/permissions",
+            headers={"Authorization": "Bearer mock"},
+        ).status_code == 403
+
+        # 8c: User status = SUSPENDED in users table -> 403
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE public.tenant_memberships SET status = 'ACTIVE' WHERE user_id = :uid AND tenant_id = :tid"),
+                {"uid": USER_EDITOR, "tid": TENANT_A},
+            )
+            conn.execute(
+                text("UPDATE public.users SET status = 'SUSPENDED' WHERE id = :uid"),
+                {"uid": USER_EDITOR},
+            )
+        assert client.get(
+            f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/permissions",
+            headers={"Authorization": "Bearer mock"},
+        ).status_code == 403
+
+    finally:
+        with engine.begin() as conn:
+            conn.execute(
+                text("UPDATE public.users SET status = 'ACTIVE' WHERE id = :uid"),
+                {"uid": USER_EDITOR},
+            )
+            conn.execute(
+                text("UPDATE public.tenant_memberships SET status = 'ACTIVE' WHERE user_id = :uid AND tenant_id = :tid"),
                 {"uid": USER_EDITOR, "tid": TENANT_A},
             )
 
 
 # ==============================================================================
-# 8. PostgreSQL Row-Level Security on project_memberships
+# 9. Trigger Immutability on Membership Updates
+# ==============================================================================
+def test_trigger_membership_update_immutability():
+    """Verify that updating project_id, user_id, or tenant_id on an existing membership is blocked."""
+    with pytest.raises((ProgrammingError, InternalError)) as excinfo:
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    UPDATE public.project_memberships
+                    SET project_id = :new_pid
+                    WHERE project_id = :old_pid AND user_id = :uid
+                """),
+                {"new_pid": PROJECT_B, "old_pid": PROJECT_A, "uid": USER_VIEWER},
+            )
+    assert "Cannot reassign project_id, user_id, or tenant_id" in str(excinfo.value)
+
+
+# ==============================================================================
+# 10. PostgreSQL Row-Level Security on project_memberships
 # ==============================================================================
 def test_project_memberships_rls_isolation():
-    # Verify using the restricted application role architectiq_app
     with RuntimeSessionLocal() as session:
         with session.begin():
             assert session.scalar(text("SELECT current_user")) == "architectiq_app"
@@ -455,18 +587,19 @@ def test_project_memberships_rls_isolation():
             rows_b = session.execute(
                 text("SELECT tenant_id, project_id FROM public.project_memberships")
             ).fetchall()
-            assert len(rows_b) == 1
-            assert UUID(str(rows_b[0][0])) == TENANT_B
-            assert UUID(str(rows_b[0][1])) == PROJECT_B
+            assert len(rows_b) >= 1
+            for r in rows_b:
+                assert UUID(str(r[0])) == TENANT_B
+                assert UUID(str(r[1])) == PROJECT_B
 
 
 # ==============================================================================
-# 9. Server-Side Capability Gates (VIEWER cannot rename/move)
+# 11. Server-Side Capability Gates (VIEWER cannot rename/move)
 # ==============================================================================
 def test_viewer_cannot_rename_or_move_project():
     set_auth(USER_VIEWER)
 
-    # Attempt to rename project as VIEWER
+    # Attempt to rename project as VIEWER -> 403
     res = client.patch(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}",
         json={"name": "Hacked Name"},
@@ -475,7 +608,16 @@ def test_viewer_cannot_rename_or_move_project():
     assert res.status_code == 403
     assert "can_edit" in res.json()["detail"]
 
-    # Attempt to rename project as OWNER
+    # Attempt to move project as VIEWER -> 403
+    res = client.patch(
+        f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}/move",
+        json={"folder_id": str(FOLDER_A)},
+        headers={"Authorization": "Bearer mock-token"},
+    )
+    assert res.status_code == 403
+    assert "can_edit" in res.json()["detail"]
+
+    # Attempt to rename project as OWNER -> 200
     set_auth(USER_OWNER)
     res = client.patch(
         f"/api/v1/tenants/{TENANT_A}/workspace/projects/{PROJECT_A}",

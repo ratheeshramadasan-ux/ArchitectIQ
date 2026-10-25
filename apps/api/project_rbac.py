@@ -1,7 +1,7 @@
 """Project-level Role-Based Access Control (RBAC) and Member Management.
 
 Enforces least-privilege role hierarchy, database-enforced tenant boundaries,
-last-owner protection, and server-side authorization.
+concurrency-safe last-owner protection, and server-side authorization.
 """
 
 from datetime import datetime
@@ -15,9 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from authentication import get_authorized_tenant_db
-from models import Project, ProjectMembership, TenantMembership, User
+from models import Project, ProjectMembership, User
 
-router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/workspace/projects/{project_id}")
+router = APIRouter(prefix="/projects/{project_id}")
 
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
 
@@ -112,17 +112,12 @@ def get_user_project_role(
     tenant_id: UUID,
 ) -> str | None:
     """Retrieve the effective project role for a user, confirming active tenant membership."""
-    # First, verify user is an ACTIVE tenant member
-    tenant_active = db.scalar(
-        select(func.count())
-        .select_from(TenantMembership)
-        .where(
-            TenantMembership.user_id == user_id,
-            TenantMembership.tenant_id == tenant_id,
-            TenantMembership.status == "ACTIVE",
-        )
+    # Verify active tenant membership via SECURITY DEFINER function without direct table grant
+    is_active_tenant_member = db.scalar(
+        text("SELECT public.architectiq_verify_tenant_membership(CAST(:uid AS uuid), CAST(:tid AS uuid))"),
+        {"uid": str(user_id), "tid": str(tenant_id)},
     )
-    if not tenant_active:
+    if not is_active_tenant_member:
         return None
 
     membership = db.scalar(
@@ -158,19 +153,29 @@ def verify_last_owner_protection(
     project_id: UUID,
     target_user_id: UUID,
 ) -> None:
-    """Prevent removing or demoting the last remaining owner of a project."""
-    target_membership = db.scalar(
-        select(ProjectMembership)
+    """Prevent removing or demoting the last remaining owner of a project.
+    
+    Locks the parent project row FOR UPDATE to prevent concurrent race conditions
+    where two owners attempt simultaneous mutual removal.
+    """
+    # 1. Concurrency serialization: lock project row
+    db.execute(
+        text("SELECT id FROM public.projects WHERE id = :pid FOR UPDATE"),
+        {"pid": project_id},
+    )
+
+    # 2. Check target role
+    target_role = db.scalar(
+        select(ProjectMembership.role)
         .where(
             ProjectMembership.project_id == project_id,
             ProjectMembership.user_id == target_user_id,
         )
-        .with_for_update()
     )
-    if not target_membership or target_membership.role != "OWNER":
+    if target_role != "OWNER":
         return
 
-    # Count all current owners
+    # 3. Count current active owners within locked transaction
     owner_count = db.scalar(
         select(func.count())
         .select_from(ProjectMembership)
@@ -216,7 +221,7 @@ def list_project_members(
     actor_id: UUID = request.state.verified_actor_id
     require_project_capability(db, project_id, actor_id, tenant_id, "can_view")
 
-    # Fetch project members joined with users table
+    # Fetch project members joined with users table (selecting only display_name for least privilege)
     stmt = (
         select(ProjectMembership, User.display_name)
         .join(User, User.id == ProjectMembership.user_id)
@@ -256,6 +261,12 @@ def add_project_member(
         db, project_id, actor_id, tenant_id, "can_manage_members"
     )
 
+    # Concurrency lock on project row to serialize membership mutations
+    db.execute(
+        text("SELECT id FROM public.projects WHERE id = :pid FOR UPDATE"),
+        {"pid": project_id},
+    )
+
     # Privilege escalation defense: ADMIN cannot appoint OWNER
     if caller_role != "OWNER" and body.role == "OWNER":
         raise HTTPException(
@@ -275,21 +286,19 @@ def add_project_member(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Verify target user exists and has ACTIVE tenant membership
-    target_user = db.get(User, body.user_id)
-    if not target_user:
+    # Verify target user exists and get display name
+    target_name = db.scalar(
+        select(User.display_name).where(User.id == body.user_id)
+    )
+    if not target_name:
         raise HTTPException(status_code=404, detail="User not found")
 
-    is_tenant_member = db.scalar(
-        select(func.count())
-        .select_from(TenantMembership)
-        .where(
-            TenantMembership.user_id == body.user_id,
-            TenantMembership.tenant_id == tenant_id,
-            TenantMembership.status == "ACTIVE",
-        )
+    # Verify target user has ACTIVE tenant membership via SECURITY DEFINER
+    is_active_tenant_member = db.scalar(
+        text("SELECT public.architectiq_verify_tenant_membership(CAST(:uid AS uuid), CAST(:tid AS uuid))"),
+        {"uid": str(body.user_id), "tid": str(tenant_id)},
     )
-    if not is_tenant_member:
+    if not is_active_tenant_member:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is not an active member of this tenant",
@@ -297,7 +306,7 @@ def add_project_member(
 
     # Check for existing membership
     existing = db.scalar(
-        select(ProjectMembership).where(
+        select(ProjectMembership.id).where(
             ProjectMembership.project_id == project_id,
             ProjectMembership.user_id == body.user_id,
         )
@@ -325,7 +334,7 @@ def add_project_member(
         id=membership.id,
         project_id=membership.project_id,
         user_id=membership.user_id,
-        display_name=target_user.display_name,
+        display_name=target_name,
         role=membership.role,
         created_at=membership.created_at,
         granted_by=membership.granted_by,
@@ -341,10 +350,16 @@ def update_project_member_role(
     db: Db,
     request: Request,
 ):
-    """Update a member's role. Requires can_manage_members with last-owner protection."""
+    """Update a member's role. Requires can_manage_members with concurrency-safe last-owner protection."""
     actor_id: UUID = request.state.verified_actor_id
     caller_role = require_project_capability(
         db, project_id, actor_id, tenant_id, "can_manage_members"
+    )
+
+    # Concurrency serialization lock on project row
+    db.execute(
+        text("SELECT id FROM public.projects WHERE id = :pid FOR UPDATE"),
+        {"pid": project_id},
     )
 
     membership = db.scalar(
@@ -380,12 +395,12 @@ def update_project_member_role(
     membership.role = body.role
     db.flush()
 
-    user = db.get(User, target_user_id)
+    display_name = db.scalar(select(User.display_name).where(User.id == target_user_id)) or ""
     return MemberOut(
         id=membership.id,
         project_id=membership.project_id,
         user_id=membership.user_id,
-        display_name=user.display_name if user else "",
+        display_name=display_name,
         role=membership.role,
         created_at=membership.created_at,
         granted_by=membership.granted_by,
@@ -400,10 +415,16 @@ def remove_project_member(
     db: Db,
     request: Request,
 ):
-    """Remove a user from the project. Requires can_manage_members with last-owner protection."""
+    """Remove a user from the project. Requires can_manage_members with concurrency-safe last-owner protection."""
     actor_id: UUID = request.state.verified_actor_id
     caller_role = require_project_capability(
         db, project_id, actor_id, tenant_id, "can_manage_members"
+    )
+
+    # Concurrency serialization lock on project row
+    db.execute(
+        text("SELECT id FROM public.projects WHERE id = :pid FOR UPDATE"),
+        {"pid": project_id},
     )
 
     membership = db.scalar(
