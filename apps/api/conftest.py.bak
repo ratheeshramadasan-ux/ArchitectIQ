@@ -1,0 +1,105 @@
+"""Pytest configuration and fixtures for audit system tests.
+
+This module ensures test isolation by configuring all database URLs to point
+to the architectiq_test database before any application modules are imported.
+"""
+
+import os
+import pytest
+from sqlalchemy.engine import make_url
+
+
+# Ensure all database URLs point to architectiq_test before any imports
+def pytest_configure(config):
+    """Configure test environment to use architectiq_test database."""
+
+    # Force all database URLs to point to architectiq_test
+    # regardless of what's in .env or environment variables
+    test_db_url = "postgresql+psycopg://architectiq:Mad%407878@127.0.0.1:5433/architectiq_test"
+    test_app_db_url = "postgresql+psycopg://architectiq_app:Gmd19O4-j7F9cBrAQhzJ-IglPdXIGiSUd_eYcPS9xtqojgmZ@127.0.0.1:5433/architectiq_test"
+    test_iam_db_url = "postgresql+psycopg://architectiq_iam_login:wITaFsh0sbUDL4UwlU8G6dVLFBbyKfF57LInULvs4wmwJhYw1KztWuXQMZZuMzA0@127.0.0.1:5433/architectiq_test"
+    test_audit_db_url = "postgresql+psycopg://architectiq_audit_writer:Mad%407878@127.0.0.1:5433/architectiq_test"
+
+    # Set environment variables for all database connections
+    os.environ['DATABASE_URL'] = test_db_url
+    os.environ['APP_DATABASE_URL'] = test_app_db_url
+    os.environ['IAM_DATABASE_URL'] = test_iam_db_url
+    os.environ['AUDIT_DATABASE_URL'] = test_audit_db_url
+
+    # Validate that we're correctly pointing to test database
+    from settings import get_settings
+    settings = get_settings()
+
+    # Validate all URLs point to architectiq_test
+    audit_url = make_url(settings.audit_database_url)
+    assert audit_url.database == "architectiq_test", f"Audit database must be 'architectiq_test', got '{audit_url.database}'"
+
+    app_url = make_url(settings.app_database_url)
+    assert app_url.database == "architectiq_test", f"App database must be 'architectiq_test', got '{app_url.database}'"
+
+    iam_url = make_url(settings.iam_database_url)
+    assert iam_url.database == "architectiq_test", f"IAM database must be 'architectiq_test', got '{iam_url.database}'"
+
+    main_url = make_url(settings.database_url)
+    assert main_url.database == "architectiq_test", f"Main database must be 'architectiq_test', got '{main_url.database}'"
+
+    # Ensure we're not accidentally pointing to development database
+    assert "architectiq_dev" not in settings.database_url, "Cannot connect to architectiq_dev in tests"
+    assert "architectiq_dev" not in settings.app_database_url, "Cannot connect to architectiq_dev in tests"
+    assert "architectiq_dev" not in settings.iam_database_url, "Cannot connect to architectiq_dev in tests"
+    assert "architectiq_dev" not in settings.audit_database_url, "Cannot connect to architectiq_dev in tests"
+
+
+@pytest.fixture(scope="session")
+def audit_writer_role():
+    """Get the audit writer role from the audit database URL."""
+    from sqlalchemy.engine import make_url
+    from settings import get_settings
+
+    settings = get_settings()
+    url = make_url(settings.audit_database_url)
+
+    # Extract username from the audit database URL
+    username = url.username if url.username else "architectiq_audit_writer"
+
+    # Verify that we're using the correct audit writer role
+    assert username == "architectiq_audit_writer", f"Audit database user must be 'architectiq_audit_writer', got '{username}'"
+
+    return username
+
+
+@pytest.fixture(scope="session")
+def validate_test_database():
+    """Ensure tests run against the correct test database."""
+    from sqlalchemy.engine import make_url
+    from settings import get_settings
+
+    settings = get_settings()
+    audit_url = make_url(settings.audit_database_url)
+
+    # Verify we're connecting to the test database
+    assert audit_url.database == "architectiq_test", f"Audit database must be 'architectiq_test', got '{audit_url.database}'"
+
+    # Also verify that the connection is working with the correct database
+    from database import audit_session
+    with audit_session() as session:
+        from sqlalchemy import text
+        result = session.execute(text("SELECT current_database()"))
+        db_name = result.fetchone()[0]
+        assert db_name == "architectiq_test", f"Connected to database '{db_name}', expected 'architectiq_test'"
+
+
+@pytest.fixture(scope="session")
+def test_database_connection():
+    """Provide a test database connection for validation."""
+    from database import audit_session
+    from sqlalchemy import text
+
+    with audit_session() as session:
+        # Verify connection works and points to correct database
+        result = session.execute(text("SELECT current_database()"))
+        db_name = result.fetchone()[0]
+
+        assert db_name == "architectiq_test", f"Connected to '{db_name}', expected 'architectiq_test'"
+
+        yield session

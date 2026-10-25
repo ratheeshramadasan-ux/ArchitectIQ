@@ -1,0 +1,889 @@
+ArchitectIQ — Enterprise UI Navigation & Functional Catalogue
+Scope: Enterprise AI, Agentic AI, Automation, Document Intelligence, Workflow Orchestration, Governance, Operations, and Platform Administration.
+
+For the parallel UI design work, I recommend defining ArchitectIQ as a multi-tenant enterprise platform with role-aware navigation, rather than a collection of independent screens.
+
+The catalogue below is a proposed target-state design, combining our previously established ArchitectIQ requirements with additional enterprise capabilities. It is not a claim that all these features are already implemented.
+1. Recommended application structure
+
+ArchitectIQ
+Enterprise AI & Automation Studio
+
+Concept
+
+
+Left navigation
+
+Modules, workspaces, expandable submenus, favourites
+
+
+Global header
+
+Tenant, organization, environment, search, notifications, profile
+
+
+Context navigation
+
+Folder, subfolder, project, artifact, version, breadcrumb
+
+
+Task & action panels
+
+Assignments, approvals, exceptions, alerts, execution controls
+
+
+
+
+Global application header
+UI element	Icon	Required functions
+Tenant switcher	building-2	Select authorized tenant
+Organization switcher	network	Organization/business unit context
+Workspace switcher	panels-top-left	Switch workspaces and recent projects
+Environment selector	layers	Development, Test, UAT, Production
+Global search	search	Projects, workflows, agents, tasks, executions, documents
+Quick create	plus	New project, workflow, agent, document pipeline, test
+Command palette	terminal	Keyboard-driven navigation and actions
+Notifications	bell	Alerts, approvals, SLA risks, deployments
+My tasks	list-todo	Personal action queue and assignments
+Help	circle-help	Documentation, guided help, support
+Profile	user-round	Account, preferences, sessions, sign out
+
+2. Main navigation — 20 functional modules
+Home & Dashboard
+/home
+01
+
+
+Workspace & Projects
+/workspace
+02
+
+
+Automation Studio
+/automation
+03
+
+
+AI Agent Studio
+/agents
+04
+
+
+AI & Model Studio
+/ai
+05
+
+
+Document Intelligence
+/documents
+06
+
+
+Integration & MCP Studio
+/integrations
+07
+
+
+Data & Knowledge Studio
+/data
+08
+
+
+Task Center
+/tasks
+09
+
+
+Approvals & Exceptions
+/approvals
+10
+
+
+Execution & Orchestration
+/execution
+11
+
+
+Testing & Evaluation
+/testing
+12
+
+
+Deployment & Releases
+/deployment
+13
+
+
+Operations & Monitoring
+/operations
+14
+
+
+Analytics & Reporting
+/analytics
+15
+
+
+Governance, Risk & Compliance
+/governance
+16
+
+
+Collaboration & Assets
+/collaboration
+17
+
+
+Support & Service Management
+/support
+18
+
+
+Settings & Configuration
+/settings
+19
+
+
+Administration
+/admin
+20
+
+
+This is the full module catalogue. The default sidebar should show the user's authorized modules, with secondary navigation revealed inside each module. Displaying all 20 expanded simultaneously would make the UI unnecessarily complex.
+3. Detailed module, submenu, function and icon catalogue
+Module 01 — Home & Dashboard
+Personalized enterprise landing page
+
+Submenu / screen	Icon	Functions and components
+My Dashboard	house	Assigned tasks, running processes, recent projects, favourites
+Executive Dashboard	chart-column-increasing	ROI, automation value, AI adoption, cost and operational risk
+Operations Dashboard	activity	Live runs, failed jobs, queues, SLA breaches
+AI Dashboard	brain-circuit	Agents running, LLM calls, tokens, latency, model failures
+Portfolio Overview	briefcase-business	Programs, projects, releases, business outcomes
+Capacity Dashboard	gauge	Workers, robots, pods, throughput, utilization
+Alerts & Notifications	bell-ring	Incident feed, alerts, escalations
+Recently Accessed	history	Projects, workflows, documents, agents
+Saved Views	bookmark	User-specific dashboard configurations
+
+Dashboard actions: add widget, rearrange widgets, resize, filter, save view, export, subscribe, drill down and share.
+Module 02 — Workspace & Project Management
+Required hierarchy:
+Tenant
+
+Organization / Business Unit
+
+Folder
+
+Subfolder
+
+Project
+
+Environment: Dev / Test / UAT / Prod
+
+Artifacts: Agents / Flows / Tests / Documents / Configurations
+
+
+
+
+
+
+
+Submenu	Icon	Functions
+Workspace Explorer	folder-tree	Tree, grid, list, search, filters, drag/drop
+Organizations	network	Organization membership, metadata, owners
+Folders & Subfolders	folders	Create, rename, move, archive, permissions
+Projects	folder-kanban	Create, clone, import, archive, project settings
+Project Overview	layout-dashboard	Summary, members, artifacts, status, metrics
+Project Members	users	Membership and scoped access
+Environments	layers	Environment-specific settings and deployment targets
+Dependencies	git-branch	Linked workflows, agents, APIs, libraries
+Versions & History	git-commit-horizontal	Version history, compare, restore
+Templates	copy	Create projects from approved templates
+Project Activity	history	Change log, approvals, activity
+Archive	archive	Retention, recovery, disposal controls
+
+Project-level tabs should include Overview, Design, Data, Integrations, Test, Deploy, Run, Monitor, Access, Settings, History. Visibility depends on role and project configuration.
+Module 03 — Automation Studio
+Submenu	Icon	Functions
+Automation Designer	workflow	Drag/drop canvas, nodes, connectors, properties
+Workflow Library	library	Reusable workflows and subprocesses
+Activities Library	blocks	Prebuilt actions and connectors
+Triggers	zap	API, schedule, queue, event, webhook, manual
+Variables & Arguments	variable	Types, scope, defaults, validation
+Conditions & Rules	git-branch	If/else, switch, expressions, deterministic rules
+Loops & Parallelism	repeat	For-each, while, fan-out/fan-in
+Queue Activities	list-ordered	Queue intake, dequeue, transaction state
+Human Tasks	user-check	Assign, pause, resume, approve, reject
+Exception Handling	shield-alert	Try/catch, retry, compensation, escalation
+Debugger	bug	Breakpoints, step-through, inspect variables
+Simulation	play	Dry run, test inputs, simulated services
+Workflow Versions	git-compare	Diff, rollback, release candidate
+Publish	upload-cloud	Validate, package, submit for release
+
+Designer node palette
+Category	Required nodes
+Flow control	Start, End, Condition, Switch, Loop, Parallel, Join, Wait, Delay
+Data	Assign, Transform, Filter, Merge, Validate, Serialize
+Application	UI Click, Type, Read, Browser, Desktop, File, Email
+Integration	HTTP Request, Webhook, Database Query, Connector Action
+Queue	Add Item, Get Item, Set Status, Retry, Dead-letter
+AI	Model Call, Agent Call, RAG Search, Embedding, Classify
+Document	Ingest, OCR, Extract, Validate, Human Review
+Human	Create Task, Approval, Escalate, Notify
+Security	Secret Reference, Authorization Check, Policy Check
+Reliability	Try/Catch, Timeout, Circuit Breaker, Compensation
+Observability	Log, Metric, Trace, Audit Event
+
+Designer toolbar icons: mouse-pointer-2, hand, plus, minus, maximize, undo-2, redo-2, copy, clipboard, trash-2, align-center, save, play, bug, history, git-branch, panel-right.
+Module 04 — AI Agent Studio
+Submenu	Icon	Functions
+Agent Explorer	bot	Browse agents, status, owner, versions
+Agent Designer	brain-circuit	Agent instructions, goals, tool bindings
+Multi-Agent Designer	network	Supervisor, specialists, routing, handoffs
+Agent Graph	workflow	LangGraph-style stateful orchestration
+Prompt Studio	message-square-code	System prompts, templates, variables
+Agent Tools	wrench	Allowed tools, scopes, schemas, permissions
+Memory Configuration	brain	Session, persistent, retrieval memory policies
+Agent Knowledge	book-open	Data sources, vector indexes, citations
+Guardrails	shield-check	Content, privacy, injection, tool restrictions
+Human Oversight	user-check	Checkpoints, review, approval
+Agent Simulator	flask-conical	Scenario tests, traces, expected outputs
+Agent Versions	git-compare	Prompt, model, tool and policy versioning
+Agent Registry	library	Approved reusable agents
+Agent Monitoring	activity	Active instances, states, latency, cost
+Agent Evaluation	clipboard-check	Quality, safety, reliability, regression
+
+Agent Designer property panels: identity, purpose, instructions, model, temperature and generation parameters, tool allowlist, knowledge sources, context budget, memory, state schema, retries, timeouts, guardrails, approval checkpoints, logging, cost budget, evaluation baseline and deployment target.
+
+For the UI, distinguish a single agent, agent as workflow activity, and multi-agent orchestration. They should share reusable components without forcing every AI use case into a multi-agent architecture.
+Module 05 — AI & Model Studio
+Submenu	Icon	Functions
+Model Catalogue	brain	Provider/model registry, versions, capabilities
+Model Gateway	route	Routing, authentication, quotas, fallback
+Model Connections	plug	Azure AI, Vertex AI, hosted and local models
+Prompt Registry	file-code	Approved prompts and version history
+Embedding Models	scan-search	Embedding configuration and benchmarks
+Model Evaluation	clipboard-check	Accuracy, relevance, safety, latency
+Fine-Tuning Jobs	sliders-horizontal	Datasets, experiments, checkpoints
+Model Deployments	rocket	Endpoint configuration and promotion
+Inference Playground	messages-square	Interactive model testing
+Token & Cost Management	coins	Budgets, consumption, chargeback
+Fallback Policies	git-branch	Approved fallback models and conditions
+Model Observability	chart-no-axes-combined	Errors, drift, latency, throughput
+Model Approval	badge-check	Risk assessment and deployment approval
+
+Module 06 — Document Intelligence
+Submenu	Icon	Functions
+Document Dashboard	files	Volume, extraction accuracy, exceptions
+Document Intake	file-input	Upload, email, API, storage, batch
+Document Classification	tags	Classify types, confidence, routing
+OCR & Extraction	scan-text	OCR, key-value, tables, structured fields
+Schema Designer	list-tree	Document types, fields, validations
+Extraction Designer	file-scan	Pipeline configuration
+Model Training	graduation-cap	Training sets, labeling, model versions
+Validation Station	clipboard-check	Human validation, corrections, review
+Document Queue	list-ordered	Pending, in progress, exception, complete
+Quality Monitoring	chart-column	STP, confidence, field accuracy
+Document Repository	folder-open	Stored artifacts, metadata, retention
+Document Audit	history	Corrections, model versions, decisions
+Sensitive Data Controls	shield	PII detection, masking, redaction
+
+Module 07 — Integration & MCP Studio
+Submenu	Icon	Functions
+Connector Catalogue	plug	Available integrations and connectors
+Connection Manager	cable	Endpoints, credentials references, health
+API Designer	code-xml	API contracts, routes, schema
+API Gateway	network	API registration, throttling, routing
+MCP Server Builder	server-cog	Tool/resource/prompt exposure
+MCP Server Registry	server	Registered servers, versions, environments
+MCP Tool Registry	wrench	Schemas, permissions, approved actions
+Webhooks	webhook	Event subscriptions and callbacks
+Event Bus	radio-tower	Topics, subscriptions, routing
+Database Connectors	database	SQL and approved database connections
+Enterprise Applications	app-window	ERP, CRM, core banking, ITSM connectors
+Credential References	key-round	Vault-backed secrets, rotation references
+Connection Testing	plug-zap	Connectivity and authorization checks
+Integration Monitoring	activity	Errors, timeouts, throughput
+Integration Policies	shield-check	Tool allowlists, egress, data restrictions
+
+MCP-specific detail screens should include Tools, Resources, Prompts, Authentication, Authorization, Transport, Test Console, Version, Health, Audit, Deployment.
+Module 08 — Data & Knowledge Studio
+Submenu	Icon	Functions
+Data Sources	database	Register approved data sources
+Data Pipelines	workflow	Ingest, transform, load, schedule
+Dataset Catalogue	table	Schema, metadata, ownership
+Knowledge Bases	book-open	Documents and retrieval collections
+Vector Indexes	layers-3	Embedding stores, indexing, refresh
+RAG Designer	scan-search	Chunking, retrieval, reranking, grounding
+Data Quality	check-check	Validation, profiling, quality rules
+Data Lineage	git-fork	Source-to-output traceability
+Data Classification	tags	Public, internal, confidential, restricted
+Data Retention	calendar-clock	Retention and disposal
+Data Access	lock-keyhole	Dataset-level access policies
+Data Preview	table-properties	Schema and permitted sample inspection
+Knowledge Evaluation	clipboard-check	Retrieval quality and grounding tests
+
+Module 09 — Task Center
+This should be a first-class module, not merely a notification panel.
+Submenu	Icon	Functions
+My Tasks	list-todo	All assigned actions
+Team Tasks	users	Team workload and reassignment
+Unassigned Tasks	inbox	Claim and allocate work
+Task Inbox	mail-open	New actionable items
+Human Review	user-check	Agent and workflow intervention
+Document Validation	file-check	Validate extracted data
+Exception Tasks	triangle-alert	Resolve processing exceptions
+SLA Tasks	clock-alert	Due soon, overdue, escalated
+Completed Tasks	check-circle-2	Completed history
+Task Templates	copy	Reusable task forms and definitions
+Task Rules	git-branch	Routing, assignment, escalation
+Task Analytics	chart-column	Backlog, aging, turnaround
+
+Task detail screen: title, priority, status, tenant/project, originating workflow, assigned user/group, SLA, business context, evidence, attachments, comments, action history and permitted action buttons.
+
+Task action icons: check, x, user-plus, arrow-right-left, pause, play, rotate-ccw, message-square, paperclip, flag, clock, history.
+Module 10 — Approvals & Exceptions
+Submenu	Icon	Functions
+My Approvals	clipboard-check	Pending approval decisions
+Team Approvals	users	Team approval queues
+Approval Policies	shield-check	Rules, thresholds, authority
+Approval Workflows	workflow	Sequential, parallel, quorum
+Delegations	user-round-cog	Temporary delegation and coverage
+Escalations	arrow-up-circle	Timeout and management escalation
+Exception Inbox	alert-triangle	Business and technical exceptions
+Exception Categories	tags	Classification and severity
+Remediation Actions	wrench	Retry, correct, compensate
+Decision History	history	Who approved what, when and why
+Evidence & Audit	file-check	Evidence, immutable decision trail
+
+Approval types should include deployment, privileged role grant, model change, prompt release, agent tool permission, SOP/rule change, production configuration, data access, exception override and high-risk transaction.
+
+For approval integrity, the UI must show the exact proposed action and parameters, not just a generic Approve button.
+Module 11 — Execution & Orchestration
+Submenu	Icon	Functions
+Execution Console	play-circle	Start, stop, pause, resume, retry
+Running Executions	activity	Active jobs and workflows
+Execution History	history	Completed, failed, cancelled runs
+Schedules	calendar-clock	Cron, calendar, blackout windows
+Trigger Manager	zap	Event, API, manual, file, queue
+Queue Manager	list-ordered	Queue definitions and processing
+Queue Transactions	rows-3	Transaction status and history
+Workers & Runtimes	cpu	Worker allocation, availability
+Robot / Bot Management	bot	Automation runtime registration
+Long-Running Workflows	hourglass	Durable state, wait, resume
+Human Checkpoints	user-check	Suspended runs awaiting intervention
+Retry & Recovery	rotate-ccw	Retry policies and recovery
+Dead-Letter Queue	inbox	Poison messages and failed transactions
+Orchestration Rules	git-branch	Dependencies, concurrency, priorities
+Execution Logs	scroll-text	Logs, errors, correlations
+Capacity Planning	gauge	Workload forecasting and scaling
+
+Queue Manager should have its own detailed UI.
+Queue tab	Functions
+Overview	Queue health, pending, processing, success, failed
+Transactions	Item list, state, attempts, priority, SLA
+Subtransactions	Parent/child processing, dependency and reconciliation
+Exceptions	Business exceptions versus system exceptions
+Retries	Retry eligibility, delay, max attempts
+Dead-letter	Quarantined items, investigation, reprocessing
+Processing Rules	Routing, priority, concurrency, ordering
+Monitoring	Backlog, age, throughput, ETA
+Audit	Every state transition and operator action
+
+Module 12 — Testing & Evaluation
+Submenu	Icon	Functions
+Test Dashboard	flask-conical	Quality gates and test status
+Test Case Designer	file-check	Inputs, expected results, assertions
+Test Suites	layers	Grouped tests and coverage
+Test Data Manager	database	Synthetic data, masked datasets
+Workflow Tests	workflow	Activity, branch, integration tests
+Agent Evaluations	brain-circuit	Tool use, accuracy, reliability
+LLM Evaluations	message-square-check	Hallucination, grounding, safety
+Document Evaluations	file-search	Classification and extraction accuracy
+API & MCP Tests	plug-zap	Contract, auth, tool invocation
+Performance Testing	gauge	Latency, throughput, concurrency
+Security Testing	shield-check	Authorization, injection, isolation
+Regression Testing	git-compare	Compare baseline versus candidate
+Test Execution	play	Run and schedule tests
+Test Results	chart-column	Pass/fail, evidence, trends
+Defect Management	bug	Defects, severity, assignment
+Release Quality Gates	check-check	Deployment acceptance criteria
+
+Role-specific workbenches should be available for Evaluator, Test Case Creator, and Tester, with different edit, execute, evaluate and approval permissions.
+Module 13 — Deployment & Release Management
+Submenu	Icon	Functions
+Deployment Dashboard	rocket	Releases by environment
+Packages & Artifacts	package	Versioned build artifacts
+Release Pipeline	git-branch	Build, test, approve, deploy
+Environment Promotion	arrow-up-right	Dev → Test → UAT → Prod
+Deployment Requests	clipboard-list	Change requests and evidence
+Release Approvals	badge-check	Separation of duties
+Deployment History	history	Version, owner, outcome
+Rollback Center	rotate-ccw	Restore approved previous release
+Configuration Comparison	git-compare	Environment configuration differences
+Release Calendar	calendar-days	Release windows and freezes
+Feature Flags	flag	Controlled rollout and rollback
+Deployment Health	heart-pulse	Post-deployment verification
+
+Module 14 — Operations & Monitoring
+Submenu	Icon	Functions
+Operations Command Center	monitor	Central operational overview
+Live Workflow Monitor	workflow	Execution graph and current state
+Live Agent Monitor	bot	Agent graph, state, tool calls
+Application Health	heart-pulse	API and service health
+Infrastructure Monitor	server	Containers, nodes, pods, resources
+Queue Monitor	list-ordered	Backlogs, age, processing
+SLA Monitor	timer	Breach prediction, escalations
+Alert Manager	bell-ring	Alert rules, severity, routing
+Incident Monitor	siren	Active incidents
+Logs Explorer	scroll-text	Search and correlation
+Distributed Tracing	route	End-to-end spans and dependencies
+Model Observability	brain	Token use, errors, latency
+Capacity Monitor	gauge	Saturation, autoscaling, utilization
+Recovery Dashboard	rotate-ccw	Retries, recovery, failover
+Audit Monitor	shield-check	Security and activity anomalies
+
+For agent monitoring, the UI should show the actual execution topology:
+Illustrative agent execution
+Running
+
+Trigger
+
+Supervisor
+
+Specialist
+
+
+
+Completed
+
+Approval
+
+Tool call
+
+
+Each execution node opens its inputs, outputs, timing, model/tool metadata, errors, trace and audit details, subject to access controls.
+Module 15 — Analytics & Reporting
+Submenu	Icon	Functions
+Analytics Home	chart-no-axes-combined	Portfolio analytics
+Report Builder	chart-column	Drag/drop dimensions and measures
+Dashboard Builder	layout-dashboard	Custom dashboards
+Automation ROI	coins	Savings, avoided effort, value
+Operational Performance	gauge	Throughput, success, cycle time
+Agent Performance	brain-circuit	Quality, latency, interventions
+Document Analytics	files	STP, field accuracy, corrections
+Queue Analytics	list-ordered	Backlog, aging, exceptions
+Cost Analytics	wallet	Tokens, infrastructure, licenses
+Capacity Forecasting	trending-up	Resource demand, recommended scaling
+User & Project Metrics	users	Adoption, execution, project utilization
+Scheduled Reports	calendar-clock	Delivery schedules and recipients
+Export Center	download	CSV, XLSX, PDF, approved BI integrations
+
+Module 16 — Governance, Risk & Compliance
+Submenu	Icon	Functions
+Governance Dashboard	shield-check	Risk posture and outstanding controls
+AI Use Case Registry	clipboard-list	Business purpose, owner, classification
+Risk Assessment	shield-alert	Inherent and residual risk
+Policy Catalogue	book-open-check	Security, privacy, AI policies
+Control Framework	list-checks	Controls, evidence, owners
+AI Governance	brain-circuit	Model, prompt, agent and tool approvals
+Data Governance	database	Classification, lineage, ownership
+Privacy & PII	lock-keyhole	Sensitive-data policies and evidence
+Compliance Mapping	map	Controls mapped to standards
+Model Risk Management	scale	Validation, monitoring, limitations
+Change Governance	git-pull-request	Material change assessment
+SOP & Rule Governance	book-open	SOP comparison, rule proposals, approvals
+Exceptions & Waivers	file-warning	Time-limited policy exceptions
+Audit Evidence	file-check	Evidence collection and export
+Control Testing	clipboard-check	Control effectiveness testing
+Governance Reports	file-bar-chart	Risk, exceptions, audit readiness
+
+For SOP & Rule Governance, preserve the two-stage process: an AI agent analyzes a revised SOP and proposes changes; authorized reviewers approve the changes before the deterministic rule engine is updated. Production transactions then use the approved rule version.
+Module 17 — Collaboration & Asset Library
+Submenu	Icon	Functions
+Team Collaboration	messages-square	Comments, discussions, mentions
+Shared Asset Library	library	Reusable agents, workflows, connectors
+Component Registry	blocks	Versioned reusable activities
+Templates	copy	Project, workflow, agent templates
+Knowledge Sharing	book-open	Internal articles and patterns
+Design Reviews	message-square-check	Review requests and decisions
+Change Requests	git-pull-request	Proposed changes and approval
+Favourites	star	Pinned assets
+Shared Collections	folders	Curated reusable collections
+Asset Publishing	upload-cloud	Publish, certify, deprecate
+
+Module 18 — Support & Service Management
+Submenu	Icon	Functions
+Support Dashboard	life-buoy	Open issues and service health
+Service Requests	clipboard-list	Access, configuration, service requests
+Incident Management	siren	Incident triage and resolution
+Problem Management	search-check	Root cause and recurring failures
+Change Management	git-pull-request	Change records and approvals
+Knowledge Base	book-open	Troubleshooting and runbooks
+Support Tickets	ticket	Ticket assignment, status, SLA
+Diagnostic Bundles	package	Safe log and trace collection
+Maintenance Windows	calendar-clock	Planned downtime
+Platform Status	heart-pulse	Component health
+Vendor Escalation	external-link	External support coordination
+
+4. Module 19 — Settings & Configuration
+Settings should be contextual. Personal preferences belong to the user; project settings belong to the project; security and tenant-wide controls belong to Administration.
+Category	Submenu	Icon	Detailed functions
+Personal	My Profile	user-round	Display name, avatar, contact preferences
+Personal	Appearance	palette	Theme, density, contrast, layout
+Personal	Language & Region	languages	Language, locale, timezone, formats
+Personal	Notifications	bell	Email, in-app, task and alert preferences
+Personal	Accessibility	accessibility	Keyboard, motion, display preferences
+Personal	Sessions & Devices	monitor-smartphone	Active sessions, device management
+Workspace	Workspace Preferences	panels-top-left	Default workspace, landing page
+Workspace	Folder Preferences	folder-cog	Defaults, naming conventions
+Workspace	Project Settings	folder-kanban	Project metadata, owner, lifecycle
+Workspace	Environment Settings	layers	Environment references and variables
+Workspace	Variables	variable	Project variables, typed values
+Workspace	Connections	plug	Approved project integrations
+Workspace	Scheduling	calendar-clock	Project-level schedules
+Workspace	Logging	scroll-text	Allowed log levels and retention references
+Workspace	Timeouts & Retries	timer	Workflow runtime defaults
+Workspace	SLA Configuration	gauge	Targets, calendars, escalation
+AI	Model Preferences	brain	Default approved model
+AI	Agent Defaults	bot	Default agent configuration
+AI	Prompt Preferences	message-square-code	Template and editor settings
+AI	Model Fallback	git-branch	Project fallback selections
+AI	Evaluation Defaults	clipboard-check	Required test suites and thresholds
+Designer	Canvas Preferences	workflow	Grid, snapping, zoom, alignment
+Designer	Node Preferences	blocks	Palette favourites and defaults
+Designer	Autosave & Versions	save	Autosave, drafts, version behavior
+Designer	Validation Rules	check-check	Design-time validation
+Operations	Queue Defaults	list-ordered	Priorities, retry policy references
+Operations	Worker Preferences	cpu	Project runtime choices
+Operations	Alert Subscriptions	bell-ring	Operational alert routing
+Data	Data Handling	database	Project data mappings and controls
+Data	Document Settings	file-scan	Schemas, validation defaults
+Data	Knowledge Settings	book-open	Retrieval configurations
+Developer	API Preferences	code-xml	API development settings
+Developer	Webhook Preferences	webhook	Project webhook configuration
+Developer	CLI / SDK	terminal	SDK documentation and configuration
+
+Every settings page should support view, edit, validate, save, reset, compare and audit history, where appropriate. Some settings require a separate approval before taking effect.
+5. Module 20 — Administration
+This is the most security-sensitive part of ArchitectIQ. It should have its own navigation hierarchy and administrator landing page.
+20.1 Platform & Tenant Administration
+Submenu	Icon	Functions
+Admin Overview	shield	Administrative dashboard
+Tenant Registry	building-2	Create, activate, suspend, archive tenants
+Tenant Details	building	Tenant metadata, status, owners
+Tenant Configuration	settings-2	Defaults, isolation, permitted features
+Organization Management	network	Create and manage organizations
+Business Units	building-2	Departmental structure
+Folder Governance	folder-lock	Folder policies, delegation
+Tenant Quotas	gauge	Resource, project, user, execution quotas
+Tenant Feature Flags	flag	Enabled modules and features
+Tenant Lifecycle	refresh-cw	Provisioning, suspension, decommissioning
+Tenant Data Residency	globe	Permitted storage and processing regions
+Tenant Audit	scroll-text	Tenant administrative activity
+
+20.2 Identity & Access Management
+Submenu	Icon	Functions
+User Directory	users	Invite, activate, suspend, deactivate
+User Details	user-round	Memberships, effective roles, activity
+Groups & Teams	users-round	Membership and nested group policies
+Service Accounts	bot	Nonhuman identities and ownership
+Identity Providers	fingerprint	OIDC, SAML, federation
+SSO Configuration	key-round	Login and identity mapping
+MFA & Authentication	shield-check	Authentication assurance requirements
+Session Policies	clock	Expiration, revocation, concurrency
+API Clients	key	Machine clients and scopes
+Role Catalogue	shield	System and custom roles
+Role Designer	shield-plus	Create/clone custom roles
+Permission Catalogue	list-tree	Resource-action permission definitions
+Role Assignments	user-check	Assign roles to users/groups
+Access Policy Designer	git-branch	RBAC and ABAC conditions
+Effective Access Viewer	eye	Explain effective permissions
+Access Requests	clipboard-list	Request elevated or additional access
+Privileged Access	lock-keyhole	Time-bound elevated access
+Access Reviews	clipboard-check	Periodic certification
+Separation of Duties	scale	Conflicting-role rules
+Access Audit	history	Grant/revoke and policy changes
+
+20.3 Role Designer — M3.2 target design
+The role designer needs resource-level, action-level and scope-level controls.
+Custom Role Designer
+Design concept
+
+Role identityName, description, owner, status, version
+
+
+
+Role scopeTenant / Organization / Folder / Project / Environment
+
+
+
+Permission matrixResources × allowed actions
+
+
+
+Conditional policiesABAC attributes, environment, risk, approval
+
+
+
+
+
+Illustrative permission matrix
+Resource	View	Create	Edit	Execute	Approve
+Workflows					
+Agents					
+Test cases					
+Deployments					
+Role grants					
+
+Illustrative Designer role only. Actual permissions must come from the authorization service.
+Important authorization rules: System roles remain immutable. Only authorized Tenant Admins and Organization Admins may create, clone or customize custom roles within their permitted scopes. Role creation and role assignment are separate permissions. An administrator must not grant permissions beyond their own delegable authority. High-risk grants require appropriate approval, and backend authorization remains authoritative regardless of UI visibility.
+20.4 Security Administration
+Submenu	Icon	Functions
+Security Dashboard	shield-alert	Security posture, critical findings
+Security Policies	shield-check	Enterprise security controls
+Secrets & Vaults	vault	Vault providers, references, rotation
+CyberArk Integration	key-round	Privileged credential integration
+Encryption & Keys	lock	KMS, key policies, rotation
+Network Policies	network	Egress, allowlists, private endpoints
+IP Restrictions	globe-lock	Network access conditions
+API Security	shield	Authentication, scopes, rate limits
+MCP Tool Security	wrench	Tool permissions and restrictions
+Agent Security	bot	Prompt injection, tool-use guardrails
+Data Loss Prevention	file-lock	Data exfiltration controls
+PII Policies	scan-eye	Classification, masking, redaction
+Security Events	siren	Alerts and investigations
+Threat Monitoring	radar	Anomalies and security signals
+Audit Logs	scroll-text	HTTP, authorization, administrative activity
+Audit Export	file-down	Authorized evidence extraction
+Security Exceptions	file-warning	Approved temporary deviations
+
+20.5 Platform Infrastructure Administration
+Submenu	Icon	Functions
+Platform Health	heart-pulse	Service health and dependencies
+Cluster Management	server	Cluster and node inventory
+Container Runtimes	container	Runtime capacity and status
+Worker Pools	cpu	Runtime groups and allocation
+Runtime Images	package	Approved execution images
+Autoscaling Policies	gauge	Capacity rules and limits
+Database Management	database	Connection health, migrations status
+Redis & Cache	layers	Cache health, configuration
+Event Infrastructure	radio-tower	Kafka/topics/event brokers
+Storage Management	hard-drive	Object, document and artifact storage
+Backup & Restore	database-backup	Backup schedules and restore validation
+Disaster Recovery	shield-check	Recovery plans, RPO/RTO, exercises
+High Availability	network	Failover and redundancy status
+Maintenance	wrench	Windows, upgrades, lifecycle
+Platform Version	git-commit-horizontal	Component versions and compatibility
+
+Infrastructure screens should generally expose approved management actions, not unrestricted database consoles or direct secret values.
+20.6 Global AI Administration
+Submenu	Icon	Functions
+AI Providers	brain	Approved providers and connections
+Global Model Registry	library	Model inventory and lifecycle
+Model Gateway Policies	route	Central routing and authorization
+Token Quotas	coins	Tenant/project budgets
+Rate Limits	gauge	RPS, TPM, RPM limits
+Model Fallback Policies	git-branch	Approved fallback mappings
+Global Prompt Policies	message-square-code	Prompt and template controls
+Agent Governance	shield-check	Agent registration and permissions
+Tool Allowlist	wrench	Approved tool capabilities
+Evaluation Standards	clipboard-check	Mandatory quality and safety gates
+AI Telemetry	activity	Cost, token, latency, errors
+AI Incident Management	siren	Model or agent failures
+AI Feature Rollout	flag	Controlled feature activation
+
+20.7 Operations Administration
+Submenu	Icon	Functions
+Global Queue Configuration	list-ordered	Queue limits, retries, retention
+Scheduler Administration	calendar-clock	Schedulers, calendars, blackout periods
+Worker Allocation	cpu	Tenant/project capacity assignments
+Global SLA Policies	timer	Default SLA and escalation policies
+Alert Rules	bell-ring	Global notification and alert rules
+Notification Channels	send	Email, Teams, webhook destinations
+Incident Policies	siren	Incident routing and ownership
+Log Retention	scroll-text	Retention and archival
+Operational Runbooks	book-open	Approved recovery procedures
+Global Kill Switches	octagon-alert	Controlled emergency suspension
+
+20.8 Commercial & Enterprise Administration
+Submenu	Icon	Functions
+Licensing	badge-check	Entitlements and usage
+Subscription	credit-card	Plan and service information
+Usage Metering	gauge	Execution, storage, model usage
+Cost Allocation	wallet	Tenant, project, department allocation
+Chargeback	receipt	Internal cost distribution
+Budgets	coins	Limits and alerts
+Capacity Forecast	trending-up	Demand and expansion planning
+Contract & Entitlements	file-text	Licensed features and restrictions
+Billing Reports	file-bar-chart	Usage and cost exports
+
+These commercial screens should be optional if ArchitectIQ is deployed solely as an internal enterprise platform.
+6. Universal task menu and contextual actions
+A critical UI design rule is that every major object should use a consistent action pattern, while displaying only actions permitted for that object and user.
+Action group	Menu action	Icon
+Creation	New / Create	plus
+Creation	Clone / Duplicate	copy
+Creation	Import	file-up
+Navigation	Open	external-link
+Navigation	View details	eye
+Modification	Edit	pencil
+Modification	Rename	text-cursor-input
+Modification	Move	folder-input
+Modification	Configure	settings-2
+Validation	Validate	check-check
+Validation	Test	flask-conical
+Execution	Run	play
+Execution	Pause	pause
+Execution	Resume	play-circle
+Execution	Stop / Cancel	square
+Execution	Retry	rotate-ccw
+Governance	Submit for approval	send
+Governance	Approve	check-circle
+Governance	Reject	x-circle
+Governance	Request changes	message-square
+Collaboration	Assign	user-plus
+Collaboration	Share	share-2
+Collaboration	Comment	message-circle
+Lifecycle	Publish	upload-cloud
+Lifecycle	Deploy	rocket
+Lifecycle	Compare versions	git-compare
+Lifecycle	Rollback	history
+Lifecycle	Archive	archive
+Lifecycle	Restore	archive-restore
+Lifecycle	Delete	trash-2
+Audit	View history	clock-3
+Audit	View audit trail	scroll-text
+Data	Export	download
+Data	Refresh	refresh-cw
+Support	Report issue	bug
+
+Use the same icons consistently across toolbar buttons, row actions, context menus and detail screens.
+7. Shared screen components and interaction patterns
+Component	Used in	Required behavior
+Navigation tree	Workspace, projects, assets	Expand, collapse, search, filter, permission-aware
+Data grid	Tasks, queues, users, audit	Sort, filter, resize, select, paginate, export
+Detail drawer	Nearly all modules	Quick inspection without losing context
+Properties panel	Workflow, agent, model, integration	Typed fields, validation, change tracking
+Canvas	Workflow, agents, MCP, pipelines	Drag/drop, zoom, pan, alignment, minimap
+Split view	Document validation, comparison	Source on one side, extracted/changed content on other
+Diff viewer	Prompts, SOP, workflows, roles	Before/after and highlighted changes
+Timeline	Runs, tasks, incidents	Ordered events and correlation links
+Trace explorer	Agent, workflow, API	Spans, latency, errors, inputs/outputs with redaction
+Approval dialog	Governance and privileged actions	Exact action, impact, evidence, reviewer decision
+Notification center	All modules	Read, acknowledge, navigate, mute
+Saved filters	Data grids and dashboards	Personal/team saved views
+Bulk action bar	Tasks, users, queues	Restricted multi-select actions
+Command palette	Global	Search commands and navigate
+Status indicator	Execution, deployment, task	Consistent states and semantic colours
+Activity feed	Projects, agents, approvals	Actor, action, timestamp, correlation
+Help panel	All modules	Contextual guidance and documentation
+
+Common lifecycle states
+Object	Proposed states
+Project	Draft, Active, On Hold, Archived
+Workflow / Agent	Draft, Validating, Approved, Published, Deprecated
+Execution	Queued, Running, Waiting, Paused, Completed, Failed, Cancelled
+Queue transaction	New, In Progress, Successful, Business Exception, System Exception, Retrying, Dead-letter
+Task	Open, Assigned, In Progress, Waiting, Completed, Cancelled
+Approval	Pending, Approved, Rejected, Changes Requested, Expired
+Deployment	Requested, Validating, Awaiting Approval, Deploying, Succeeded, Failed, Rolled Back
+Incident	New, Acknowledged, Investigating, Mitigated, Resolved, Closed
+
+These states should be driven by backend domain models, not independently invented by frontend components.
+8. Navigation visibility by role
+Illustrative default navigation. The M3.2 authorization engine will determine actual effective access.
+Role	Primary visible work areas
+Platform Administrator	All authorized platform administration, security, infrastructure and monitoring
+Tenant Administrator	Tenant, identity, policies, tenant reporting and configuration
+Organization Administrator	Organization, users, folders, projects, scoped roles
+Project Administrator	Project settings, members, deployments, operations
+Solution Architect	Workspace, designers, integrations, testing, governance
+Automation Designer	Automation Studio, test, project assets
+AI Agent Designer	Agent Studio, AI Studio, integrations, testing
+MCP Server Builder	Integration & MCP Studio, testing, deployment requests
+Test Case Creator	Test cases, test data, test suites
+Tester	Test execution, results, defects
+Evaluator	AI/model/agent evaluations and evidence
+Operations Engineer	Execution, queues, monitoring, recovery
+Business Reviewer	Task Center, document validation, approvals
+Compliance / Auditor	Governance, authorized audit records, reports
+Executive / Business Owner	Dashboards, portfolio, analytics, approvals
+Read-only Viewer	Authorized dashboards, projects, reports
+
+Menu visibility improves usability but is not a security boundary. Every backend operation must enforce tenant isolation, resource permissions, environment restrictions and applicable approval requirements.
+9. Recommended UI implementation sequence
+
+UI-01 — Application Shell & Navigation
+First priority
+Global header, collapsible sidebar, tenant/organization selector, workspace tree, breadcrumbs, global search, task badge, notification panel, profile and role-aware menu rendering.
+
+
+
+
+UI-02 — Workspace & Project Foundation
+
+Folder/subfolder/project hierarchy, project detail tabs, environment selector, object grids, properties drawer, contextual actions.
+
+
+
+
+UI-03 — Unified Design Studio
+
+Reusable canvas and inspector framework for Automation Designer, Agent Designer, MCP Builder and data pipelines, with specialized palettes.
+
+
+
+
+UI-04 — Task, Queue & Approval Center
+
+Task inbox, queues, subtransactions, human reviews, exception workbench, approval detail, SLA timers and action history.
+
+
+
+
+UI-05 — Administration & RBAC
+
+Tenant management, organizations, user/group directory, role catalogue, permission matrix, scoped role designer, effective access viewer, security audit.
+
+
+
+
+UI-06 — Execution & Observability
+
+Live execution topology, agent state, queue health, distributed tracing, infrastructure, SLA and capacity dashboards.
+
+
+
+
+UI-07 — Governance, Analytics & Enterprise Services
+
+AI governance, SOP/rule approval, evaluation, analytics, service management, document intelligence and commercial administration.
+
+
+
+10. Design decisions to standardize now
+For ArchitectIQ, I recommend the following baseline:
+Design concern	Proposed standard
+Icon library	Lucide React, consistent 20px navigation icons
+Main sidebar	Collapsible, grouped, searchable
+Default navigation	8–12 top-level visible entries per role, remaining entries in grouped sections
+Sidebar width	Approximately 256px expanded; 64–72px collapsed
+Secondary navigation	Contextual tree or submenu within selected module
+Object screens	Overview, configuration, activity, access and history tabs where applicable
+Data grids	Shared reusable enterprise grid component
+Designers	Shared canvas foundation with module-specific nodes
+Task interactions	Unified task detail and action framework
+Approvals	Reusable approval component with decision evidence
+Role enforcement	Backend authorization with frontend permission-aware presentation
+Theme	Light, dark, enterprise high-contrast
+Accessibility	Keyboard navigation, focus indicators, WCAG 2.2 AA target
+Design tokens	Shared colours, typography, spacing, radius and status tokens
+Routing	Stable module and resource routes with scoped IDs
+Navigation catalogue	Central typed registry with icon, route, feature flag and required permission
+
+Architectural recommendation: Maintain the entire navigation and feature catalogue in a centralized UI Feature Registry, rather than hardcoding menus in separate React components. Each entry should define its module, parent, route, icon, resource type, required permission, feature flag, and contextual actions.
+
+That will allow the UI team to build the full ArchitectIQ concept in parallel while the backend team completes M3.1 security hardening and M3.2 RBAC, without repeatedly redesigning the menu structure.
+
+The next logical UI deliverable is a screen-by-screen specification and navigation registry based on this catalogue, with each page assigned a unique screen ID, route, component type, required permissions, and detailed actions.

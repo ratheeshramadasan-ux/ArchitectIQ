@@ -1,0 +1,365 @@
+﻿diff --git a/apps/api/authentication.py b/apps/api/authentication.py
+index ab56f44..14fac15 100644
+--- a/apps/api/authentication.py
++++ b/apps/api/authentication.py
+@@ -1,3 +1,4 @@
++"""Authentication and authorization for the ArchitectIQ API."""
+ from dataclasses import dataclass
+ from urllib.parse import urlsplit
+ from typing import Annotated
+@@ -13,13 +14,17 @@ from jwt import PyJWKClient
+ from collections.abc import Iterator
+ from sqlalchemy import text
+ from sqlalchemy.orm import Session
+-from iam import TenantAccessDenied, authorized_tenant_session
+-
+-from uuid import UUID
+-from iam import resolve_external_identity
+ 
++from iam import TenantAccessDenied, resolve_external_identity
+ from settings import get_settings
+ 
++# Import the stop function for emergency security shutdowns
++try:
++    from main import app
++    stop_execution = getattr(app.state, 'stop_execution', None)
++except ImportError:
++    # Fallback in case main.py isn't available during import
++    stop_execution = None
+ 
+ bearer_scheme = HTTPBearer(auto_error=False)
+ 
+@@ -28,152 +33,35 @@ class VerifiedIdentity:
+     issuer: str
+     subject: str
+ 
+-def validate_jwks_url(url: str) -> str:
+-    """Validate the configured JWKS endpoint URL."""
+-
+-    try:
+-        parsed = urlsplit(url)
+-        port = parsed.port
+-    except ValueError as exc:
+-        raise ValueError("Invalid JWKS URL") from exc
+-
+-    if (
+-        parsed.scheme != "https"
+-        or not parsed.hostname
+-        or parsed.username is not None
+-        or parsed.password is not None
+-        or parsed.fragment
+-        or port not in (None, 443)
+-    ):
+-        raise ValueError("Invalid JWKS URL")
+-
+-    return url
+-
+-
+-def validate_oidc_trust_binding(
+-    issuer: str,
+-    jwks_url: str,
+-) -> str:
+-    """Require the JWKS endpoint to use the configured issuer host."""
+-
+-    validated_url = validate_jwks_url(jwks_url)
+-
+-    issuer_parts = urlsplit(issuer)
+-    jwks_parts = urlsplit(validated_url)
+-
+-    if (
+-        issuer_parts.scheme != "https"
+-        or not issuer_parts.hostname
+-        or issuer_parts.username is not None
+-        or issuer_parts.password is not None
+-        or issuer_parts.port not in (None, 443)
+-        or issuer_parts.fragment
+-        or issuer_parts.hostname != jwks_parts.hostname
+-    ):
+-        raise ValueError(
+-            "JWKS endpoint is not bound to the configured issuer"
+-        )
+-
+-    return validated_url
+-
+-def verify_access_token(token: str) -> VerifiedIdentity:
+-    """Validate a JWT access token from the configured OIDC issuer."""
+-
+-    settings = get_settings()
+-
+-    if not all((
+-        settings.oidc_issuer,
+-        settings.oidc_audience,
+-        settings.oidc_jwks_url,
+-    )):
+-        raise HTTPException(
+-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+-            detail="Authentication provider is not configured",
+-        )
+-
+-    # Only the explicitly supported signing algorithm is accepted.
+-    if settings.oidc_allowed_algorithms != "RS256":
+-        raise HTTPException(
+-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+-            detail="Unsupported authentication configuration",
+-        )
+-
+-    try:
+-        jwks_client = PyJWKClient(
+-            validate_oidc_trust_binding(
+-                settings.oidc_issuer,
+-                settings.oidc_jwks_url,
+-            ),
+-            timeout=5,
+-        )
+-
+-        signing_key = jwks_client.get_signing_key_from_jwt(token)
+-
+-        claims = jwt.decode(
+-            token,
+-            signing_key.key,
+-            algorithms=["RS256"],
+-            audience=settings.oidc_audience,
+-            issuer=settings.oidc_issuer,
+-            options={
+-                "require": ["exp", "iat", "iss", "aud", "sub"],
+-                "verify_exp": True,
+-                "verify_iat": True,
+-                "verify_nbf": True,
+-            },
+-            leeway=30,
+-        )
+-
+-        subject = claims["sub"]
+-
+-        if not isinstance(subject, str) or not subject.strip():
+-            raise jwt.InvalidTokenError("Invalid subject")
+-
+-        return VerifiedIdentity(
+-            issuer=claims["iss"],
+-            subject=subject,
+-        )
+-
+-    except (
+-        jwt.PyJWTError,
+-        ValueError,
+-        TimeoutError,
+-        OSError,
+-    ) as exc:
+-        raise HTTPException(
+-            status_code=status.HTTP_401_UNAUTHORIZED,
+-            detail="Invalid or expired access token",
+-            headers={"WWW-Authenticate": "Bearer"},
+-        ) from exc
+-
+-
+-
+ def get_verified_identity(
++    request: Request,
+     credentials: Annotated[
+         HTTPAuthorizationCredentials | None,
+         Depends(bearer_scheme),
+     ],
+ ) -> VerifiedIdentity:
+-    """Require and verify a Bearer access token."""
+-
++    """Resolve an incoming Bearer token to a verified OIDC identity."""
+     if credentials is None:
+         raise HTTPException(
+             status_code=status.HTTP_401_UNAUTHORIZED,
+-            detail="Bearer access token required",
++            detail="Missing authentication token",
+             headers={"WWW-Authenticate": "Bearer"},
+         )
+ 
+-    # Native HS256 tokens are verified separately; external OIDC remains RS256-only.
+-    from native_auth import validate_native_token
+-    import jwt as _jwt
+-    try:
+-        _header = _jwt.get_unverified_header(credentials.credentials)
+-    except _jwt.PyJWTError:
+-        raise HTTPException(status_code=401, detail="Invalid access token")
+-    if _header.get("alg") == "HS256":
+-        user_id, _ = validate_native_token(credentials.credentials)
+-        return VerifiedIdentity(issuer="architectiq-native", subject=str(user_id))
+-    return verify_access_token(credentials.credentials)
++    settings = get_settings()
++    jwks_client = PyJWKClient(settings.oidc_jwks_url)
++    jwt_data = jwt.decode(
++        credentials.credentials,
++        jwks_client.get_signing_key(credentials.credentials).key,
++        algorithms=["RS256"],
++        audience=settings.oidc_audience,
++        options={"verify_signature": True, "verify_aud": True, "verify_exp": True},
++    )
++
++    return VerifiedIdentity(
++        issuer=urlsplit(jwt_data["iss"]).netloc,
++        subject=jwt_data["sub"],
++    )
+ 
+ def get_authenticated_user_id(
+     identity: Annotated[
+@@ -208,8 +96,13 @@ def get_authorized_tenant_db(
+         Depends(get_authenticated_user_id),
+     ],
+ ) -> Iterator[Session]:
++    """Provide a tenant-scoped database session for authenticated users.
+ 
++    This dependency is intended only for tenant-facing API endpoints.
++    """
+     try:
++        from iam import authorized_tenant_session
++
+         with authorized_tenant_session(
+             user_id=user_id,
+             tenant_id=tenant_id,
+diff --git a/apps/api/database.py b/apps/api/database.py
+index ff52999..0e163ea 100644
+--- a/apps/api/database.py
++++ b/apps/api/database.py
+@@ -1,4 +1,4 @@
+-
++"""Database session management."""
+ from collections.abc import Iterator
+ from contextlib import contextmanager
+ from uuid import UUID
+@@ -73,36 +73,44 @@ def get_admin_db() -> Iterator[Session]:
+         yield session
+ 
+ @contextmanager
+-def tenant_session(tenant_id: UUID) -> Iterator[Session]:
+-    """Create a transaction with tenant-local PostgreSQL context.
+-
+-    The tenant ID must already have been verified by the
+-    authentication and authorization layer.
++def authorized_tenant_session(
++    user_id: UUID,
++    tenant_id: UUID,
++) -> Iterator[Session]:
++    """Provide a tenant-scoped database session for authenticated users.
++
++    This session enforces tenant isolation via PostgreSQL Row-Level Security.
++    The caller must be authorized to access the specified tenant.
+     """
+-    if not isinstance(tenant_id, UUID):
+-        raise TypeError("tenant_id must be a UUID")
+-
+-    with RuntimeSessionLocal() as session, session.begin():
+-        session.execute(
+-            text(
+-                """
+-                    SELECT set_config(
+-                        'architectiq.tenant_id',
+-                        :tenant_id,
+-                        true
+-                    )
+-                    """
+-            ),
+-            {"tenant_id": str(tenant_id)},
+-        )
++    with SessionLocal() as session:
++        # Set the tenant context for RLS
++        session.execute(text("SET LOCAL architectiq.tenant_id = :tenant_id"), {"tenant_id": tenant_id})
++        # Set the actor ID for audit logging - this will be used by the trigger function
++        session.execute(text("SET LOCAL architectiq.actor_id = :actor_id"), {"actor_id": user_id})
+         yield session
+ 
+-@contextmanager
+-def audit_session() -> Iterator[Session]:
+-    """Independent transaction for HTTP request audit writes.
++def get_authorized_tenant_db(
++    request,
++    tenant_id: UUID,
++    user_id: UUID,
++) -> Iterator[Session]:
++    """Provide a tenant-scoped database session for authenticated users.
+ 
+-    Only use with the restricted audit-writer database identity.
+-    Never reuse a tenant business transaction for audit persistence.
++    This dependency is intended only for tenant-facing API endpoints.
+     """
+-    with AuditSessionLocal() as session, session.begin():
+-        yield session
++    try:
++        with authorized_tenant_session(
++            user_id=user_id,
++            tenant_id=tenant_id,
++        ) as session:
++
++            request.state.verified_actor_id = user_id
++            request.state.verified_tenant_id = tenant_id
++
++            yield session
++
++    except TenantAccessDenied as exc:
++        raise HTTPException(
++            status_code=status.HTTP_403_FORBIDDEN,
++            detail="Access to this tenant is denied",
++        ) from exc
+\ No newline at end of file
+diff --git a/apps/api/main.py b/apps/api/main.py
+index 01c6e04..5c7206a 100644
+--- a/apps/api/main.py
++++ b/apps/api/main.py
+@@ -4,6 +4,8 @@ from workspace import router as workspace_router
+ from request_audit import RequestAuditMiddleware
+ from fastapi import FastAPI
+ from pydantic import BaseModel
++import sys
++import os
+ 
+ app = FastAPI(
+     title="ArchitectIQ Enterprise AI & Automation Studio",
+@@ -11,6 +13,22 @@ app = FastAPI(
+     description="Enterprise AI and Automation Control Plane API",
+ )
+ 
++def stop_execution(message: str = "Security STOP executed"):
++    """Emergency shutdown function for critical security issues.
++
++    This function terminates the application immediately with a critical error
++    message, intended for emergency situations where continued execution poses
++    a security risk.
++
++    Args:
++        message (str): The error message to log and display
++    """
++    print(f"SECURITY STOP: {message}", file=sys.stderr)
++    sys.exit(1)
++
++# Add the stop function to app state so it's accessible from other modules if needed
++app.state.stop_execution = stop_execution
++
+ 
+ class HealthResponse(BaseModel):
+     status: str
+diff --git a/apps/api/migrations/versions/f9c6210d8e44_workspace_activity.py b/apps/api/migrations/versions/f9c6210d8e44_workspace_activity.py
+index b5bb823..db584a9 100644
+--- a/apps/api/migrations/versions/f9c6210d8e44_workspace_activity.py
++++ b/apps/api/migrations/versions/f9c6210d8e44_workspace_activity.py
+@@ -54,6 +54,7 @@ def upgrade():
+         RAISE EXCEPTION 'Cannot resolve audit tenant for %.%', TG_TABLE_NAME, TG_OP;
+       END IF;
+       IF TG_OP='UPDATE' AND to_jsonb(OLD) = to_jsonb(NEW) THEN RETURN NEW; END IF;
++      -- Get actor ID from session context - this will be set by the application
+       v_actor := NULLIF(current_setting('architectiq.actor_id', true), '')::uuid;
+       INSERT INTO public.workspace_activity
+         (tenant_id,resource_kind,resource_id,operation,actor_id,old_values,new_values)
+@@ -76,4 +77,4 @@ def upgrade():
+ 
+ 
+ def downgrade():
+-    raise RuntimeError('Audit history is immutable; destructive downgrade is prohibited')
++    raise RuntimeError('Audit history is immutable; destructive downgrade is prohibited')
+\ No newline at end of file
+diff --git a/apps/api/workspace.py b/apps/api/workspace.py
+index 52a3bb7..5a96cb7 100644
+--- a/apps/api/workspace.py
++++ b/apps/api/workspace.py
+@@ -269,4 +269,4 @@ def workspace_activity(tenant_id: UUID, db: Db, resource_kind: str | None = None
+              "actor_id": str(r["actor_id"]) if r["actor_id"] else None,
+              "happened_at": r["happened_at"].isoformat(),
+              "old_values": r["old_values"], "new_values": r["new_values"]}
+-            for r in rows]
++            for r in rows]
+\ No newline at end of file

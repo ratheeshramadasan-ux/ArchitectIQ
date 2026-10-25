@@ -1,0 +1,12 @@
+﻿Inspect the ArchitectIQ repository in READ-ONLY mode.
+
+1. Report the current Git branch, HEAD commit, and working-tree status.
+2. Inspect apps/api/request_audit.py, database.py, settings.py, the M3.1 audit migration, and middleware registration.
+3. Review existing pytest coverage.
+4. Assess INSERT-only audit privileges, cross-tenant RLS, verified tenant/actor attribution, 401/403/404/500 auditing, transaction rollback independence, and workspace_activity regression risks.
+5. Identify the three highest-priority implementation gaps and their affected files.
+
+Do not edit files, run migrations, commit, or push.
+Do not expose secrets.
+Mark requirements PASS, FAIL, or UNVERIFIED based on actual evidence.
+Stop after producing the inspection report.

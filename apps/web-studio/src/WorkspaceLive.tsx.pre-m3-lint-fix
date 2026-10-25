@@ -1,0 +1,55 @@
+import { useCallback, useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight, FolderPlus, RefreshCw } from 'lucide-react'
+
+type Node = { id: string; name: string; kind: 'org'|'folder'|'project'|'environment'; children: Node[] }
+type Counts = { organizations: number; folders: number; projects: number; environments: number }
+const endpoint = '/api/v1/tenants'
+export default function WorkspaceLive() {
+  const [tenant, setTenant] = useState(sessionStorage.getItem('architectiq.tenant') || '')
+  const [token, setToken] = useState('')
+  const [tree, setTree] = useState<Node[]>([])
+  const [counts, setCounts] = useState<Counts|null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Node|null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [kind, setKind] = useState<'organization'|'folder'|'project'|'environment'>('organization')
+  const base = `${endpoint}/${tenant}/workspace`
+  const call = useCallback(async (path:string, init?:RequestInit) => {
+    const res = await fetch(`${base}${path}`, { ...init, headers: {'Authorization': `Bearer ${token}`, 'Content-Type':'application/json', ...init?.headers} })
+    if (!res.ok) throw new Error(`API ${res.status}: ${(await res.text()).slice(0,250)}`)
+    return res.json()
+  }, [base, token])
+  const refresh = useCallback(async () => {
+    if (!tenant || !token) return
+    setBusy(true); setError('')
+    try { const [t, s] = await Promise.all([call('/tree'), call('/summary')]); setTree(t); setCounts(s) }
+    catch(e) { setError(e instanceof Error ? e.message : 'Connection failed') }
+    finally { setBusy(false) }
+  }, [call, tenant, token])
+  useEffect(() => { sessionStorage.setItem('architectiq.tenant', tenant) }, [tenant])
+  async function create() {
+    if (!newName.trim()) return
+    const parent = selected
+    let path = ''; let body: Record<string,string|null> = {name:newName.trim()}
+    if(kind==='organization') { path='/organizations'; body.slug=slug }
+    else if(kind==='folder') {
+      if(!parent || !['org','folder'].includes(parent.kind)) return setError('Select an organization or folder')
+      const findOrg = (items:Node[], id:string, org?:string):string|undefined => { for(const n of items){const current=n.kind==='org'?n.id:org;if(n.id===id)return current;const found=findOrg(n.children||[],id,current);if(found)return found} }
+      const org=findOrg(tree,parent.id); if(!org)return setError('Organization not found')
+      path='/folders';body.organization_id=org;body.parent_folder_id=parent.kind==='folder'?parent.id:null
+    } else if(kind==='project') {if(parent?.kind!=='folder')return setError('Select a folder');path='/projects';body.folder_id=parent.id}
+    else {if(parent?.kind!=='project')return setError('Select a project');path=`/projects/${parent.id}/environments`;body={environment:newName.trim().toUpperCase()}}
+    setBusy(true);setError('')
+    try {await call(path,{method:'POST',body:JSON.stringify(body)});setNewName('');await refresh()}
+    catch(e){setError(e instanceof Error?e.message:'Create failed')}
+    finally{setBusy(false)}
+  }
+  function renderNode(n:Node, depth=0):React.ReactNode {
+    const open=expanded.has(n.id)
+    return <div key={n.id}><button className={`tree-row ${selected?.id===n.id?'tree-selected':''}`} style={{paddingLeft:12+depth*17}} onClick={()=>{setSelected(n);setExpanded(s=>{const next=new Set(s);if(next.has(n.id))next.delete(n.id);else next.add(n.id);return next})}}>{n.children?.length?(open?<ChevronDown size={15}/>:<ChevronRight size={15}/>):<span style={{width:15}}/>}<span>{n.kind==='org'?'🏢':n.kind==='folder'?'📁':n.kind==='project'?'⚙️':'🔹'}</span><span>{n.name}</span></button>{open&&n.children?.map(c=>renderNode(c,depth+1))}</div>
+  }
+  return <section className="workspace-panel glass" style={{padding:24,minHeight:600}}><h1>Enterprise Workspace</h1><p>Authenticated tenant data · No sample records</p><div style={{display:'flex',gap:12,flexWrap:'wrap',margin:'20px 0'}}><label>Tenant UUID <input aria-label="Tenant UUID" value={tenant} onChange={e=>setTenant(e.target.value)} placeholder="Tenant UUID"/></label><label>OIDC access token <input aria-label="OIDC access token" type="password" value={token} onChange={e=>setToken(e.target.value)} placeholder="Bearer access token" autoComplete="off"/></label><button className="primary-button" disabled={busy||!tenant||!token} onClick={refresh}><RefreshCw size={16}/> Connect / Refresh</button></div><p style={{fontSize:12}}>Access tokens remain in component memory and are not saved. Requires configured OIDC identity and an active tenant membership.</p>{error&&<p role="alert" style={{color:'#ff8c9b'}}>{error}</p>}{counts&&<div style={{display:'flex',gap:18,margin:'20px 0',flexWrap:'wrap'}}>{Object.entries(counts).map(([k,v])=><div className="metric-card glass" style={{minWidth:145}} key={k}><small>{k}</small><h2>{v}</h2></div>)}</div>}<div style={{display:'grid',gridTemplateColumns:'minmax(260px,1fr) minmax(280px,1fr)',gap:24}}><div><h3>Resource hierarchy</h3>{tree.length?tree.map(n=>renderNode(n)):<p>Connect to load the tenant workspace.</p>}</div><div><h3>Create resource</h3><p>Selected: {selected?.name||'None'}</p><label>Type <select aria-label="Resource type" value={kind} onChange={e=>setKind(e.target.value as typeof kind)}><option value="organization">Organization</option><option value="folder">Folder / subfolder</option><option value="project">Project</option><option value="environment">Environment</option></select></label><label>Name <input aria-label="Resource name" value={newName} onChange={e=>setNewName(e.target.value)} placeholder={kind==='environment'?'DEV / TEST / UAT / PROD':'Name'}/></label>{kind==='organization'&&<label>Slug <input aria-label="Organization slug" value={slug} onChange={e=>setSlug(e.target.value)} placeholder="my-organization"/></label>}<div style={{marginTop:16}}><button className="primary-button" disabled={busy||!token} onClick={create}><FolderPlus size={16}/> Create</button></div></div></div></section>
+}
