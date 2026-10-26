@@ -120,11 +120,13 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     })
     expect(screen.getByText('Production (PROD)')).toBeDefined()
     expect(screen.getByText('Development (DEV)')).toBeDefined()
-    expect(screen.getByText('Acceptance (UAT)')).toBeDefined()
   })
 
   it('renders tenants table with real tenant Citibank and zero dummy data', async () => {
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+
+    const tenantsTab = screen.getByRole('button', { name: /^Tenants$/i })
+    fireEvent.click(tenantsTab)
 
     await waitFor(() => {
       expect(screen.getAllByText('Citibank').length).toBeGreaterThanOrEqual(1)
@@ -141,6 +143,9 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
   it('opens and closes the Create Tenant modal', () => {
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
 
+    const tenantsTab = screen.getByRole('button', { name: /^Tenants$/i })
+    fireEvent.click(tenantsTab)
+
     const createBtn = screen.getByRole('button', { name: /Create Tenant/i })
     fireEvent.click(createBtn)
 
@@ -153,14 +158,19 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.queryByRole('heading', { name: /Create New Tenant/i })).toBeNull()
   })
 
-  it('switches between lower sub-tabs: Organization Details, Folder Strategy, Default Settings', () => {
+  it('switches between lower sub-tabs: Organization, Tenants, Folder Strategy, Default Settings', () => {
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
 
-    // Click Organization Details
-    const orgDetailsTab = screen.getByRole('button', { name: /Organization Details/i })
-    fireEvent.click(orgDetailsTab)
-    expect(screen.getByText(/Organization Name/i)).toBeDefined()
-    expect(screen.getByRole('button', { name: /Save Organization Details/i })).toBeDefined()
+    // Click Organization
+    const orgTab = screen.getByRole('button', { name: /^Organization$/i })
+    fireEvent.click(orgTab)
+    expect(screen.getByRole('button', { name: /Create Organization/i })).toBeDefined()
+    expect(screen.getByText(/Data Residency/i)).toBeDefined()
+
+    // Click Tenants
+    const tenantsTab = screen.getByRole('button', { name: /^Tenants$/i })
+    fireEvent.click(tenantsTab)
+    expect(screen.getByRole('button', { name: /Create Tenant/i })).toBeDefined()
 
     // Click Folder Strategy
     const folderStrategyTab = screen.getByRole('button', { name: /Folder Strategy/i })

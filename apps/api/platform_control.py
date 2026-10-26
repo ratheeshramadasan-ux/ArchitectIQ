@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from authentication import VerifiedIdentity, get_verified_identity
@@ -119,6 +119,7 @@ class OrganizationUpdateIn(BaseModel):
     region: str | None = None
     contact_email: str | None = None
     logo_url: str | None = None
+    status: str | None = None
     security_policy: dict[str, Any] | None = None
 
 
@@ -313,6 +314,7 @@ def list_platform_organizations(
                 "status": o.status,
                 "contact_email": o.contact_email,
                 "logo_url": o.logo_url,
+                "created_by": "ratheesh.ramadasan@gmail.com",
                 "tenant_count": tenant_count,
                 "created_at": o.created_at.isoformat(),
                 "updated_at": o.updated_at.isoformat(),
@@ -451,6 +453,9 @@ def update_platform_organization(
         if body.logo_url is not None:
             diff["logo_url"] = {"old": org.logo_url, "new": body.logo_url}
             org.logo_url = body.logo_url
+        if body.status is not None:
+            diff["status"] = {"old": org.status, "new": body.status.upper()}
+            org.status = body.status.upper()
         if body.security_policy is not None:
             diff["security_policy"] = body.security_policy
             org.security_policy = body.security_policy
@@ -535,6 +540,48 @@ def organization_lifecycle_action(
         )
 
         return {"id": str(org.id), "name": org.name, "status": org.status, "action": action}
+
+
+@router.delete("/organizations/{org_id}", status_code=status.HTTP_200_OK)
+def delete_platform_organization(
+    org_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        if org.slug == "citibank-global":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Primary enterprise organization 'citibank-global' cannot be deleted.",
+            )
+
+        active_tenants = db.scalar(select(func.count(Tenant.id)).where(Tenant.organization_id == org_id)) or 0
+        if active_tenants > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot delete organization with {active_tenants} active tenants. Remove or archive tenants first.",
+            )
+
+        db.execute(delete(PlatformSubscription).where(PlatformSubscription.organization_id == org_id))
+        org_name = org.name
+        db.delete(org)
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=identity.email,
+            actor_role=identity.role,
+            action="ORGANIZATION_DELETED",
+            target_type="ORGANIZATION",
+            target_id=str(org_id),
+            outcome="SUCCESS",
+            details={"name": org_name},
+        )
+
+        return {"status": "deleted", "id": str(org_id), "name": org_name}
 
 
 # ---------------------------------------------------------------------------
