@@ -406,11 +406,11 @@
    GLASS MODE & ANIMATED AMBIENT BLUR
    ========================================================================== */
 
-.glass-mode.theme-aurora-glass {
-  background: linear-gradient(135deg, #FAD961 0%, #F76B1C 100%) !important;
+.glass-mode.theme-aurora-glass:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #FAD961 0%, #F76B1C 100%);
 }
-.glass-mode.theme-frosted-glass {
-  background: linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%) !important;
+.glass-mode.theme-frosted-glass:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%);
 }
 .glass-mode.theme-obsidian-glass:not(.has-wallpaper) {
   background: linear-gradient(135deg, #090979 0%, #00d4ff 100%);

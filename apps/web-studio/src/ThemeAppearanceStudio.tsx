@@ -201,10 +201,20 @@ function ColorInput({
 export default function ThemeAppearanceStudio({
   config,
   onChange,
+  brandLogo,
+  isDarkBackdrop,
 }: {
   config: ThemeConfig
   onChange: (updated: Partial<ThemeConfig>) => void
+  brandLogo?: string
+  isDarkBackdrop?: boolean
 }) {
+  const isDark = isDarkBackdrop ?? (
+    Boolean(config.activeBackground) ||
+    ['Woodland', 'Midnight Aurora', 'Wraith', 'Next Gen Ultra', 'Deep Space', 'Cyberpunk Neon', 'Emerald Empire', 'Crimson Velvet', 'Oceanic Depth', 'Jet Black', 'Obsidian Glass', 'Aurora Glass'].includes(config.activeTheme)
+  )
+  const activeLogo = brandLogo || (isDark ? '/brand/logo-dark.png' : '/brand/logo-light.png')
+
   const [labPrimary, setLabPrimary] = useState(config.primaryColor || '')
   const [labPrimaryFg, setLabPrimaryFg] = useState('')
   const [labAccent, setLabAccent] = useState(config.accentColor || '')
@@ -324,9 +334,17 @@ export default function ThemeAppearanceStudio({
             <p className="appearance-page-desc">Customize how ArchitectIQ looks across every module.</p>
           </div>
         </div>
-        <div className="appearance-active-pill">
-          <Eye size={12} />
-          <span>{config.activeTheme.toUpperCase()}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="appearance-active-pill" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px' }}>
+            <img key={activeLogo} src={activeLogo} alt="Active Logo" style={{ height: 16, maxWidth: 90, objectFit: 'contain' }} />
+            <span style={{ fontSize: '0.65rem', fontWeight: 800, opacity: 0.85 }}>
+              {isDark ? 'LIGHT LOGO (FOR DARK THEME)' : 'DARK LOGO (FOR LIGHT THEME)'}
+            </span>
+          </div>
+          <div className="appearance-active-pill">
+            <Eye size={12} />
+            <span>{config.activeTheme.toUpperCase()}</span>
+          </div>
         </div>
       </div>
 
@@ -709,7 +727,10 @@ export default function ThemeAppearanceStudio({
               {/* Micro Preview Box */}
               <div className="lab-micro-preview-card">
                 <span className="preview-label">MICRO PREVIEW</span>
-                <div className="preview-icons-row">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 0 10px', borderBottom: '1px solid var(--border)' }}>
+                  <img key={activeLogo} src={activeLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 140, objectFit: 'contain' }} />
+                </div>
+                <div className="preview-icons-row" style={{ marginTop: 8 }}>
                   <Zap size={20} style={{ color: config.primaryColor || 'var(--primary)' }} />
                   <Monitor size={20} style={{ color: config.primaryColor || 'var(--primary)' }} />
                   <Fingerprint size={20} style={{ color: config.primaryColor || 'var(--primary)' }} />

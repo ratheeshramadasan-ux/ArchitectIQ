@@ -45,6 +45,31 @@ const themeStorageKey = 'nextgen.theme.config.v2'
 const GLASS_THEMES = ['Aurora Glass', 'Frosted Glass', 'Obsidian Glass', 'Silk Glass', 'Horizon Glass', 'Lavender Mist', 'Champagne Glass']
 const DARK_THEMES = ['Woodland', 'Midnight Aurora', 'Wraith', 'Next Gen Ultra', 'Deep Space', 'Cyberpunk Neon', 'Emerald Empire', 'Crimson Velvet', 'Oceanic Depth', 'Jet Black', 'Obsidian Glass', 'Aurora Glass']
 
+export function isLuminanceDark(hexColor?: string): boolean {
+  if (!hexColor) return false
+  const hex = hexColor.trim().replace('#', '')
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16)
+    const g = parseInt(hex[1] + hex[1], 16)
+    const b = parseInt(hex[2] + hex[2], 16)
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 140
+  }
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16)
+    const g = parseInt(hex.substring(2, 4), 16)
+    const b = parseInt(hex.substring(4, 6), 16)
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 140
+  }
+  return false
+}
+
+export function computeIsDarkBackdrop(config: ThemeConfig): boolean {
+  if (Boolean(config.activeBackground)) return true
+  if (config.backgroundColor && isLuminanceDark(config.backgroundColor)) return true
+  if (config.cardColor && isLuminanceDark(config.cardColor)) return true
+  return DARK_THEMES.includes(config.activeTheme)
+}
+
 function loadThemeConfig(): ThemeConfig {
   try {
     const raw = JSON.parse(localStorage.getItem(themeStorageKey) || 'null')
@@ -213,9 +238,9 @@ function App(){
   ...(themeConfig.borderColor ? { '--border': themeConfig.borderColor } : {}),
  } as React.CSSProperties
 
- const isDarkTheme = dark || ['Obsidian Glass', 'Aurora Glass', 'Smoky Quartz', 'Midnight Glass'].includes(themeConfig.activeTheme) || !!themeConfig.activeBackground
- const brandLogo = isDarkTheme ? '/brand/logo-dark.png' : '/brand/logo-light.png'
- const brandShield = isDarkTheme ? '/brand/shield-hd.png' : '/brand/shield-light.png'
+ const isDarkBackdrop = computeIsDarkBackdrop(themeConfig)
+ const brandLogo = isDarkBackdrop ? '/brand/logo-dark.png' : '/brand/logo-light.png'
+ const brandShield = isDarkBackdrop ? '/brand/shield-hd.png' : '/brand/shield-light.png'
 
  if (restoring) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--background)', color: 'var(--foreground)' }}>Restoring secure session…</main>
  if (!token) {
@@ -273,9 +298,9 @@ function App(){
     <aside className={`nextgen-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
      <button className="sidebar-brand-btn" onClick={() => navigate('Dashboard')} title="ArchitectIQ Home">
       {collapsed ? (
-       <img src={brandShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
+       <img key={brandShield} src={brandShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
       ) : (
-       <img src={brandLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
+       <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
       )}
      </button>
 
@@ -370,7 +395,7 @@ function App(){
         <Menu size={18} />
        </button>
        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
-        <img src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
+        <img key={`topbar-${brandLogo}`} src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
        </div>
        <div className="topbar-tenant-pill">
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38BDF8' }} />
@@ -420,7 +445,7 @@ function App(){
 
      <main className="dashboard-page-shell">
       {active === 'Theme / Icons' && (
-       <ThemeAppearanceStudio config={themeConfig} onChange={updateTheme} />
+       <ThemeAppearanceStudio config={themeConfig} onChange={updateTheme} brandLogo={brandLogo} isDarkBackdrop={isDarkBackdrop} />
       )}
 
       {active === 'Dashboard' && (

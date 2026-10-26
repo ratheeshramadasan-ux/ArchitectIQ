@@ -105,7 +105,7 @@ export default function LoginScreen({
       <main className="iq-login">
         <form className="iq-login-card" onSubmit={submitCreateFirstTenant}>
           <div style={{ textAlign: 'center', marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <img src={brandLogo} alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+            <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
             {activeTheme && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
                 <Palette size={11} style={{ opacity: 0.7 }} /> {activeTheme}
@@ -145,7 +145,7 @@ export default function LoginScreen({
     <main className="iq-login">
       <form className="iq-login-card" onSubmit={submitLogin}>
         <div style={{ textAlign: 'center', marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <img src={brandLogo} alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+          <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
           {activeTheme && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
               <Palette size={11} style={{ opacity: 0.7 }} /> {activeTheme}
