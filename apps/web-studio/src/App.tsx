@@ -238,22 +238,17 @@ function App(){
   ...(themeConfig.borderColor ? { '--border': themeConfig.borderColor } : {}),
  } as React.CSSProperties
 
- const isSidebarDark = hasWallpaper || DARK_THEMES.includes(themeConfig.activeTheme)
- const sidebarLogo = isSidebarDark ? '/brand/logo-dark.png' : '/brand/logo-light.png'
- const sidebarShield = isSidebarDark ? '/brand/shield-hd.png' : '/brand/shield-light.png'
-
- const isCardDark = themeConfig.cardColor
-   ? isLuminanceDark(themeConfig.cardColor)
-   : DARK_THEMES.includes(themeConfig.activeTheme)
- const topbarLogo = isCardDark ? '/brand/logo-dark.png' : '/brand/logo-light.png'
- const loginLogo = isCardDark ? '/brand/logo-dark.png' : '/brand/logo-light.png'
+ const isDark = dark || (themeConfig.cardColor ? isLuminanceDark(themeConfig.cardColor) : false)
+ const brandLogo = isDark ? '/brand/logo-dark.png' : '/brand/logo-light.png'
+ const brandShield = isDark ? '/brand/shield-hd.png' : '/brand/shield-light.png'
+ const ambientOverlay = isDark ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.25)'
 
  if (restoring) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--background)', color: 'var(--foreground)' }}>Restoring secure session…</main>
  if (!token) {
   return (
    <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} ${hasWallpaper ? 'has-wallpaper' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
     {themeConfig.activeBackground && (
-     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
+     <div style={{ position: 'fixed', inset: 0, background: ambientOverlay, backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
     )}
     {isGlass && !themeConfig.activeBackground && (
      <div className="blob-container">
@@ -263,7 +258,7 @@ function App(){
      </div>
     )}
     <LoginScreen
-     brandLogo={loginLogo}
+     brandLogo={brandLogo}
      activeTheme={themeConfig.activeTheme}
      onLogin={(value, t, available) => {
       sessionStorage.setItem(authStorage, JSON.stringify({ token: value, tenant: t }))
@@ -289,7 +284,7 @@ function App(){
  return (
   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} ${hasWallpaper ? 'has-wallpaper' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
    {themeConfig.activeBackground && (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
+    <div style={{ position: 'fixed', inset: 0, background: ambientOverlay, backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
    )}
    {isGlass && !themeConfig.activeBackground && (
     <div className="blob-container">
@@ -304,9 +299,9 @@ function App(){
     <aside className={`nextgen-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
      <button className="sidebar-brand-btn" onClick={() => navigate('Dashboard')} title="ArchitectIQ Home">
       {collapsed ? (
-       <img key={sidebarShield} src={sidebarShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
+       <img key={brandShield} src={brandShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
       ) : (
-       <img key={sidebarLogo} src={sidebarLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
+       <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
       )}
      </button>
 
@@ -401,7 +396,7 @@ function App(){
         <Menu size={18} />
        </button>
        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
-        <img key={`topbar-${topbarLogo}`} src={topbarLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
+        <img key={`topbar-${brandLogo}`} src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
        </div>
        <div className="topbar-tenant-pill">
         <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38BDF8' }} />
@@ -451,7 +446,7 @@ function App(){
 
      <main className="dashboard-page-shell">
       {active === 'Theme / Icons' && (
-       <ThemeAppearanceStudio config={themeConfig} onChange={updateTheme} brandLogo={topbarLogo} isDarkBackdrop={isCardDark} />
+       <ThemeAppearanceStudio config={themeConfig} onChange={updateTheme} brandLogo={brandLogo} isDarkBackdrop={isDark} />
       )}
 
       {active === 'Dashboard' && (
