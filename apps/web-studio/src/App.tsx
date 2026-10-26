@@ -391,6 +391,20 @@ function App(){
   document.documentElement.style.setProperty('--panel-opacity', themeConfig.panelOpacity.toString())
  }, [themeConfig.panelOpacity])
 
+ useEffect(() => {
+  const rootScaleMap: Record<TextSize, string> = {
+    'Tiny': '13px',
+    'Small': '14.5px',
+    'Regular': '16px',
+    'Large': '17.5px',
+    'Extra Large': '19.5px',
+    'Gigantic': '22px',
+  }
+  const targetPx = rootScaleMap[themeConfig.activeTextSize] || '14.5px'
+  document.documentElement.style.fontSize = targetPx
+  document.documentElement.style.setProperty('--app-font-size', targetPx)
+ }, [themeConfig.activeTextSize])
+
  const matches = useMemo(() => flatLinks.filter(x => x.name.toLowerCase().includes(query.toLowerCase())), [query])
 
  useEffect(() => {
