@@ -11,7 +11,6 @@ import {
   ChevronsUp,
   Trash2,
   Edit2,
-  Move,
   ChevronDown,
   ChevronRight,
   Monitor,
@@ -23,9 +22,17 @@ import {
   Users,
   User,
   UserCircle,
-  Key,
   Check,
   X,
+  Server,
+  Database,
+  Cpu,
+  HardDrive,
+  Box,
+  Layers,
+  AlertTriangle,
+  Play,
+  Sliders
 } from 'lucide-react'
 import './ManageFoldersStudio.css'
 
@@ -39,20 +46,41 @@ export type FolderItem = {
   level?: number
 }
 
-type AuditItem = {
+export type TabType = 'Structure' | 'Settings' | 'Permissions' | 'Licenses' | 'Compute' | 'Vector Storage' | 'Operations'
+
+export type EnvironmentType = 'DEV' | 'TEST' | 'UAT' | 'PROD'
+
+export interface TenantOptionItem {
   id: string
-  action: string
-  target: string
+  name: string
+  slug?: string
+  region?: string
+  environment?: string
+}
+
+export type TelemetryEvent = {
+  id: string
+  operation: string
+  status: 'SUCCESS' | 'RUNNING' | 'FAILED' | 'WARNING'
+  category: 'Agent Execution' | 'Pod Scheduled' | 'Vector Ingestion' | 'Governance' | 'RBAC'
   actor: string
+  target: string
   timestamp: string
-  details?: string
+  durationMs: number
+  podNode?: string
+  metrics?: { cpu: string; ram: string; tokens?: number; promptTokens?: number; completionTokens?: number }
+  payload?: Record<string, any>
 }
 
 interface ManageFoldersStudioProps {
   token: string
   tenant: string
   tenantName?: string
-  currentEnv?: string
+  tenants?: TenantOptionItem[]
+  onSelectTenant?: (tenantId: string) => void
+  onOpenNewTenant?: () => void
+  currentEnv?: EnvironmentType
+  onSelectEnv?: (env: EnvironmentType) => void
   onUnauthorized?: () => void
   onChanged?: () => void
 }
@@ -61,28 +89,89 @@ export default function ManageFoldersStudio({
   token,
   tenant,
   tenantName = 'Citibank',
+  tenants = [],
+  onSelectTenant,
+  onOpenNewTenant,
   currentEnv = 'DEV',
+  onSelectEnv,
   onUnauthorized,
   onChanged,
 }: ManageFoldersStudioProps) {
+  // Top-level Organization & Multi-Tenant state
+  const organizationName = 'Citibank Global Enterprise'
+  const [activeEnv, setActiveEnv] = useState<EnvironmentType>(currentEnv)
+  useEffect(() => {
+    setActiveEnv(currentEnv)
+  }, [currentEnv])
+
+  const [activeTab, setActiveTab] = useState<TabType>('Structure')
+  const [adminConfigModal, setAdminConfigModal] = useState(false)
+  const [newTenantForm, setNewTenantForm] = useState({ name: '', slug: '', region: 'us-east-1' })
+  const [creatingTenant, setCreatingTenant] = useState(false)
+
+  // Scope & Tree State
   const [workspaces, setWorkspaces] = useState<{ id: string; name: string }[]>([
-    { id: 'default-ws', name: `Default Workspace [${currentEnv === 'DEV' ? 'Development' : currentEnv}]` }
+    { id: 'default-ws', name: `Default Workspace [${activeEnv === 'DEV' ? 'Development' : activeEnv}]` }
   ])
   const [selectedWorkspace, setSelectedWorkspace] = useState<{ id: string; name: string } | null>(workspaces[0])
   const [folderTree, setFolderTree] = useState<FolderItem[]>([])
   const [selectedFolder, setSelectedFolder] = useState<FolderItem | null>(null)
-  const [activeTab, setActiveTab] = useState<'Structure' | 'Permissions' | 'Licenses' | 'Machines' | 'Operations'>('Structure')
   const [permissionView, setPermissionView] = useState<'Group' | 'User'>('Group')
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingLogs, setLoadingLogs] = useState(false)
-  const [auditLogs, setAuditLogs] = useState<AuditItem[]>([])
   const [createModal, setCreateModal] = useState<{ isOpen: boolean; parentId: string | null }>({ isOpen: false, parentId: null })
   const [auditModal, setAuditModal] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folder: FolderItem } | null>(null)
   const [folderDisplayName, setFolderDisplayName] = useState('')
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
+
+  // 1. Folder Settings State
+  const [folderSettings, setFolderSettings] = useState({
+    inheritPermissions: true,
+    inheritCompute: true,
+    inheritVector: false,
+    inheritGovernance: true,
+    sandboxMode: 'container',
+    egressPolicy: 'vpc',
+    packageFeed: 'inherit',
+    jobRetentionDays: 90,
+    costCenter: 'CC-BANKING-4901',
+    ownerEmail: 'admin@architectiq.io'
+  })
+
+  // 2. Compute Infrastructure (Pods, Containers, VMs) State
+  const [computeType, setComputeType] = useState<'pods' | 'containers' | 'vms'>('pods')
+  const [k8sNamespace, setK8sNamespace] = useState('architectiq-agents-citi')
+  const [podImage, setPodImage] = useState('architectiq/agent-runtime:v2.5-alpine')
+  const [minReplicas, setMinReplicas] = useState(2)
+  const [maxReplicas, setMaxReplicas] = useState(8)
+  const [cpuLimit, setCpuLimit] = useState('2.0 vCPU')
+  const [memLimit, setMemLimit] = useState('4 GiB')
+  const [gpuEnabled, setGpuEnabled] = useState(false)
+  const [assignedAgents, setAssignedAgents] = useState<string[]>([
+    'Payment Reconciliation Agent',
+    'KYC & AML Verification Agent',
+    'Core Ledger Balance Auditor'
+  ])
+
+  // 3. Vector Storage State (Dedicated vs Shared)
+  const [vectorMode, setVectorMode] = useState<'dedicated' | 'shared'>('dedicated')
+  const [vectorEngine, setVectorEngine] = useState<'pgvector' | 'qdrant' | 'milvus' | 'pinecone'>('pgvector')
+  const [collectionName, setCollectionName] = useState('citi_banking_vectors_v1')
+  const [embeddingModel, setEmbeddingModel] = useState('text-embedding-3-small')
+  const [distanceMetric, setDistanceMetric] = useState<'cosine' | 'dot' | 'euclidean'>('cosine')
+  const [quotaGb, setQuotaGb] = useState(25)
+  const [testQuery, setTestQuery] = useState('')
+  const [testResults, setTestResults] = useState<{ title: string; score: number; excerpt: string }[] | null>(null)
+
+  // 4. Operations Telemetry State
+  const [opsFilterStatus, setOpsFilterStatus] = useState<string>('ALL')
+  const [opsFilterCategory, setOpsFilterCategory] = useState<string>('ALL')
+  const [opsSearchText, setOpsSearchText] = useState('')
+  const [expandedPayloads, setExpandedPayloads] = useState<Record<string, boolean>>({})
+  const [telemetryLogs, setTelemetryLogs] = useState<TelemetryEvent[]>([])
 
   const showToast = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToastMessage({ text, type })
@@ -105,12 +194,49 @@ export default function ManageFoldersStudio({
     }
   }, [])
 
-  // Sync folder name when selectedFolder changes
+  // Sync folder name and load folder-specific configs when selectedFolder changes
   useEffect(() => {
     if (selectedFolder) {
       setFolderDisplayName(selectedFolder.name)
+      // Load saved settings if present in localStorage
+      const savedSettings = localStorage.getItem(`architectiq.folder.settings.${tenant}.${selectedFolder.id}`)
+      if (savedSettings) {
+        try {
+          setFolderSettings(JSON.parse(savedSettings))
+        } catch {
+          // ignore parsing error
+        }
+      } else {
+        setFolderSettings({
+          inheritPermissions: selectedFolder.level !== 0,
+          inheritCompute: true,
+          inheritVector: false,
+          inheritGovernance: true,
+          sandboxMode: 'container',
+          egressPolicy: 'vpc',
+          packageFeed: 'inherit',
+          jobRetentionDays: 90,
+          costCenter: `CC-${selectedFolder.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) || 'BANKING'}-01`,
+          ownerEmail: 'admin@architectiq.io'
+        })
+      }
+
+      // Load saved vector settings if present
+      const savedVector = localStorage.getItem(`architectiq.folder.vector.${tenant}.${selectedFolder.id}`)
+      if (savedVector) {
+        try {
+          const parsed = JSON.parse(savedVector)
+          setVectorMode(parsed.mode || 'dedicated')
+          setVectorEngine(parsed.engine || 'pgvector')
+          setCollectionName(parsed.collectionName || `citi_${selectedFolder.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_vectors`)
+        } catch {
+          // ignore
+        }
+      } else {
+        setCollectionName(`citi_${selectedFolder.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_vectors`)
+      }
     }
-  }, [selectedFolder?.id, selectedFolder?.name])
+  }, [selectedFolder?.id, selectedFolder?.name, tenant])
 
   // Load Tree from API
   const loadTree = useCallback(async () => {
@@ -137,7 +263,7 @@ export default function ManageFoldersStudio({
           }))
         if (orgs.length > 0) {
           setWorkspaces([
-            { id: 'default-ws', name: `Default Workspace [${currentEnv === 'DEV' ? 'Development' : currentEnv}]` },
+            { id: 'default-ws', name: `Default Workspace [${activeEnv === 'DEV' ? 'Development' : activeEnv}]` },
             ...orgs
           ])
         }
@@ -178,68 +304,125 @@ export default function ManageFoldersStudio({
     } finally {
       setLoading(false)
     }
-  }, [token, tenant, currentEnv, onUnauthorized])
+  }, [token, tenant, activeEnv, onUnauthorized])
 
   // Initial load
   useEffect(() => {
     loadTree()
   }, [loadTree])
 
-  // Load audit logs
+  // Load telemetry & operational audit logs
   const loadLogs = useCallback(async () => {
     setLoadingLogs(true)
     try {
-      const res = await fetch(`/api/v1/tenants/${tenant}/workspace/events?limit=20`, {
+      const res = await fetch(`/api/v1/tenants/${tenant}/workspace/events?limit=25`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (res.ok) {
         const events = await res.json()
-        const mapped: AuditItem[] = events.map((e: any) => ({
-          id: e.id,
-          action: e.operation?.toUpperCase() || 'SCOPE_UPDATED',
-          target: `${e.resource_kind} (${e.resource_id.slice(0, 8)})`,
-          actor: e.actor_id ? 'Administrator' : 'System Automation',
+        const mapped: TelemetryEvent[] = events.map((e: any, idx: number) => ({
+          id: e.id || `evt-${idx}`,
+          operation: e.operation?.toUpperCase() || 'SCOPE_UPDATED',
+          status: 'SUCCESS',
+          category: e.operation?.includes('POD') ? 'Pod Scheduled' : e.operation?.includes('VECTOR') ? 'Vector Ingestion' : 'Governance',
+          target: `${e.resource_kind || 'Folder'} (${(e.resource_id || '').slice(0, 8)})`,
+          actor: e.actor_id ? 'Platform Administrator' : 'Autonomous Agent Worker',
           timestamp: e.happened_at || new Date().toISOString(),
-          details: JSON.stringify(e.new_values || {})
+          durationMs: 140 + (idx * 35) % 800,
+          podNode: 'k8s-worker-node-us-east-1a',
+          metrics: { cpu: '14%', ram: '420 MB', tokens: 520, promptTokens: 380, completionTokens: 140 },
+          payload: e.new_values || { folderId: e.resource_id, environment: activeEnv }
         }))
-        setAuditLogs(mapped)
+        setTelemetryLogs(mapped)
       } else {
-        // Fallback demo audit events matching Next Gen schema
-        setAuditLogs([
+        // Fallback rich operational telemetry matching enterprise execution engine
+        setTelemetryLogs([
           {
-            id: 'log-1',
-            action: 'SCOPE_CREATED',
-            target: 'Default Workspace / Finance',
-            actor: 'Platform Administrator',
+            id: 'tel-1',
+            operation: 'AGENT_WORKFLOW_DISPATCHED',
+            status: 'SUCCESS',
+            category: 'Agent Execution',
+            actor: 'agent://payment-reconciliation-v2',
+            target: 'Pod: citi-agent-worker-01',
             timestamp: new Date().toISOString(),
-            details: 'Initial deployment hierarchy established'
+            durationMs: 382,
+            podNode: 'node-citi-k8s-us-east-1a',
+            metrics: { cpu: '18%', ram: '480 MB', tokens: 840, promptTokens: 620, completionTokens: 220 },
+            payload: { workflow: 'Daily Balance Reconciliation', folder: 'Banking', recordsProcessed: 1420, tolerance: 0.001 }
           },
           {
-            id: 'log-2',
-            action: 'GOVERNANCE_LOCK_ENABLED',
-            target: 'Finance / Core Ledger',
-            actor: 'Compliance Officer',
+            id: 'tel-2',
+            operation: 'K8S_POD_AUTOSCALED',
+            status: 'SUCCESS',
+            category: 'Pod Scheduled',
+            actor: 'System Autoscaler (KEDA)',
+            target: 'Deployment: architectiq-agents-citi',
+            timestamp: new Date(Date.now() - 180000).toISOString(),
+            durationMs: 1240,
+            podNode: 'node-citi-k8s-us-east-1b',
+            metrics: { cpu: '45%', ram: '1.2 GB' },
+            payload: { minReplicas: 2, maxReplicas: 8, currentReplicas: 3, trigger: 'High Queue Depth' }
+          },
+          {
+            id: 'tel-3',
+            operation: 'VECTOR_EMBEDDING_INGESTION',
+            status: 'SUCCESS',
+            category: 'Vector Ingestion',
+            actor: 'RAG Ingestion Daemon',
+            target: 'Collection: citi_banking_vectors_v1',
+            timestamp: new Date(Date.now() - 600000).toISOString(),
+            durationMs: 820,
+            podNode: 'node-citi-k8s-us-east-1a',
+            metrics: { cpu: '22%', ram: '610 MB', tokens: 4200 },
+            payload: { document: 'Lending Policy Revision 2026.pdf', chunksIndexed: 142, embeddingModel: 'text-embedding-3-small' }
+          },
+          {
+            id: 'tel-4',
+            operation: 'GOVERNANCE_LOCK_APPLIED',
+            status: 'SUCCESS',
+            category: 'Governance',
+            actor: 'Compliance Officer (admin@architectiq.io)',
+            target: 'Folder: Banking / Core Ledger',
             timestamp: new Date(Date.now() - 3600000).toISOString(),
-            details: 'Immutability policy enforced'
+            durationMs: 45,
+            metrics: { cpu: '2%', ram: '120 MB' },
+            payload: { policy: 'SOX Immutability Rule #14', lockState: true, enforcement: 'Strict' }
+          },
+          {
+            id: 'tel-5',
+            operation: 'RBAC_CAPABILITY_VERIFIED',
+            status: 'SUCCESS',
+            category: 'RBAC',
+            actor: 'API Gateway Auth Layer',
+            target: 'Folder: Banking',
+            timestamp: new Date(Date.now() - 7200000).toISOString(),
+            durationMs: 18,
+            metrics: { cpu: '1%', ram: '95 MB' },
+            payload: { principal: 'Platform Engineers', role: 'Full Access', capability: 'can_edit' }
           }
         ])
       }
     } catch {
       // Mock fallback if route is not implemented
-      setAuditLogs([
+      setTelemetryLogs([
         {
-          id: 'log-1',
-          action: 'SCOPE_CREATED',
-          target: 'Default Workspace / Finance',
-          actor: 'Platform Administrator',
+          id: 'tel-1',
+          operation: 'AGENT_WORKFLOW_DISPATCHED',
+          status: 'SUCCESS',
+          category: 'Agent Execution',
+          actor: 'agent://payment-reconciliation-v2',
+          target: 'Pod: citi-agent-worker-01',
           timestamp: new Date().toISOString(),
-          details: 'Initial deployment hierarchy established'
+          durationMs: 382,
+          podNode: 'node-citi-k8s-us-east-1a',
+          metrics: { cpu: '18%', ram: '480 MB', tokens: 840, promptTokens: 620, completionTokens: 220 },
+          payload: { workflow: 'Daily Balance Reconciliation', folder: 'Banking', recordsProcessed: 1420 }
         }
       ])
     } finally {
       setLoadingLogs(false)
     }
-  }, [token, tenant])
+  }, [token, tenant, activeEnv])
 
   useEffect(() => {
     loadLogs()
@@ -299,87 +482,79 @@ export default function ManageFoldersStudio({
       })
     }
     setFolderTree(prev => updateLockInTree(prev))
-
-    // Add audit entry
-    const newLog: AuditItem = {
-      id: `log-${Date.now()}`,
-      action: nextLocked ? 'GOVERNANCE_LOCK_ENABLED' : 'GOVERNANCE_LOCK_DISABLED',
-      target: selectedFolder.name,
-      actor: 'Platform Administrator',
-      timestamp: new Date().toISOString(),
-      details: nextLocked ? 'Immutable protection enabled' : 'Operational edits unlocked'
-    }
-    setAuditLogs(prev => [newLog, ...prev])
-    showToast(nextLocked ? 'Folder Governance Locked' : 'Folder Governance Unlocked', 'success')
+    showToast(
+      nextLocked ? 'Folder governance lock enabled' : 'Folder governance lock released',
+      nextLocked ? 'info' : 'success'
+    )
   }
 
-  // Create folder API
-  const processFolderCreation = async (rawInput: string, parentId: string | null) => {
-    if (!rawInput.trim()) return
-    const names = rawInput
-      .split(/,|\n/)
+  // Bulk Folder Creation
+  const handleCreateFolders = async (inputNames: string, parentFolderId: string | null) => {
+    const rawNames = inputNames
+      .split(/[\n,]/)
       .map(n => n.trim())
       .filter(n => n.length > 0)
-    if (names.length === 0) return
+
+    if (rawNames.length === 0) {
+      showToast('Please enter at least one folder name', 'error')
+      return
+    }
 
     setLoading(true)
     let createdCount = 0
+    let failedCount = 0
 
-    // Discover organization ID
-    let orgId = selectedFolder?.organizationId
-    if (!orgId && folderTree.length > 0) {
-      orgId = folderTree[0].organizationId || folderTree[0].id
-    }
+    const targetOrgId = selectedWorkspace?.id && selectedWorkspace.id !== 'default-ws'
+      ? selectedWorkspace.id
+      : folderTree[0]?.organizationId || folderTree[0]?.id
 
-    for (const name of names) {
+    for (const name of rawNames) {
       try {
-        const payload: Record<string, any> = {
-          name,
-          organization_id: orgId || tenant,
-          parent_folder_id: parentId || (selectedFolder?.id !== orgId ? selectedFolder?.id : null)
-        }
-
         const res = await fetch(`/api/v1/tenants/${tenant}/workspace/folders`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            name,
+            organization_id: targetOrgId,
+            parent_folder_id: parentFolderId
+          })
         })
-
         if (res.ok) {
           createdCount++
         } else {
-          // If direct API endpoint returned error, simulate client creation so user can proceed
-          createdCount++
+          failedCount++
         }
       } catch {
-        createdCount++
+        failedCount++
       }
     }
 
-    if (createdCount > 0) {
-      showToast(
-        names.length > 1
-          ? `${createdCount} folders provisioned successfully`
-          : `Folder "${names[0]}" provisioned successfully`,
-        'success'
-      )
-      loadTree()
-      onChanged?.()
+    setCreateModal({ isOpen: false, parentId: null })
+    loadTree()
+    onChanged?.()
+
+    if (createdCount > 0 && failedCount === 0) {
+      showToast(`Successfully created ${createdCount} folder${createdCount > 1 ? 's' : ''}`, 'success')
+    } else if (createdCount > 0 && failedCount > 0) {
+      showToast(`Created ${createdCount} folder(s), ${failedCount} failed`, 'info')
+    } else {
+      showToast('Failed to create folders', 'error')
     }
-    setLoading(false)
   }
 
   // Rename folder API
   const handleRenameFolder = async (folder: FolderItem) => {
-    if (folder.isGovernanceLocked) {
-      showToast('Cannot rename a governance-locked folder', 'error')
+    if (!folderDisplayName.trim()) {
+      showToast('Folder name cannot be empty', 'error')
       return
     }
-    const newName = prompt('Enter new folder name:', folder.name)
-    if (!newName || newName.trim() === folder.name) return
+    if (folder.isGovernanceLocked) {
+      showToast('Cannot rename a governance-locked folder. Unlock it first.', 'error')
+      return
+    }
 
     setLoading(true)
     try {
@@ -389,11 +564,12 @@ export default function ManageFoldersStudio({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ name: newName.trim() })
+        body: JSON.stringify({ name: folderDisplayName.trim() })
       })
 
-      if (res.ok || res.status === 404) {
-        showToast('Folder renamed successfully', 'success')
+      if (res.ok) {
+        showToast('Folder name updated successfully', 'success')
+        setSelectedFolder(prev => prev ? { ...prev, name: folderDisplayName.trim() } : null)
         loadTree()
         onChanged?.()
       } else {
@@ -474,6 +650,10 @@ export default function ManageFoldersStudio({
     const hasChildren = Boolean(node.children && node.children.length > 0)
     const isExpanded = Boolean(expandedFolders[node.id])
 
+    // Detect if a folder is mistakenly named as an environment (e.g. DEV, PROD, TEST, UAT)
+    const upperName = node.name.trim().toUpperCase()
+    const isEnvName = ['DEV', 'TEST', 'PROD', 'UAT', 'STAGING'].includes(upperName)
+
     return (
       <div key={node.id} className="tree-node-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
         <div
@@ -511,8 +691,17 @@ export default function ManageFoldersStudio({
             )}
           </div>
 
+          {isEnvName && (
+            <span
+              className="node-env-warning-badge"
+              title="DEV, TEST, UAT & PROD are Environments, not folders. Folders should represent business domains."
+            >
+              <AlertTriangle size={10} /> Env Name
+            </span>
+          )}
+
           {node.isGovernanceLocked && (
-            <Lock size={11} style={{ color: isSelected ? 'inherit' : '#D97706', flexShrink: 0 }} />
+            <Lock size={11} style={{ color: isSelected ? 'inherit' : '#D97706', flexShrink: 0, marginLeft: 4 }} />
           )}
 
           {!isSelected && <span className="node-manage-pill">Manage</span>}
@@ -527,6 +716,19 @@ export default function ManageFoldersStudio({
     )
   }
 
+  // Filtered Telemetry Logs
+  const filteredTelemetry = useMemo(() => {
+    return telemetryLogs.filter(log => {
+      const matchStatus = opsFilterStatus === 'ALL' || log.status === opsFilterStatus
+      const matchCat = opsFilterCategory === 'ALL' || log.category === opsFilterCategory
+      const matchText = !opsSearchText.trim() || 
+        log.operation.toLowerCase().includes(opsSearchText.toLowerCase()) ||
+        log.target.toLowerCase().includes(opsSearchText.toLowerCase()) ||
+        log.actor.toLowerCase().includes(opsSearchText.toLowerCase())
+      return matchStatus && matchCat && matchText
+    })
+  }, [telemetryLogs, opsFilterStatus, opsFilterCategory, opsSearchText])
+
   return (
     <div className="manage-folders-container">
       {/* Toast Notification Pill */}
@@ -539,7 +741,7 @@ export default function ManageFoldersStudio({
         </div>
       )}
 
-      {/* Top Header Cluster */}
+      {/* Top Header */}
       <header className="manage-folders-header">
         <div className="folders-header-left">
           <div className="folders-breadcrumb">
@@ -551,16 +753,60 @@ export default function ManageFoldersStudio({
             <h1>Folders</h1>
             <div className="folders-divider-v" />
 
-            {/* Context & Scope Badges */}
+            {/* Context: Customer Organization & Active Tenant */}
             <div className="folders-context-badges">
+              {/* Customer Organization Badge */}
+              <button
+                className="context-tenant-badge"
+                style={{ cursor: 'pointer' }}
+                onClick={() => setAdminConfigModal(true)}
+                title="Customer Organization: Click to open Admin Config"
+              >
+                <Building2 size={12} style={{ color: 'var(--accent, #BA9731)' }} />
+                <span>{organizationName}</span>
+              </button>
+
+              <ChevronRight size={12} style={{ opacity: 0.3 }} />
+
+              {/* Tenant Selector Dropdown */}
               <div className="context-tenant-badge">
                 <span className="status-dot-green" />
-                <span>{tenantName || 'CITIBANK'}</span>
+                {tenants.length > 1 ? (
+                  <select
+                    value={tenant}
+                    onChange={(e) => onSelectTenant?.(e.target.value)}
+                    style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 800, fontSize: '0.65rem', outline: 'none', cursor: 'pointer' }}
+                  >
+                    {tenants.map(t => (
+                      <option key={t.id} value={t.id} style={{ background: 'var(--card)', color: 'var(--foreground)' }}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span>{tenantName}</span>
+                )}
               </div>
+
               <ChevronRight size={12} style={{ opacity: 0.3 }} />
-              <div className="context-scope-badge">
-                <LayoutGrid size={12} />
-                <span>{selectedWorkspace?.name || 'GLOBAL TENANT SCOPE'}</span>
+
+              {/* Environment Switcher Pills (Explicit: DEV, TEST, UAT, PROD are Environments, not folders) */}
+              <div className="env-switcher-group" title="Active Runtime Environment">
+                <span className="env-group-label">ENV:</span>
+                {(['DEV', 'TEST', 'UAT', 'PROD'] as const).map(env => (
+                  <button
+                    key={env}
+                    className={`env-pill-btn ${activeEnv === env ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveEnv(env)
+                      onSelectEnv?.(env)
+                      showToast(`Switched active environment context to ${env}`, 'info')
+                    }}
+                  >
+                    <span className="env-dot" />
+                    <span>{env}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -568,11 +814,27 @@ export default function ManageFoldersStudio({
 
         {/* Header Action Buttons */}
         <div className="folders-header-actions">
-          <button className="folders-btn-secondary" onClick={() => setAuditModal(true)}>
+          <button
+            className="folders-btn-secondary"
+            onClick={() => setAdminConfigModal(true)}
+            title="Customer Organization & Multi-Tenant Configuration"
+          >
+            <Settings2 size={14} />
+            <span>Admin Config</span>
+          </button>
+
+          <button
+            className="folders-btn-secondary"
+            onClick={() => setAuditModal(true)}
+          >
             <History size={14} />
             <span>View Audit</span>
           </button>
-          <button className="folders-btn-primary" onClick={() => setCreateModal({ isOpen: true, parentId: null })}>
+
+          <button
+            className="folders-btn-primary"
+            onClick={() => setCreateModal({ isOpen: true, parentId: null })}
+          >
             <Plus size={14} />
             <span>New Folder</span>
           </button>
@@ -580,49 +842,55 @@ export default function ManageFoldersStudio({
       </header>
 
       {/* Main Dual-Pane Body */}
-      <div className="folders-dual-pane">
-        {/* Left Pane: Scope & Tree */}
+      <div className="folders-dual-pane-body">
+        {/* Left Pane: Scope, Filters, and Hierarchical Tree */}
         <aside className="folders-left-pane glass-card">
-          <div className="pane-section-label">Folder Scope</div>
-          <div className="scope-options-stack">
-            <button
-              onClick={() => setSelectedWorkspace(null)}
-              className={`scope-option-btn ${!selectedWorkspace ? 'active' : ''}`}
-            >
-              <Activity size={13} />
-              <span>Global Tenant Scope</span>
-              {!selectedWorkspace && <div className="scope-active-dot" />}
-            </button>
-            {workspaces.map((ws) => (
-              <button
-                key={ws.id}
-                onClick={() => setSelectedWorkspace(ws)}
-                className={`scope-option-btn ${selectedWorkspace?.id === ws.id ? 'active' : ''}`}
-              >
-                <LayoutGrid size={13} />
-                <span>{ws.name}</span>
-                {selectedWorkspace?.id === ws.id && <div className="scope-active-dot" />}
-              </button>
-            ))}
+          {/* Architecture Clarification Callout */}
+          <div className="folders-architecture-tip">
+            <Layers size={13} style={{ color: 'var(--accent, #BA9731)', flexShrink: 0, marginTop: 1 }} />
+            <span>
+              <strong>Architecture Note:</strong> DEV, TEST, UAT &amp; PROD are <strong>Environments</strong> (runtime stages), not folders. Folders represent your organizational business domains.
+            </span>
           </div>
 
-          <div style={{ height: 1, background: 'var(--border)', margin: '4px 0', opacity: 0.5 }} />
+          {/* Folder Scope Selector */}
+          <div className="folders-scope-section">
+            <span className="pane-section-label">Folder Scope</span>
+            <div className="scope-pills-list">
+              <button
+                className={`scope-pill-btn ${selectedWorkspace === null ? 'active' : ''}`}
+                onClick={() => setSelectedWorkspace(null)}
+              >
+                <Activity size={14} />
+                <span>Global Tenant Scope</span>
+              </button>
 
-          {/* Search & Level Expansion Controls */}
-          <div className="folders-search-controls">
-            <div className="search-input-wrap">
+              {workspaces.map(ws => (
+                <button
+                  key={ws.id}
+                  className={`scope-pill-btn ${selectedWorkspace?.id === ws.id ? 'active' : ''}`}
+                  onClick={() => setSelectedWorkspace(ws)}
+                >
+                  <LayoutGrid size={14} />
+                  <span>{ws.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Search Bar & Level Controls */}
+          <div className="tree-toolbar-row">
+            <div className="folders-search-box">
               <Search size={13} />
               <input
                 type="text"
+                placeholder="Search folders..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search folders..."
-                className="folders-search-field"
-                aria-label="Filter resource hierarchy"
               />
             </div>
 
-            <div className="tree-level-btns">
+            <div className="tree-quick-controls">
               <button onClick={handleExpandAll} className="tree-icon-btn" title="Expand All">
                 <ChevronsDown size={13} />
               </button>
@@ -662,7 +930,7 @@ export default function ManageFoldersStudio({
           </div>
         </aside>
 
-        {/* Right Pane: Detail & Tabs */}
+        {/* Right Pane: Detail & Multi-Tab Configuration Panel */}
         <main className="folders-right-pane glass-card">
           {!selectedFolder ? (
             <div className="folders-empty-detail">
@@ -670,7 +938,7 @@ export default function ManageFoldersStudio({
                 <FolderTree size={44} />
               </div>
               <h3>No Folder Selected</h3>
-              <p>Select a node from the tree on the left to manage its permissions, licenses, and machine allocations.</p>
+              <p>Select a node from the tree on the left to manage its structure, settings, permissions, compute pods, vector storage, and operations log.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -684,7 +952,7 @@ export default function ManageFoldersStudio({
                     <div>
                       <h2>{selectedFolder.name}</h2>
                       <div className="detail-status-line">
-                        <span>FOLDER MANAGEMENT</span>
+                        <span>FOLDER SCOPE: {activeEnv} ENVIRONMENT</span>
                         <span>•</span>
                         <span className={selectedFolder.isGovernanceLocked ? 'status-label-locked' : 'status-label-active'}>
                           {selectedFolder.isGovernanceLocked ? 'GOVERNANCE LOCKED' : 'ACTIVE SYSTEM'}
@@ -711,9 +979,9 @@ export default function ManageFoldersStudio({
                   </div>
                 </div>
 
-                {/* Tabs Strip */}
+                {/* Tabs Strip: Structure, Settings, Permissions, Licenses, Compute, Vector Storage, Operations */}
                 <div className="folder-tabs-strip">
-                  {(['Structure', 'Permissions', 'Licenses', 'Machines', 'Operations'] as const).map((tab) => (
+                  {(['Structure', 'Settings', 'Permissions', 'Licenses', 'Compute', 'Vector Storage', 'Operations'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
@@ -748,72 +1016,235 @@ export default function ManageFoldersStudio({
                       </div>
                       <div className="gov-lock-text-block">
                         <span className="gov-lock-title">Governance Lock</span>
-                        <span className="gov-lock-desc">
-                          When enabled, this folder's structure, permissions, and license allocations are immutable.
-                          Only Platform Admins can override this state.
-                        </span>
+                        <p className="gov-lock-desc">
+                          Prevents accidental deletion, renaming, or unauthorized changes to this folder's root policies.
+                        </p>
                       </div>
                       <button
+                        className={`gov-lock-toggle-btn ${selectedFolder.isGovernanceLocked ? 'locked' : ''}`}
                         onClick={handleToggleLock}
-                        className={`switch-pill ${selectedFolder.isGovernanceLocked ? 'locked' : ''}`}
-                        aria-label="Toggle Governance Lock"
                       >
-                        <div className="switch-thumb" />
+                        {selectedFolder.isGovernanceLocked ? 'Unlock' : 'Lock'}
                       </button>
                     </div>
 
-                    {/* Assigned Infrastructure */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span className="pane-section-label">Assigned Infrastructure</span>
-                        <button style={{ background: 'none', border: 'none', color: 'var(--accent, #BA9731)', fontSize: '0.68rem', fontWeight: 800, cursor: 'pointer' }}>
-                          EDIT ALLOCATION
-                        </button>
-                      </div>
-
-                      <div className="infra-assigned-card">
-                        <div className="infra-icon-wrap">
-                          <Monitor size={18} />
-                        </div>
-                        <div className="infra-details-col">
-                          <span className="infra-pool-name">{selectedFolder.name}-VM-Pool</span>
-                          <span className="infra-pool-sub">8 Virtual Machines Active</span>
-                        </div>
-                      </div>
+                    {/* Quick Subfolder Action */}
+                    <div className="structure-actions-row">
+                      <button
+                        className="dashed-action-btn"
+                        onClick={() => setCreateModal({ isOpen: true, parentId: selectedFolder.id })}
+                      >
+                        <Plus size={13} />
+                        <span>Add Subfolder under {selectedFolder.name}</span>
+                      </button>
                     </div>
                   </div>
                 )}
 
-                {/* 2. Permissions Tab */}
-                {activeTab === 'Permissions' && (
-                  <div className="permissions-hub-stack">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span className="pane-section-label">Permissions Hub</span>
-                      <div className="perm-view-toggle">
-                        <button
-                          onClick={() => setPermissionView('Group')}
-                          className={`perm-toggle-btn ${permissionView === 'Group' ? 'active' : ''}`}
-                        >
-                          Groups
-                        </button>
-                        <button
-                          onClick={() => setPermissionView('User')}
-                          className={`perm-toggle-btn ${permissionView === 'User' ? 'active' : ''}`}
-                        >
-                          Users
-                        </button>
+                {/* 2. Folder-Level Settings Tab (Inheritance, Sandbox, Feeds, Retention) */}
+                {activeTab === 'Settings' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    {/* Inheritance Controls */}
+                    <div className="settings-section-card">
+                      <div className="settings-card-head">
+                        <div className="settings-card-title-group">
+                          <Sliders size={16} style={{ color: 'var(--accent, #BA9731)' }} />
+                          <span className="settings-card-title">Folder Inheritance Controls</span>
+                        </div>
+                        <span className="license-status-tag">Active Policy</span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div className="settings-toggle-row">
+                          <div className="settings-toggle-info">
+                            <span className="settings-toggle-title">Inherit Permissions from Parent Folder</span>
+                            <span className="settings-toggle-sub">Roles and user permissions cascade automatically from parent scope</span>
+                          </div>
+                          <label className="toggle-switch-ui">
+                            <input
+                              type="checkbox"
+                              checked={folderSettings.inheritPermissions}
+                              onChange={(e) => setFolderSettings(prev => ({ ...prev, inheritPermissions: e.target.checked }))}
+                            />
+                            <span className="toggle-slider" />
+                          </label>
+                        </div>
+
+                        <div className="settings-toggle-row">
+                          <div className="settings-toggle-info">
+                            <span className="settings-toggle-title">Inherit Compute &amp; Pod Pools</span>
+                            <span className="settings-toggle-sub">Agents running in this folder can dispatch jobs to parent cluster worker pods</span>
+                          </div>
+                          <label className="toggle-switch-ui">
+                            <input
+                              type="checkbox"
+                              checked={folderSettings.inheritCompute}
+                              onChange={(e) => setFolderSettings(prev => ({ ...prev, inheritCompute: e.target.checked }))}
+                            />
+                            <span className="toggle-slider" />
+                          </label>
+                        </div>
+
+                        <div className="settings-toggle-row">
+                          <div className="settings-toggle-info">
+                            <span className="settings-toggle-title">Inherit Vector Knowledge Base</span>
+                            <span className="settings-toggle-sub">Allow folder RAG agents to query documents from parent vector collections</span>
+                          </div>
+                          <label className="toggle-switch-ui">
+                            <input
+                              type="checkbox"
+                              checked={folderSettings.inheritVector}
+                              onChange={(e) => setFolderSettings(prev => ({ ...prev, inheritVector: e.target.checked }))}
+                            />
+                            <span className="toggle-slider" />
+                          </label>
+                        </div>
+
+                        <div className="settings-toggle-row">
+                          <div className="settings-toggle-info">
+                            <span className="settings-toggle-title">Inherit Governance &amp; Approval Gates</span>
+                            <span className="settings-toggle-sub">Enforce parent organization compliance approvals on all agent deployments</span>
+                          </div>
+                          <label className="toggle-switch-ui">
+                            <input
+                              type="checkbox"
+                              checked={folderSettings.inheritGovernance}
+                              onChange={(e) => setFolderSettings(prev => ({ ...prev, inheritGovernance: e.target.checked }))}
+                            />
+                            <span className="toggle-slider" />
+                          </label>
+                        </div>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {/* Execution & Security Isolation */}
+                    <div className="settings-section-card">
+                      <div className="settings-card-head">
+                        <div className="settings-card-title-group">
+                          <ShieldCheck size={16} style={{ color: '#10B981' }} />
+                          <span className="settings-card-title">Execution Sandbox &amp; Security Isolation</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>SANDBOX ISOLATION MODE</label>
+                          <select
+                            className="settings-select-input"
+                            value={folderSettings.sandboxMode}
+                            onChange={(e) => setFolderSettings(prev => ({ ...prev, sandboxMode: e.target.value }))}
+                          >
+                            <option value="container">Standard Containerized Sandbox</option>
+                            <option value="gvisor">gVisor MicroVM Sandbox (Strict User Isolation)</option>
+                            <option value="pod">Dedicated Kubernetes Pod Isolation</option>
+                            <option value="airgap">Airgapped Sandbox (Zero Outbound Egress)</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>EGRESS NETWORK POLICY</label>
+                          <select
+                            className="settings-select-input"
+                            value={folderSettings.egressPolicy}
+                            onChange={(e) => setFolderSettings(prev => ({ ...prev, egressPolicy: e.target.value }))}
+                          >
+                            <option value="all">Full Outbound Internet Access</option>
+                            <option value="vpc">Restricted Corporate VPC Only</option>
+                            <option value="none">Airgapped (No Egress)</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Data Retention & Metadata */}
+                    <div className="settings-section-card">
+                      <div className="settings-card-head">
+                        <div className="settings-card-title-group">
+                          <Database size={16} style={{ color: '#0284C7' }} />
+                          <span className="settings-card-title">Retention &amp; Cost Center Metadata</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>JOB EXECUTION RETENTION</label>
+                          <select
+                            className="settings-select-input"
+                            value={folderSettings.jobRetentionDays}
+                            onChange={(e) => setFolderSettings(prev => ({ ...prev, jobRetentionDays: Number(e.target.value) }))}
+                          >
+                            <option value="30">30 Days</option>
+                            <option value="90">90 Days (Recommended)</option>
+                            <option value="365">1 Year (Regulatory compliance)</option>
+                            <option value="0">Indefinite</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>COST CENTER CODE</label>
+                          <input
+                            type="text"
+                            className="settings-select-input"
+                            value={folderSettings.costCenter}
+                            onChange={(e) => setFolderSettings(prev => ({ ...prev, costCenter: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Save Settings Action */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <button
+                        className="folders-btn-primary"
+                        onClick={() => {
+                          if (selectedFolder) {
+                            localStorage.setItem(`architectiq.folder.settings.${tenant}.${selectedFolder.id}`, JSON.stringify(folderSettings))
+                            showToast('Folder settings updated successfully', 'success')
+                          }
+                        }}
+                      >
+                        <Check size={14} />
+                        <span>Save Folder Settings</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Permissions Tab */}
+                {activeTab === 'Permissions' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div className="permissions-toolbar">
+                      <div className="perm-toggle-group">
+                        <button
+                          className={`perm-toggle-btn ${permissionView === 'Group' ? 'active' : ''}`}
+                          onClick={() => setPermissionView('Group')}
+                        >
+                          <Users size={12} />
+                          <span>Groups (3)</span>
+                        </button>
+                        <button
+                          className={`perm-toggle-btn ${permissionView === 'User' ? 'active' : ''}`}
+                          onClick={() => setPermissionView('User')}
+                        >
+                          <User size={12} />
+                          <span>Users (3)</span>
+                        </button>
+                      </div>
+
+                      <span style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+                        {folderSettings.inheritPermissions ? 'Inherited from Citibank Global' : 'Custom Isolated Permissions'}
+                      </span>
+                    </div>
+
+                    <div className="principals-grid">
                       {permissionView === 'Group' ? (
                         <>
                           <div className="principal-card">
                             <div className="principal-info-row">
-                              <div className="principal-icon-wrap"><ShieldCheck size={16} /></div>
+                              <div className="principal-icon-wrap"><Users size={16} /></div>
                               <div>
-                                <div className="principal-name">Platform Admin</div>
-                                <div className="principal-role">Super Admin</div>
+                                <div className="principal-name">Platform Engineers</div>
+                                <div className="principal-role">Infrastructure Team</div>
                               </div>
                             </div>
                             <div className="principal-access-badge">Full Access</div>
@@ -823,22 +1254,22 @@ export default function ManageFoldersStudio({
                             <div className="principal-info-row">
                               <div className="principal-icon-wrap"><Users size={16} /></div>
                               <div>
-                                <div className="principal-name">HR Team</div>
-                                <div className="principal-role">Viewer</div>
+                                <div className="principal-name">Automation Developers</div>
+                                <div className="principal-role">Workflow Authors</div>
                               </div>
                             </div>
-                            <div className="principal-access-badge">Read-Only</div>
+                            <div className="principal-access-badge">Editor</div>
                           </div>
 
                           <div className="principal-card">
                             <div className="principal-info-row">
-                              <div className="principal-icon-wrap"><Key size={16} /></div>
+                              <div className="principal-icon-wrap"><Users size={16} /></div>
                               <div>
-                                <div className="principal-name">Finance Analysts</div>
-                                <div className="principal-role">Developer</div>
+                                <div className="principal-name">Compliance Reviewers</div>
+                                <div className="principal-role">Risk &amp; Governance</div>
                               </div>
                             </div>
-                            <div className="principal-access-badge">Owner</div>
+                            <div className="principal-access-badge">Viewer Only</div>
                           </div>
                         </>
                       ) : (
@@ -889,7 +1320,7 @@ export default function ManageFoldersStudio({
                   </div>
                 )}
 
-                {/* 3. Licenses Tab */}
+                {/* 4. Licenses Tab */}
                 {activeTab === 'Licenses' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -931,7 +1362,7 @@ export default function ManageFoldersStudio({
                         <div className="license-info-row">
                           <div className="license-icon-wrap"><CreditCard size={16} /></div>
                           <div>
-                            <div className="license-name">Studio Designer</div>
+                            <div className="license-name">Studio Designer &amp; Agent Builder</div>
                             <div className="license-sub-row">
                               <span>Developer Tier</span>
                               <span>•</span>
@@ -942,7 +1373,7 @@ export default function ManageFoldersStudio({
                         <div className="license-actions-row">
                           <div style={{ textAlign: 'right', marginRight: 8 }}>
                             <div style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--muted-foreground)', textTransform: 'uppercase' }}>Expires</div>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 800 }}>2025-06-15</div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 800 }}>2026-06-15</div>
                           </div>
                           <button className="tree-icon-btn" title="Modify"><Settings2 size={13} /></button>
                           <button className="tree-icon-btn" title="Decommission"><Trash2 size={13} /></button>
@@ -960,11 +1391,497 @@ export default function ManageFoldersStudio({
                   </div>
                 )}
 
-                {/* 4. Operations Tab (Audit Trail) */}
+                {/* 5. Compute Tab (Kubernetes Pods, Containers, VM Pools for Folder Agents) */}
+                {activeTab === 'Compute' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Compute Type Selector */}
+                    <div className="compute-type-nav">
+                      <button
+                        className={`compute-type-btn ${computeType === 'pods' ? 'active' : ''}`}
+                        onClick={() => setComputeType('pods')}
+                      >
+                        <Box size={14} />
+                        <span>Kubernetes Pods &amp; Agent Workers</span>
+                      </button>
+                      <button
+                        className={`compute-type-btn ${computeType === 'containers' ? 'active' : ''}`}
+                        onClick={() => setComputeType('containers')}
+                      >
+                        <Server size={14} />
+                        <span>Docker Containers</span>
+                      </button>
+                      <button
+                        className={`compute-type-btn ${computeType === 'vms' ? 'active' : ''}`}
+                        onClick={() => setComputeType('vms')}
+                      >
+                        <Monitor size={14} />
+                        <span>Virtual Machine (VM) Pools</span>
+                      </button>
+                    </div>
+
+                    {/* Pod Configuration Form */}
+                    {computeType === 'pods' && (
+                      <div className="settings-section-card">
+                        <div className="settings-card-head">
+                          <div className="settings-card-title-group">
+                            <Box size={16} style={{ color: '#0284C7' }} />
+                            <span className="settings-card-title">Folder Agent Pod Runtime Configuration</span>
+                          </div>
+                          <span className="license-status-tag">Cluster: k8s-citi-prod</span>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>K8S NAMESPACE</label>
+                            <input
+                              type="text"
+                              className="settings-select-input"
+                              value={k8sNamespace}
+                              onChange={(e) => setK8sNamespace(e.target.value)}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>CONTAINER IMAGE &amp; TAG</label>
+                            <input
+                              type="text"
+                              className="settings-select-input"
+                              value={podImage}
+                              onChange={(e) => setPodImage(e.target.value)}
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>AUTOSCALE REPLICAS (MIN - MAX)</label>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <input
+                                type="number"
+                                className="settings-select-input"
+                                style={{ width: 80 }}
+                                value={minReplicas}
+                                min={1}
+                                max={20}
+                                onChange={(e) => setMinReplicas(Number(e.target.value))}
+                              />
+                              <span style={{ fontSize: '0.72rem', color: 'var(--muted-foreground)' }}>to</span>
+                              <input
+                                type="number"
+                                className="settings-select-input"
+                                style={{ width: 80 }}
+                                value={maxReplicas}
+                                min={minReplicas}
+                                max={50}
+                                onChange={(e) => setMaxReplicas(Number(e.target.value))}
+                              />
+                              <span style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>Pods</span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>CPU &amp; RAM LIMITS</label>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input
+                                type="text"
+                                className="settings-select-input"
+                                value={cpuLimit}
+                                onChange={(e) => setCpuLimit(e.target.value)}
+                              />
+                              <input
+                                type="text"
+                                className="settings-select-input"
+                                value={memLimit}
+                                onChange={(e) => setMemLimit(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* GPU Acceleration Toggle */}
+                        <div className="settings-toggle-row" style={{ marginTop: 8 }}>
+                          <div className="settings-toggle-info">
+                            <span className="settings-toggle-title">GPU Acceleration (NVIDIA T4 / A10G)</span>
+                            <span className="settings-toggle-sub">Enable hardware acceleration for local LLM inference</span>
+                          </div>
+                          <label className="toggle-switch-ui">
+                            <input
+                              type="checkbox"
+                              checked={gpuEnabled}
+                              onChange={(e) => setGpuEnabled(e.target.checked)}
+                            />
+                            <span className="toggle-slider" />
+                          </label>
+                        </div>
+
+                        {/* Live Running Pods Table */}
+                        <div style={{ marginTop: 6 }}>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--foreground)', display: 'block', marginBottom: 6 }}>
+                            Active Worker Pods in this Folder
+                          </span>
+                          <table className="pods-status-table">
+                            <thead>
+                              <tr>
+                                <th>POD ID</th>
+                                <th>STATUS</th>
+                                <th>NODE</th>
+                                <th>CPU / RAM</th>
+                                <th>RESTARTS</th>
+                                <th>ACTIONS</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td style={{ fontWeight: 800 }}>pod/citi-agent-worker-01</td>
+                                <td><span className="pod-running-dot" />Running</td>
+                                <td>node-citi-k8s-us-east-1a</td>
+                                <td>14% / 410 MB</td>
+                                <td>0</td>
+                                <td><button className="tree-icon-btn" title="Restart Pod" onClick={() => showToast('Restarting pod...', 'info')}><RotateCw size={11} /></button></td>
+                              </tr>
+                              <tr>
+                                <td style={{ fontWeight: 800 }}>pod/citi-agent-worker-02</td>
+                                <td><span className="pod-running-dot" />Running</td>
+                                <td>node-citi-k8s-us-east-1a</td>
+                                <td>9% / 395 MB</td>
+                                <td>0</td>
+                                <td><button className="tree-icon-btn" title="Restart Pod" onClick={() => showToast('Restarting pod...', 'info')}><RotateCw size={11} /></button></td>
+                              </tr>
+                              <tr>
+                                <td style={{ fontWeight: 800 }}>pod/citi-agent-worker-03</td>
+                                <td><span className="pod-running-dot" />Running</td>
+                                <td>node-citi-k8s-us-east-1b</td>
+                                <td>18% / 440 MB</td>
+                                <td>0</td>
+                                <td><button className="tree-icon-btn" title="Restart Pod" onClick={() => showToast('Restarting pod...', 'info')}><RotateCw size={11} /></button></td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {computeType === 'containers' && (
+                      <div className="settings-section-card">
+                        <div className="settings-card-head">
+                          <div className="settings-card-title-group">
+                            <Server size={16} style={{ color: '#BA9731' }} />
+                            <span className="settings-card-title">Docker / Containerd Daemon Pools</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>CONTAINER HOST POOL</label>
+                            <select className="settings-select-input">
+                              <option>citi-docker-swarm-pool-01 (16 Hosts)</option>
+                              <option>citi-containerd-edge-02 (8 Hosts)</option>
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                            <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>MAX CONCURRENT AGENT JOBS</label>
+                            <input type="number" defaultValue={25} className="settings-select-input" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {computeType === 'vms' && (
+                      <div className="settings-section-card">
+                        <div className="settings-card-head">
+                          <div className="settings-card-title-group">
+                            <Monitor size={16} style={{ color: '#10B981' }} />
+                            <span className="settings-card-title">Virtual Machine (VM) Host Pools</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>ASSIGNED VM POOL</label>
+                          <select className="settings-select-input">
+                            <option>citi-unattended-prod-pool-01 (Windows Server 2022)</option>
+                            <option>citi-unattended-linux-pool-02 (Ubuntu 24.04 LTS)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assigned Agents to this Folder */}
+                    <div className="settings-section-card">
+                      <div className="settings-card-head">
+                        <div className="settings-card-title-group">
+                          <Cpu size={16} style={{ color: 'var(--accent, #BA9731)' }} />
+                          <span className="settings-card-title">Assigned AI Agents for Execution</span>
+                        </div>
+                        <button
+                          className="folders-btn-primary"
+                          style={{ padding: '3px 8px', fontSize: '0.62rem' }}
+                          onClick={() => showToast('Agent assignment modal ready', 'info')}
+                        >
+                          <Plus size={11} />
+                          <span>Assign Agent</span>
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {[
+                          { name: 'Payment Reconciliation Agent', type: 'Autonomous FinOps', status: 'Pod Worker 01' },
+                          { name: 'KYC & AML Verification Agent', type: 'Compliance Assistant', status: 'Pod Worker 02' },
+                          { name: 'Core Ledger Balance Auditor', type: 'Scheduled Auditor', status: 'Pod Worker 03' },
+                          { name: 'Fraud Anomaly Detection Agent', type: 'Real-time Stream Evaluator', status: 'Pod Worker 01' }
+                        ].map((ag) => {
+                          const isAssigned = assignedAgents.includes(ag.name)
+                          return (
+                            <div key={ag.name} className="agent-assignment-card">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isAssigned}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setAssignedAgents(prev => [...prev, ag.name])
+                                    } else {
+                                      setAssignedAgents(prev => prev.filter(n => n !== ag.name))
+                                    }
+                                  }}
+                                />
+                                <Cpu size={14} style={{ color: isAssigned ? 'var(--primary)' : 'var(--muted-foreground)' }} />
+                                <div>
+                                  <div style={{ fontSize: '0.74rem', fontWeight: 800 }}>{ag.name}</div>
+                                  <div style={{ fontSize: '0.62rem', color: 'var(--muted-foreground)' }}>{ag.type}</div>
+                                </div>
+                              </div>
+                              <span className={isAssigned ? "license-status-tag" : "audit-actor-badge"}>
+                                {isAssigned ? `Active • ${ag.status}` : 'Unassigned'}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. Vector Storage Tab (Dedicated vs Shared) */}
+                {activeTab === 'Vector Storage' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span className="pane-section-label">Vector Storage &amp; RAG Knowledge Base</span>
+                      <p style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)', margin: 0 }}>
+                        Configure high-dimensional semantic search and vector database collections for AI agents operating in this folder.
+                      </p>
+                    </div>
+
+                    {/* Mode Selector: Dedicated to Folder vs Shared with Tenant */}
+                    <div className="vector-mode-grid">
+                      <div
+                        className={`vector-mode-card ${vectorMode === 'dedicated' ? 'selected' : ''}`}
+                        onClick={() => setVectorMode('dedicated')}
+                      >
+                        <div className="vector-mode-head">
+                          <HardDrive size={16} style={{ color: vectorMode === 'dedicated' ? 'var(--primary)' : 'var(--muted-foreground)' }} />
+                          <span>Specific to Folder (Dedicated)</span>
+                        </div>
+                        <p style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)', margin: 0, lineHeight: 1.35 }}>
+                          Isolated collection partition. Private department knowledge base with strict airgapping from other business units.
+                        </p>
+                      </div>
+
+                      <div
+                        className={`vector-mode-card ${vectorMode === 'shared' ? 'selected' : ''}`}
+                        onClick={() => setVectorMode('shared')}
+                      >
+                        <div className="vector-mode-head">
+                          <Database size={16} style={{ color: vectorMode === 'shared' ? 'var(--primary)' : 'var(--muted-foreground)' }} />
+                          <span>Shared with Tenant / Parent</span>
+                        </div>
+                        <p style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)', margin: 0, lineHeight: 1.35 }}>
+                          Connects to the shared tenant vector store, logically partitioned using folder metadata scoping tags.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Vector Engine & Collection Configuration */}
+                    <div className="settings-section-card">
+                      <div className="settings-card-head">
+                        <div className="settings-card-title-group">
+                          <Database size={16} style={{ color: '#0284C7' }} />
+                          <span className="settings-card-title">Vector Collection &amp; Embeddings</span>
+                        </div>
+                        <span className="license-status-tag">HNSW Index Ready</span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>VECTOR DATABASE ENGINE</label>
+                          <select
+                            className="settings-select-input"
+                            value={vectorEngine}
+                            onChange={(e: any) => setVectorEngine(e.target.value)}
+                          >
+                            <option value="pgvector">pgvector (PostgreSQL Native)</option>
+                            <option value="qdrant">Qdrant Enterprise Vector DB</option>
+                            <option value="milvus">Milvus Distributed Vector Store</option>
+                            <option value="pinecone">Pinecone Serverless</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>COLLECTION / NAMESPACE</label>
+                          <input
+                            type="text"
+                            className="settings-select-input"
+                            value={collectionName}
+                            onChange={(e) => setCollectionName(e.target.value)}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>EMBEDDING MODEL</label>
+                          <select
+                            className="settings-select-input"
+                            value={embeddingModel}
+                            onChange={(e) => setEmbeddingModel(e.target.value)}
+                          >
+                            <option value="text-embedding-3-small">text-embedding-3-small (1536 dim)</option>
+                            <option value="text-embedding-3-large">text-embedding-3-large (3072 dim)</option>
+                            <option value="e5-large-v2">e5-large-v2 (1024 dim)</option>
+                            <option value="bge-m3">bge-m3 (Dense + Sparse)</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>DISTANCE METRIC</label>
+                          <select
+                            className="settings-select-input"
+                            value={distanceMetric}
+                            onChange={(e: any) => setDistanceMetric(e.target.value)}
+                          >
+                            <option value="cosine">Cosine Similarity</option>
+                            <option value="dot">Dot Product (Inner Product)</option>
+                            <option value="euclidean">Euclidean Distance (L2)</option>
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          <label style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--muted-foreground)' }}>STORAGE QUOTA (GB)</label>
+                          <input
+                            type="number"
+                            className="settings-select-input"
+                            value={quotaGb}
+                            min={5}
+                            max={500}
+                            onChange={(e) => setQuotaGb(Number(e.target.value))}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Quota & Utilization Meter */}
+                      <div style={{ marginTop: 8, padding: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', fontWeight: 800 }}>
+                          <span>Storage Quota Utilization</span>
+                          <span>8.4 GB / {quotaGb} GB (33.6%)</span>
+                        </div>
+                        <div className="vector-progress-meter">
+                          <div className="vector-progress-bar" style={{ width: '33.6%' }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 16, fontSize: '0.65rem', color: 'var(--muted-foreground)', marginTop: 4 }}>
+                          <span>142,500 indexed vectors</span>
+                          <span>•</span>
+                          <span>35,625 document chunks</span>
+                          <span>•</span>
+                          <span>Last sync: 2 mins ago</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Interactive Similarity Search Query Tester */}
+                    <div className="query-tester-box">
+                      <span style={{ fontSize: '0.74rem', fontWeight: 800 }}>Test Vector Search Similarity Query</span>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          type="text"
+                          placeholder="e.g., customer loan KYC compliance requirements"
+                          className="settings-select-input"
+                          style={{ flex: 1 }}
+                          value={testQuery}
+                          onChange={(e) => setTestQuery(e.target.value)}
+                        />
+                        <button
+                          className="folders-btn-primary"
+                          onClick={() => {
+                            if (!testQuery.trim()) {
+                              showToast('Please enter a query', 'error')
+                              return
+                            }
+                            setTestResults([
+                              {
+                                title: 'Citibank Lending & Credit Policy §4.2',
+                                score: 0.942,
+                                excerpt: 'Mandatory KYC documents must be validated within 48 hours before automated credit release.'
+                              },
+                              {
+                                title: 'AML Regulatory Compliance Handbook 2026',
+                                score: 0.887,
+                                excerpt: 'Real-time transaction anomaly screening requires second-factor authorization on sums exceeding $50k.'
+                              }
+                            ])
+                            showToast('Vector similarity search test completed', 'success')
+                          }}
+                        >
+                          <Play size={12} />
+                          <span>Run Query</span>
+                        </button>
+                      </div>
+
+                      {testResults && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                          {testResults.map((r, i) => (
+                            <div key={i} className="query-result-chip">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
+                                <span>{r.title}</span>
+                                <span style={{ color: '#10B981' }}>Similarity: {r.score}</span>
+                              </div>
+                              <span style={{ color: 'var(--muted-foreground)' }}>{r.excerpt}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <button
+                        className="folders-btn-secondary"
+                        onClick={() => showToast('Re-indexing vector embeddings across 35,625 chunks...', 'info')}
+                      >
+                        <RotateCw size={12} />
+                        <span>Re-index Vector Collection</span>
+                      </button>
+
+                      <button
+                        className="folders-btn-primary"
+                        onClick={() => {
+                          if (selectedFolder) {
+                            localStorage.setItem(`architectiq.folder.vector.${tenant}.${selectedFolder.id}`, JSON.stringify({
+                              mode: vectorMode,
+                              engine: vectorEngine,
+                              collectionName,
+                              embeddingModel,
+                              distanceMetric,
+                              quotaGb
+                            }))
+                            showToast('Vector storage configuration saved', 'success')
+                          }
+                        }}
+                      >
+                        <Check size={14} />
+                        <span>Save Vector Config</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. Operations Tab (Significantly Enriched Telemetry) */}
                 {activeTab === 'Operations' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span className="pane-section-label">Governance Audit Trail</span>
+                      <span className="pane-section-label">Operational Telemetry &amp; Execution Audit Log</span>
                       <button
                         onClick={loadLogs}
                         className="tree-icon-btn"
@@ -975,34 +1892,119 @@ export default function ManageFoldersStudio({
                       </button>
                     </div>
 
-                    <div className="audit-trail-stack">
-                      {auditLogs.map((log) => (
-                        <div key={log.id} className="audit-entry-card">
-                          <div className="audit-indicator-bar" />
-                          <div className="audit-content-block">
-                            <div className="audit-head-row">
-                              <span className="audit-action-name">{log.action.replace(/_/g, ' ')}</span>
-                              <span className="audit-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                            </div>
-                            <span className="audit-target">{log.target}</span>
-                            <span className="audit-actor-badge">{log.actor}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                    {/* Search & Filters */}
+                    <div className="ops-filter-bar">
+                      <div className="folders-search-box" style={{ flex: 1, minWidth: 180 }}>
+                        <Search size={12} />
+                        <input
+                          type="text"
+                          placeholder="Search operations, actors, targets..."
+                          value={opsSearchText}
+                          onChange={(e) => setOpsSearchText(e.target.value)}
+                        />
+                      </div>
 
-                {/* 5. Machines Tab */}
-                {activeTab === 'Machines' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <span className="pane-section-label">Machine Allocations &amp; Runner Pools</span>
-                    <div className="quota-banner" style={{ padding: 32 }}>
-                      <Monitor size={28} style={{ color: 'var(--accent, #BA9731)', marginBottom: 4 }} />
-                      <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>Dynamic Runner Infrastructure</span>
-                      <p style={{ fontSize: '0.72rem', color: 'var(--muted-foreground)', maxWidth: 360, margin: '4px 0 0' }}>
-                        Runners assigned to this folder execute unattended automation jobs in isolated container sandboxes.
-                      </p>
+                      <select
+                        className="settings-select-input"
+                        value={opsFilterStatus}
+                        onChange={(e) => setOpsFilterStatus(e.target.value)}
+                      >
+                        <option value="ALL">All Statuses</option>
+                        <option value="SUCCESS">Success</option>
+                        <option value="RUNNING">Running</option>
+                        <option value="FAILED">Failed</option>
+                      </select>
+
+                      <select
+                        className="settings-select-input"
+                        value={opsFilterCategory}
+                        onChange={(e) => setOpsFilterCategory(e.target.value)}
+                      >
+                        <option value="ALL">All Categories</option>
+                        <option value="Agent Execution">Agent Execution</option>
+                        <option value="Pod Scheduled">Pod Scheduled</option>
+                        <option value="Vector Ingestion">Vector Ingestion</option>
+                        <option value="Governance">Governance</option>
+                        <option value="RBAC">RBAC</option>
+                      </select>
+                    </div>
+
+                    {/* Telemetry Cards Stack */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {filteredTelemetry.map((item) => {
+                        const isExpanded = Boolean(expandedPayloads[item.id])
+                        return (
+                          <div key={item.id} className="ops-telemetry-entry">
+                            <div
+                              className="ops-telemetry-head"
+                              onClick={() => setExpandedPayloads(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <span className={`ops-status-badge ${item.status.toLowerCase()}`}>
+                                  {item.status}
+                                </span>
+                                <div>
+                                  <div style={{ fontSize: '0.74rem', fontWeight: 800 }}>{item.operation}</div>
+                                  <div style={{ fontSize: '0.62rem', color: 'var(--muted-foreground)' }}>
+                                    Target: {item.target} • Initiator: {item.actor}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--primary)' }}>
+                                  {item.durationMs}ms
+                                </span>
+                                <span style={{ fontSize: '0.62rem', color: 'var(--muted-foreground)' }}>
+                                  {new Date(item.timestamp).toLocaleTimeString()}
+                                </span>
+                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                              </div>
+                            </div>
+
+                            {/* Metrics Strip */}
+                            {item.metrics && (
+                              <div className="ops-telemetry-metrics">
+                                <span>CPU: {item.metrics.cpu}</span>
+                                <span>•</span>
+                                <span>RAM: {item.metrics.ram}</span>
+                                {item.metrics.tokens && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Tokens: {item.metrics.tokens} (Prompt: {item.metrics.promptTokens || 0}, Compl: {item.metrics.completionTokens || 0})</span>
+                                  </>
+                                )}
+                                {item.podNode && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Node: {item.podNode}</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Expandable JSON Payload Inspector */}
+                            {isExpanded && (
+                              <div className="ops-payload-inspector">
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                  <span style={{ color: 'var(--muted-foreground)' }}>TELEMETRY PARAMETERS &amp; STATE DIFF:</span>
+                                  <button
+                                    style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.62rem' }}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      navigator.clipboard.writeText(JSON.stringify(item.payload, null, 2))
+                                      showToast('Copied payload to clipboard', 'info')
+                                    }}
+                                  >
+                                    Copy JSON
+                                  </button>
+                                </div>
+                                <code>{JSON.stringify(item.payload, null, 2)}</code>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -1037,43 +2039,194 @@ export default function ManageFoldersStudio({
         </main>
       </div>
 
+      {/* Admin Config: Customer Organization & Multi-Tenant Management Modal */}
+      {adminConfigModal && (
+        <div className="modal-overlay-nextgen" onClick={() => setAdminConfigModal(false)}>
+          <div className="modal-content-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Admin Configuration: Organization &amp; Multi-Tenant</h2>
+              <p>One Customer Organization can contain multiple isolated Tenants across environments</p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Customer Org Profile */}
+              <div className="admin-org-banner">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Building2 size={24} style={{ color: 'var(--accent, #BA9731)' }} />
+                  <div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 900 }}>{organizationName}</div>
+                    <div style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+                      Customer ID: org-citi-global-ent • Tier: Enterprise Multi-Tenant
+                    </div>
+                  </div>
+                </div>
+                <span className="license-status-tag">Multi-Tenant Enabled</span>
+              </div>
+
+              {/* Tenants Directory List */}
+              <div>
+                <span className="pane-section-label" style={{ marginBottom: 8, display: 'block' }}>
+                  Tenants under this Organization ({tenants.length || 3})
+                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {(tenants.length > 0 ? tenants : [
+                    { id: 'citi-na', name: 'Citibank NA [Retail Banking]', slug: 'citi-na', region: 'us-east-1' },
+                    { id: 'citi-emea', name: 'Citibank EMEA [Investment Banking]', slug: 'citi-emea', region: 'eu-west-1' },
+                    { id: 'citi-apac', name: 'Citibank APAC [Wealth Management]', slug: 'citi-apac', region: 'ap-southeast-1' }
+                  ]).map((t) => {
+                    const isCurrent = t.id === tenant
+                    return (
+                      <div key={t.id} className="tenant-list-row">
+                        <div>
+                          <div style={{ fontSize: '0.76rem', fontWeight: 800 }}>{t.name}</div>
+                          <div style={{ fontSize: '0.62rem', color: 'var(--muted-foreground)' }}>
+                            Slug: {t.slug || t.id} • Region: {t.region || 'us-east-1'} • Envs: DEV, TEST, UAT, PROD
+                          </div>
+                        </div>
+                        {isCurrent ? (
+                          <span className="ops-status-badge success">Active Tenant</span>
+                        ) : (
+                          <button
+                            className="folders-btn-secondary"
+                            style={{ padding: '3px 8px', fontSize: '0.65rem' }}
+                            onClick={() => {
+                              onSelectTenant?.(t.id)
+                              showToast(`Switched active tenant to ${t.name}`, 'success')
+                              setAdminConfigModal(false)
+                            }}
+                          >
+                            Switch to Tenant
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Provision New Tenant for this Organization */}
+              <div style={{ padding: 12, borderRadius: 6, background: 'rgba(255,255,255,0.2)', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.74rem', fontWeight: 800, display: 'block', marginBottom: 8 }}>
+                  Provision New Tenant for Customer
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                  <input
+                    type="text"
+                    placeholder="Tenant Name (e.g. Citibank Wealth)"
+                    className="settings-select-input"
+                    value={newTenantForm.name}
+                    onChange={(e) => setNewTenantForm(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Slug (e.g. citi-wealth)"
+                    className="settings-select-input"
+                    value={newTenantForm.slug}
+                    onChange={(e) => setNewTenantForm(prev => ({ ...prev, slug: e.target.value }))}
+                  />
+                </div>
+                <button
+                  className="folders-btn-primary"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  disabled={creatingTenant}
+                  onClick={async () => {
+                    if (!newTenantForm.name.trim()) {
+                      showToast('Please enter a tenant name', 'error')
+                      return
+                    }
+                    if (onOpenNewTenant) {
+                      setAdminConfigModal(false)
+                      onOpenNewTenant()
+                    } else {
+                      setCreatingTenant(true)
+                      try {
+                        const res = await fetch('/api/v1/tenants', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`
+                          },
+                          body: JSON.stringify({
+                            name: newTenantForm.name.trim(),
+                            slug: newTenantForm.slug.trim() || undefined
+                          })
+                        })
+                        if (res.ok) {
+                          const newT = await res.json()
+                          showToast(`Tenant "${newT.name}" provisioned successfully`, 'success')
+                          setAdminConfigModal(false)
+                          onChanged?.()
+                        } else {
+                          showToast('Failed to provision tenant', 'error')
+                        }
+                      } catch {
+                        showToast('Failed to provision tenant', 'error')
+                      } finally {
+                        setCreatingTenant(false)
+                      }
+                    }
+                  }}
+                >
+                  <Plus size={13} />
+                  <span>Provision Tenant</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: 16 }}>
+              <button className="folders-btn-secondary" onClick={() => setAdminConfigModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* + New Folder Modal */}
       {createModal.isOpen && (
         <div className="modal-overlay-nextgen" onClick={() => setCreateModal({ isOpen: false, parentId: null })}>
           <div className="modal-content-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h2>Create New Folders</h2>
-              <p>Use commas or new lines to create multiple folders at once</p>
+              <p>Enter business domain names (e.g., Banking, Mortgages, Core Ledger). Use commas or new lines for bulk creation.</p>
             </div>
+
+            {/* Helper note explaining environments are not folders */}
+            <div className="folders-architecture-tip" style={{ marginBottom: 12 }}>
+              <Layers size={13} style={{ color: 'var(--accent, #BA9731)', flexShrink: 0, marginTop: 1 }} />
+              <span>
+                <strong>Reminder:</strong> Do not create folders named DEV, UAT, or PROD. Environments are runtime stages managed globally in the header.
+              </span>
+            </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault()
-                const form = e.target as HTMLFormElement
-                const textarea = form.elements.namedItem('folderNames') as HTMLTextAreaElement
-                processFolderCreation(textarea.value, createModal.parentId)
-                setCreateModal({ isOpen: false, parentId: null })
+                const form = e.currentTarget
+                const input = form.elements.namedItem('folderNames') as HTMLTextAreaElement
+                if (input) handleCreateFolders(input.value, createModal.parentId)
               }}
             >
-              <div className="modal-body">
-                <textarea
-                  name="folderNames"
-                  autoFocus
-                  required
-                  placeholder="Finance&#10;HR&#10;Operations"
-                  className="bulk-textarea"
-                />
-              </div>
-              <div className="modal-footer">
+              <textarea
+                name="folderNames"
+                className="modal-textarea"
+                placeholder={"Retail Banking\nCommercial Lending\nRisk & Compliance"}
+                rows={4}
+                required
+                autoFocus
+              />
+
+              <div className="modal-actions">
                 <button
                   type="button"
                   className="folders-btn-secondary"
-                  style={{ flex: 1, justifyContent: 'center' }}
                   onClick={() => setCreateModal({ isOpen: false, parentId: null })}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="folders-btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                  Create Folders
+                <button type="submit" className="folders-btn-primary" disabled={loading}>
+                  {loading ? <RotateCw size={14} className="animate-spin" /> : <Plus size={14} />}
+                  <span>Create Folders</span>
                 </button>
               </div>
             </form>
@@ -1081,37 +2234,32 @@ export default function ManageFoldersStudio({
         </div>
       )}
 
-      {/* View Audit Modal */}
+      {/* Global Audit Log Modal */}
       {auditModal && (
         <div className="modal-overlay-nextgen" onClick={() => setAuditModal(false)}>
           <div className="modal-content-card" style={{ maxWidth: 640 }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h2>Global Audit Log</h2>
-                <p>Enterprise Governance &amp; Immutability Record</p>
-              </div>
-              <button className="tree-icon-btn" onClick={() => setAuditModal(false)}>
-                <X size={15} />
-              </button>
+            <div className="modal-head">
+              <h2>Operational Audit Log</h2>
+              <p>Complete historical log of structural and security events across the workspace</p>
             </div>
-            <div className="modal-body" style={{ maxHeight: 420, overflowY: 'auto' }}>
-              <div className="audit-trail-stack">
-                {auditLogs.map((log) => (
-                  <div key={log.id} className="audit-entry-card">
-                    <div className="audit-indicator-bar" />
-                    <div className="audit-content-block">
-                      <div className="audit-head-row">
-                        <span className="audit-action-name">{log.action.replace(/_/g, ' ')}</span>
-                        <span className="audit-time">{new Date(log.timestamp).toLocaleString()}</span>
-                      </div>
-                      <span className="audit-target">{log.target}</span>
-                      <span className="audit-actor-badge">{log.actor}</span>
+
+            <div className="modal-scroll-body">
+              {telemetryLogs.map((log) => (
+                <div key={log.id} className="audit-entry-card">
+                  <div className="audit-indicator-bar" />
+                  <div className="audit-content-block">
+                    <div className="audit-head-row">
+                      <span className="audit-action-name">{log.operation.replace(/_/g, ' ')}</span>
+                      <span className="audit-time">{new Date(log.timestamp).toLocaleString()}</span>
                     </div>
+                    <span className="audit-target">{log.target}</span>
+                    <span className="audit-actor-badge">{log.actor}</span>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
-            <div className="modal-footer" style={{ justifyContent: 'flex-end' }}>
+
+            <div className="modal-actions">
               <button className="folders-btn-secondary" onClick={() => setAuditModal(false)}>
                 Close
               </button>
@@ -1120,49 +2268,53 @@ export default function ManageFoldersStudio({
         </div>
       )}
 
-      {/* Context Menu Popover */}
+      {/* Right-Click Context Menu */}
       {contextMenu && (
         <div
-          className="context-menu-popover"
-          style={{
-            left: Math.min(contextMenu.x, window.innerWidth - 190),
-            top: Math.min(contextMenu.y, window.innerHeight - 170)
-          }}
+          className="folders-context-menu"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
             className="context-menu-item"
             onClick={() => {
+              const f = contextMenu.folder
               setContextMenu(null)
-              setCreateModal({ isOpen: true, parentId: contextMenu.folder.id })
+              setCreateModal({ isOpen: true, parentId: f.id })
             }}
           >
-            <Plus size={12} />
+            <Plus size={13} />
             <span>New Subfolder</span>
           </button>
-          <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }} />
+
           <button
             className="context-menu-item"
             onClick={() => {
               const f = contextMenu.folder
               setContextMenu(null)
-              handleRenameFolder(f)
+              setSelectedFolder(f)
+              setActiveTab('Structure')
             }}
           >
-            <Edit2 size={12} />
-            <span>Rename</span>
+            <Edit2 size={13} />
+            <span>Rename Folder</span>
           </button>
+
           <button
             className="context-menu-item"
             onClick={() => {
+              const f = contextMenu.folder
               setContextMenu(null)
-              showToast('Move operation: Drag and drop to target folder', 'info')
+              setSelectedFolder(f)
+              setActiveTab('Settings')
             }}
           >
-            <Move size={12} />
-            <span>Move</span>
+            <Sliders size={13} />
+            <span>Folder Settings</span>
           </button>
-          <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }} />
+
+          <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+
           <button
             className="context-menu-item danger"
             onClick={() => {
@@ -1171,8 +2323,8 @@ export default function ManageFoldersStudio({
               handleDeleteFolder(f)
             }}
           >
-            <Trash2 size={12} />
-            <span>Delete</span>
+            <Trash2 size={13} />
+            <span>Delete Folder</span>
           </button>
         </div>
       )}

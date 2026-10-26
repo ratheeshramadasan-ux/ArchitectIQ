@@ -33,6 +33,7 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
 
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
     globalThis.fetch = vi.fn().mockImplementation((url: string | URL | Request) => {
       const urlStr = String(url)
       if (urlStr.includes('/workspace/tree')) {
@@ -49,7 +50,7 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
           json: () => Promise.resolve([
             {
               id: 'event-1',
-              operation: 'SCOPE_CREATED',
+              operation: 'AGENT_WORKFLOW_DISPATCHED',
               resource_kind: 'Folder',
               resource_id: 'folder-1-uuid',
               happened_at: new Date().toISOString(),
@@ -73,7 +74,36 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
     })
   })
 
-  it('renders breadcrumb header, environment badges, and action buttons', async () => {
+  it('renders breadcrumb header, environment switcher pills, and action buttons', async () => {
+    const handleEnvSelect = vi.fn()
+    render(
+      <ManageFoldersStudio
+        token="test-token"
+        tenant="tenant-citi"
+        tenantName="Citibank"
+        currentEnv="DEV"
+        onSelectEnv={handleEnvSelect}
+      />
+    )
+
+    expect(screen.getByText(/Workspace \/ Manage Folders/i)).toBeDefined()
+    expect(screen.getByRole('heading', { level: 1, name: 'Folders' })).toBeDefined()
+    expect(screen.getByText('Citibank Global Enterprise')).toBeDefined()
+    expect(screen.getByText('Citibank')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Admin Config' })).toBeDefined()
+    expect(screen.getByText('View Audit')).toBeDefined()
+    expect(screen.getByText('New Folder')).toBeDefined()
+
+    // Environment switcher pills
+    expect(screen.getByRole('button', { name: /^DEV$/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^UAT$/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^PROD$/ })).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: /^UAT$/ }))
+    expect(handleEnvSelect).toHaveBeenCalledWith('UAT')
+  })
+
+  it('displays architecture note clarifying environments vs folders', async () => {
     render(
       <ManageFoldersStudio
         token="test-token"
@@ -83,11 +113,8 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
       />
     )
 
-    expect(screen.getByText(/Workspace \/ Manage Folders/i)).toBeDefined()
-    expect(screen.getByRole('heading', { level: 1, name: 'Folders' })).toBeDefined()
-    expect(screen.getByText('Citibank')).toBeDefined()
-    expect(screen.getByText('View Audit')).toBeDefined()
-    expect(screen.getByText('New Folder')).toBeDefined()
+    expect(screen.getByText(/DEV, TEST, UAT & PROD are/i)).toBeDefined()
+    expect(screen.getByText(/Environments/i)).toBeDefined()
   })
 
   it('loads hierarchical folder tree from API and renders nodes', async () => {
@@ -118,10 +145,10 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
     )
 
     expect(screen.getByText('No Folder Selected')).toBeDefined()
-    expect(screen.getByText(/Select a node from the tree on the left to manage its permissions/i)).toBeDefined()
+    expect(screen.getByText(/Select a node from the tree on the left to manage its structure, settings, permissions, compute pods/i)).toBeDefined()
   })
 
-  it('selects a folder and displays detail pane with Structure, Permissions, Licenses tabs', async () => {
+  it('selects a folder and displays detail pane with all tabs including Settings, Compute, and Vector Storage', async () => {
     render(
       <ManageFoldersStudio
         token="test-token"
@@ -142,86 +169,84 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
       expect(screen.getByText('ACTIVE SYSTEM')).toBeDefined()
     })
 
-    // Verify tabs are available
+    // Verify all 7 tabs are available
     expect(screen.getByRole('button', { name: 'Structure' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Permissions' })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Licenses' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Compute' })).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Vector Storage' })).toBeDefined()
     expect(screen.getByRole('button', { name: 'Operations' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Machines' })).toBeDefined()
 
-    // Test Governance Lock Toggle
-    const lockToggle = screen.getByLabelText('Toggle Governance Lock')
-    fireEvent.click(lockToggle)
-
+    // Test Folder Settings tab
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     await waitFor(() => {
-      expect(screen.getByText('GOVERNANCE LOCKED')).toBeDefined()
+      expect(screen.getByText('Folder Inheritance Controls')).toBeDefined()
+      expect(screen.getByText('Inherit Permissions from Parent Folder')).toBeDefined()
+      expect(screen.getByText('Inherit Compute & Pod Pools')).toBeDefined()
+      expect(screen.getByText('Inherit Vector Knowledge Base')).toBeDefined()
+      expect(screen.getByText('Execution Sandbox & Security Isolation')).toBeDefined()
+      expect(screen.getByText('Save Folder Settings')).toBeDefined()
     })
 
-    // Switch to Permissions tab
-    fireEvent.click(screen.getByRole('button', { name: 'Permissions' }))
+    // Test Compute tab (Pods, Containers, VMs)
+    fireEvent.click(screen.getByRole('button', { name: 'Compute' }))
     await waitFor(() => {
-      expect(screen.getByText('Platform Admin')).toBeDefined()
-      expect(screen.getByText('Full Access')).toBeDefined()
+      expect(screen.getByText(/Kubernetes Pods & Agent Workers/i)).toBeDefined()
+      expect(screen.getByText(/Docker Containers/i)).toBeDefined()
+      expect(screen.getByText(/Virtual Machine \(VM\) Pools/i)).toBeDefined()
+      expect(screen.getByText(/Active Worker Pods in this Folder/i)).toBeDefined()
+      expect(screen.getByText('pod/citi-agent-worker-01')).toBeDefined()
+      expect(screen.getByText('Assigned AI Agents for Execution')).toBeDefined()
     })
 
-    // Switch to Licenses tab
-    fireEvent.click(screen.getByRole('button', { name: 'Licenses' }))
+    // Test Vector Storage tab (Dedicated vs Shared)
+    fireEvent.click(screen.getByRole('button', { name: 'Vector Storage' }))
     await waitFor(() => {
-      expect(screen.getByText('Unattended Automation')).toBeDefined()
-      expect(screen.getByText('Available Quota')).toBeDefined()
+      expect(screen.getByText('Specific to Folder (Dedicated)')).toBeDefined()
+      expect(screen.getByText('Shared with Tenant / Parent')).toBeDefined()
+      expect(screen.getByText('Vector Collection & Embeddings')).toBeDefined()
+      expect(screen.getByText('Storage Quota Utilization')).toBeDefined()
+      expect(screen.getByText('Test Vector Search Similarity Query')).toBeDefined()
+    })
+
+    // Test Operations tab (Enriched Telemetry)
+    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+    await waitFor(() => {
+      expect(screen.getByText(/Operational Telemetry & Execution Audit Log/i)).toBeDefined()
+      expect(screen.getByPlaceholderText(/Search operations, actors, targets/i)).toBeDefined()
+      expect(screen.getByText('All Statuses')).toBeDefined()
+      expect(screen.getByText('All Categories')).toBeDefined()
     })
   })
 
-  it('opens and closes New Folder modal and processes creation', async () => {
+  it('opens Admin Config modal and displays Customer Organization and Multi-Tenant options', async () => {
+    const handleTenantSelect = vi.fn()
     render(
       <ManageFoldersStudio
         token="test-token"
-        tenant="tenant-citi"
-        tenantName="Citibank"
+        tenant="citi-na"
+        tenantName="Citibank NA"
+        tenants={[
+          { id: 'citi-na', name: 'Citibank NA [Retail Banking]', slug: 'citi-na', region: 'us-east-1' },
+          { id: 'citi-emea', name: 'Citibank EMEA [Investment Banking]', slug: 'citi-emea', region: 'eu-west-1' }
+        ]}
+        onSelectTenant={handleTenantSelect}
         currentEnv="DEV"
       />
     )
 
-    const newFolderBtn = screen.getByText('New Folder')
-    fireEvent.click(newFolderBtn)
-
-    expect(screen.getByText('Create New Folders')).toBeDefined()
-    expect(screen.getByPlaceholderText(/Finance.*HR.*Operations/)).toBeDefined()
-
-    const textarea = screen.getByPlaceholderText(/Finance.*HR.*Operations/)
-    fireEvent.change(textarea, { target: { value: 'HR Department' } })
-
-    const submitBtn = screen.getByRole('button', { name: 'Create Folders' })
-    fireEvent.click(submitBtn)
+    const adminBtn = screen.getByRole('button', { name: 'Admin Config' })
+    fireEvent.click(adminBtn)
 
     await waitFor(() => {
-      expect(screen.queryByText('Create New Folders')).toBeNull()
-    })
-  })
-
-  it('opens View Audit modal and renders operational events', async () => {
-    render(
-      <ManageFoldersStudio
-        token="test-token"
-        tenant="tenant-citi"
-        tenantName="Citibank"
-        currentEnv="DEV"
-      />
-    )
-
-    const auditBtn = screen.getByText('View Audit')
-    fireEvent.click(auditBtn)
-
-    await waitFor(() => {
-      expect(screen.getByText('Global Audit Log')).toBeDefined()
-      expect(screen.getByText('Enterprise Governance & Immutability Record')).toBeDefined()
+      expect(screen.getByText(/Admin Configuration: Organization & Multi-Tenant/i)).toBeDefined()
+      expect(screen.getByText(/One Customer Organization can contain multiple isolated Tenants/i)).toBeDefined()
+      expect(screen.getAllByText('Citibank EMEA [Investment Banking]').length).toBeGreaterThanOrEqual(1)
     })
 
-    const closeBtn = screen.getByRole('button', { name: 'Close' })
-    fireEvent.click(closeBtn)
-
-    await waitFor(() => {
-      expect(screen.queryByText('Global Audit Log')).toBeNull()
-    })
+    const switchBtn = screen.getByRole('button', { name: 'Switch to Tenant' })
+    fireEvent.click(switchBtn)
+    expect(handleTenantSelect).toHaveBeenCalledWith('citi-emea')
   })
 })

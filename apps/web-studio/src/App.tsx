@@ -133,7 +133,7 @@ function App(){
  const [savedSession]=useState(readSession);const [token,setToken]=useState(savedSession?.token||'');const [tenant,setTenant]=useState(savedSession?.tenant||'');const [tenants,setTenants]=useState<TenantOption[]>([]);const [restoring,setRestoring]=useState(!!savedSession);const [liveNodes,setLiveNodes]=useState<TreeNode[]>([]);const [workspaceError,setWorkspaceError]=useState('');const nodes=liveNodes;
  const [summaryData,setSummaryData]=useState<{organizations:number;folders:number;projects:number;active_projects:number;archived_projects:number}|null>(null);
  const [overviewData,setOverviewData]=useState<{throughput_24h?:number;open_incidents?:Record<string,number>;sla_health_pct?:number;service_health?:string}|null>(null);
- const [active,setActive]=useState('Dashboard');const currentEnv: 'DEV'|'TEST'|'UAT'|'PROD' = 'DEV';const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
+ const [active,setActive]=useState('Dashboard');const [currentEnv,setCurrentEnv]=useState<'DEV'|'TEST'|'UAT'|'PROD'>('DEV');const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
  const [newTenantModal,setNewTenantModal]=useState(false);const [newTenantName,setNewTenantName]=useState('');const [tenantCreating,setTenantCreating]=useState(false);const [tenantCreateError,setTenantCreateError]=useState('');
  useEffect(()=>{if(!token)return;let cancelled=false;fetch(`/api/v1/tenants/${tenant}/workspace/tree`,{headers:{Authorization:`Bearer ${token}`}}).then(async r=>{if(r.status===401){clearSession();setToken('');throw new Error('Session expired')}if(!r.ok)throw new Error(`Workspace HTTP ${r.status}`);return r.json()}).then(data=>{if(!cancelled){setLiveNodes(data);setWorkspaceError('');if(data.length>0){setSelected(prev=>prev||data[0])}}}).catch(e=>{if(!cancelled)setWorkspaceError(String(e))});return()=>{cancelled=true}},[token,tenant]);
  useEffect(()=>{
@@ -615,7 +615,15 @@ function App(){
         token={token}
         tenant={tenant}
         tenantName={tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        tenants={tenants}
+        onSelectTenant={(id) => {
+          setTenant(id);
+          setLiveNodes([]);
+          sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: id }));
+        }}
+        onOpenNewTenant={() => setNewTenantModal(true)}
         currentEnv={currentEnv}
+        onSelectEnv={setCurrentEnv}
         onUnauthorized={unauthorized}
         onChanged={changed}
        />
