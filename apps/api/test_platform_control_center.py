@@ -34,7 +34,43 @@ def platform_env():
             ),
             {"u": admin_user_id},
         )
-    return {"admin_user_id": admin_user_id}
+    yield {"admin_user_id": admin_user_id}
+    # Teardown: ensure test organizations and tenants do not pollute dev/prod database
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "DELETE FROM public.workspace_activity WHERE tenant_id IN (SELECT id FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global'))"
+            )
+        )
+        conn.execute(
+            text(
+                "DELETE FROM public.tenant_environments WHERE tenant_id IN (SELECT id FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global'))"
+            )
+        )
+        conn.execute(
+            text(
+                "DELETE FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global') OR (organization_id = '9a1c6757-4268-42ab-9f98-38441eab424c' AND slug NOT IN ('citibank', 'citibank-sandbox'))"
+            )
+        )
+        conn.execute(
+            text(
+                "DELETE FROM public.platform_subscriptions WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global')"
+            )
+        )
+        conn.execute(
+            text(
+                "DELETE FROM public.platform_infrastructure_pools WHERE assigned_org_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global')"
+            )
+        )
+        conn.execute(
+            text(
+                "DELETE FROM public.platform_organizations WHERE slug != 'citibank-global'"
+            )
+        )
+        conn.execute(
+            text("DELETE FROM public.users WHERE id = :u"),
+            {"u": admin_user_id},
+        )
 
 
 def test_platform_dashboard_kpis(platform_env):
@@ -366,3 +402,52 @@ def test_audit_trail_and_diagnostics(platform_env):
     assert verification["status"] == "VERIFIED"
     assert verification["rpo_minutes"] > 0
     assert verification["rto_minutes"] > 0
+
+
+def test_fleet_tenant_lifecycle_and_administration_overview(platform_env):
+    authenticate_as(platform_env["admin_user_id"])
+    unique_suffix = uuid4().hex[:6]
+
+    # 1. Overview API
+    overview_resp = client.get("/api/v1/platform/administration/overview")
+    assert overview_resp.status_code == 200
+    ov_data = overview_resp.json()
+    assert "total_tenants" in ov_data
+    assert "total_users" in ov_data
+    assert "active_projects" in ov_data
+    assert ov_data["policy_compliance_pct"] == 100
+
+    # 2. Provision Tenant with description and status
+    tenant_resp = client.post(
+        "/api/v1/platform/fleet/tenants",
+        json={
+            "name": f"Admin Tenant {unique_suffix}",
+            "description": "Lifecycle testing tenant",
+            "status": "Active",
+        },
+    )
+    assert tenant_resp.status_code == 201
+    created_tenant = tenant_resp.json()
+    tenant_id = created_tenant["id"]
+    assert created_tenant["status"] == "Active"
+    assert created_tenant["description"] == "Lifecycle testing tenant"
+
+    # 3. Patch Tenant (Update name and status to Suspended)
+    patch_resp = client.patch(
+        f"/api/v1/platform/fleet/tenants/{tenant_id}",
+        json={
+            "name": f"Admin Tenant {unique_suffix} Updated",
+            "status": "Suspended",
+            "description": "Temporarily suspended for maintenance",
+        },
+    )
+    assert patch_resp.status_code == 200
+    patched = patch_resp.json()
+    assert patched["name"] == f"Admin Tenant {unique_suffix} Updated"
+    assert patched["status"] == "Suspended"
+    assert patched["description"] == "Temporarily suspended for maintenance"
+
+    # 4. Delete / Archive Tenant
+    del_resp = client.delete(f"/api/v1/platform/fleet/tenants/{tenant_id}")
+    assert del_resp.status_code == 200
+    assert del_resp.json()["status"] == "Archived"

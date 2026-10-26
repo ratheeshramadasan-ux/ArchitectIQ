@@ -56,7 +56,7 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.getByText('Learn about Organization Setup')).toBeDefined()
   })
 
-  it('renders all 6 top domain sub-navigation tabs and navigates when clicked', () => {
+  it('renders all 9 top domain sub-navigation tabs and navigates when clicked', () => {
     const onNavigateMock = vi.fn()
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" onNavigate={onNavigateMock} />)
 
@@ -64,11 +64,38 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.getByRole('button', { name: /Environments/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /Users & Teams/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /Roles & Permissions/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Identity & SSO/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /Integrations/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Repositories & Artifacts/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Compute & Capacity/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /Licensing & Usage/i })).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: /Environments/i }))
     expect(onNavigateMock).toHaveBeenCalledWith('Environments')
+  })
+
+  it('switches between domain tabs like Environments, Identity & SSO, Compute & Capacity', () => {
+    render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+
+    // Click Environments
+    fireEvent.click(screen.getByRole('button', { name: /Environments/i }))
+    expect(screen.getByText(/Canonical Environments Fleet/i)).toBeDefined()
+    expect(screen.getByText(/Safety Guard Active/i)).toBeDefined()
+
+    // Click Identity & SSO
+    fireEvent.click(screen.getByRole('button', { name: /Identity & SSO/i }))
+    expect(screen.getByText(/Enterprise Identity & SSO Configuration/i)).toBeDefined()
+    expect(screen.getByText(/Okta Enterprise/i)).toBeDefined()
+
+    // Click Compute & Capacity
+    fireEvent.click(screen.getByRole('button', { name: /Compute & Capacity/i }))
+    expect(screen.getByText(/Dedicated & Shared Compute Pools/i)).toBeDefined()
+    expect(screen.getByText(/Total CPU Allocation/i)).toBeDefined()
+
+    // Click Licensing & Usage
+    fireEvent.click(screen.getByRole('button', { name: /Licensing & Usage/i }))
+    expect(screen.getByText(/Subscription Entitlements & Licensing/i)).toBeDefined()
+    expect(screen.getByText(/Tenant Fleet Quota/i)).toBeDefined()
   })
 
   it('renders Hero Banner with 4 KPI metrics and architectural tree illustration', async () => {

@@ -300,7 +300,13 @@ function App(){
  const [savedSession]=useState(readSession);const [token,setToken]=useState(savedSession?.token||'');const [tenant,setTenant]=useState(savedSession?.tenant||'');const [tenants,setTenants]=useState<TenantOption[]>([]);const [restoring,setRestoring]=useState(!!savedSession);const [liveNodes,setLiveNodes]=useState<TreeNode[]>([]);const [workspaceError,setWorkspaceError]=useState('');const nodes=liveNodes;
  const [summaryData,setSummaryData]=useState<{organizations:number;folders:number;projects:number;active_projects:number;archived_projects:number}|null>(null);
  const [overviewData,setOverviewData]=useState<{throughput_24h?:number;open_incidents?:Record<string,number>;sla_health_pct?:number;service_health?:string}|null>(null);
- const [active,setActive]=useState('Folders & Hierarchy');const [currentEnv,setCurrentEnv]=useState<'DEV'|'TEST'|'UAT'|'CANARY'|'PROD'>('DEV');const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
+ const [active,setActive]=useState(() => {
+   try {
+     const saved = sessionStorage.getItem('architectiq.active_view')
+     if (saved) return saved
+   } catch {}
+   return 'Folders & Hierarchy'
+ });const [currentEnv,setCurrentEnv]=useState<'DEV'|'TEST'|'UAT'|'CANARY'|'PROD'>('DEV');const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
  const [newTenantModal,setNewTenantModal]=useState(false);const [newTenantName,setNewTenantName]=useState('');const [tenantCreating,setTenantCreating]=useState(false);const [tenantCreateError,setTenantCreateError]=useState('');
  const [currentUserRole, setCurrentUserRole] = useState('Tenant Admin');
  const [envModalOpen, setEnvModalOpen] = useState(false);
@@ -566,7 +572,15 @@ function App(){
   )
  }
 
- const navigate = (name: string) => { setActive(name); setSearch(false); setMobile(false); setQuery('') }
+ const navigate = (name: string) => {
+   setActive(name)
+   setSearch(false)
+   setMobile(false)
+   setQuery('')
+   try {
+     sessionStorage.setItem('architectiq.active_view', name)
+   } catch {}
+ }
  const toggle = (id: string) => setTreeOpen(old => { const n = new Set(old); if (n.has(id)) n.delete(id); else n.add(id); return n })
  const select = (n: TreeNode) => { setSelected(n); setActive('Explorer') }
 
@@ -576,34 +590,42 @@ function App(){
  const isKnowledgeStudio = active === 'Knowledge Studio'
  const isTestStudio = active === 'Test Studio'
  const isDeploymentReleasesStudio = active === 'Release Manager' || active === 'Deployment Pipelines' || active === 'Packages & Versions'
- const isTenantEnvs = active === 'Environments' || active === 'Environment Settings' || active === 'Tenant Environments'
- const isExplorer = active === 'Projects'
- const isTenantAppsStudio = active === 'Applications' || active === 'General Settings' || active === 'App Studio'
- const isIamStudio = active === 'Role Catalog' || active === 'Build Custom Role' || active === 'Permission Matrix' || active === 'Segregation of Duties' || active === 'Roles & Permissions'
- const isAccessDirectoryStudio = active === 'Access Groups' || active === 'Identity Providers' || active === 'Map IdP Groups' || active === 'User Directory' || active === 'Pending Approvals' || active === 'Groups & Teams' || active === 'SSO & Mapping' || active === 'Users & Access' || active === 'Users & Approvals' || active === 'Users, Groups & Teams' || active === 'Identity & SSO'
- const isTenantIntegrationsStudio = active === 'Bot Agents' || active === 'Connected Systems & MCP' || active === 'Connected Systems' || active === 'Code Repositories' || active === 'API & Webhooks' || active === 'Assets & Credentials' || active === '6. Integrations' || active === 'Integrations & MCP' || active === 'Repositories & APIs'
- const isJobsOperations = active === 'Execution Center' || active === 'Queues & Transactions' || active === 'Schedules & Triggers' || active === 'Runners & Workers' || active === 'Jobs & Executions' || active === 'Run & Operate' || active === 'Schedules' || active === 'Queues & Approvals'
- const isApprovalsInbox = active === 'My Tasks' || active === 'Human Tasks & Approvals' || active === 'Approvals'
- const isObservability = active === 'Observability Dashboard' || active === 'SLA & Performance' || active === 'Incidents & Alerts' || active === 'Support & Runbooks' || active === 'Analytics & Reports' || active === 'Monitoring' || active === 'Monitor & Analyse' || active === 'Observability Console'
- const isGovernance = active === 'Governance Console' || active === 'Security Policies & MFA' || active === 'Data Protection & PII' || active === 'AI Model Governance' || active === 'Compliance & Attestation' || active === 'Governance'
- const isAuditViewer = active === 'Activity Audit Logs' || active === 'Audit Logs'
- const isOrgTenantStudio =
+ const isAdministration =
    active === 'Organization & Tenants' ||
    active === 'Manage Organizations & Tenants' ||
    active === 'Manage Organization and Tenant' ||
    active === 'Manage Organization & Tenant' ||
    active === 'Manage Organizations' ||
    active === 'Tenants' ||
-   active === 'Manage Tenants'
- const isPlatformControlCenter =
+   active === 'Manage Tenants' ||
+   active === 'Environments' ||
+   active === 'Users, Groups & Teams' ||
+   active === 'Roles & Permissions' ||
+   active === 'Identity & SSO' ||
+   active === 'Integrations & MCP' ||
+   active === 'Repositories & Artifacts' ||
+   active === 'Repositories & APIs' ||
+   active === 'Compute & Capacity' ||
+   active === 'Licensing & Usage'
+ const isTenantEnvs = !isAdministration && (active === 'Environment Settings' || active === 'Tenant Environments')
+ const isExplorer = active === 'Projects'
+ const isTenantAppsStudio = active === 'Applications' || active === 'General Settings' || active === 'App Studio'
+ const isIamStudio = !isAdministration && (active === 'Role Catalog' || active === 'Build Custom Role' || active === 'Permission Matrix' || active === 'Segregation of Duties')
+ const isAccessDirectoryStudio = !isAdministration && (active === 'Access Groups' || active === 'Identity Providers' || active === 'Map IdP Groups' || active === 'User Directory' || active === 'Pending Approvals' || active === 'Groups & Teams' || active === 'SSO & Mapping' || active === 'Users & Access' || active === 'Users & Approvals')
+ const isTenantIntegrationsStudio = !isAdministration && (active === 'Bot Agents' || active === 'Connected Systems & MCP' || active === 'Connected Systems' || active === 'Code Repositories' || active === 'API & Webhooks' || active === 'Assets & Credentials' || active === '6. Integrations')
+ const isJobsOperations = active === 'Execution Center' || active === 'Queues & Transactions' || active === 'Schedules & Triggers' || active === 'Runners & Workers' || active === 'Jobs & Executions' || active === 'Run & Operate' || active === 'Schedules' || active === 'Queues & Approvals'
+ const isApprovalsInbox = active === 'My Tasks' || active === 'Human Tasks & Approvals' || active === 'Approvals'
+ const isObservability = active === 'Observability Dashboard' || active === 'SLA & Performance' || active === 'Incidents & Alerts' || active === 'Support & Runbooks' || active === 'Analytics & Reports' || active === 'Monitoring' || active === 'Monitor & Analyse' || active === 'Observability Console'
+ const isGovernance = active === 'Governance Console' || active === 'Security Policies & MFA' || active === 'Data Protection & PII' || active === 'AI Model Governance' || active === 'Compliance & Attestation' || active === 'Governance'
+ const isAuditViewer = active === 'Activity Audit Logs' || active === 'Audit Logs'
+ const isPlatformControlCenter = !isAdministration && (
    active === 'Platform Control Center' ||
    active === 'Platform Overview & Health' ||
    active === 'Infrastructure Inventory' ||
    active === 'Platform Configuration & Flags' ||
-   active === 'Compute & Capacity' ||
-   active === 'Licensing & Usage' ||
    active === 'Platform Administration' ||
    active === 'Tenant Fleet'
+ )
  const isPlatformMgmt = false
  const isTenantMgmt = false
  const studio = flatLinks.some(l => l.name === active)
@@ -1149,7 +1171,7 @@ function App(){
       {isAccessDirectoryStudio && (
        <AccessDirectoryStudio
         initialTab={
-          active === 'Identity Providers' || active === 'Identity & SSO' ? 'security' :
+          active === 'Identity Providers' ? 'security' :
           active === 'Map IdP Groups' ? 'mappings' :
           active === 'User Directory' ? 'users' :
           active === 'Pending Approvals' ? 'approvals' : 'groups'
@@ -1163,7 +1185,7 @@ function App(){
        <TenantIntegrationsStudio
         initialTab={
           active === 'Bot Agents' ? 'bots' :
-          active === 'Code Repositories' || active === 'Repositories & APIs' ? 'repos' :
+          active === 'Code Repositories' ? 'repos' :
           active === 'API & Webhooks' ? 'webhooks' : 'systems'
         }
         currentEnv={currentEnv}
@@ -1184,11 +1206,13 @@ function App(){
       )}
       {isGovernance && <GovernanceConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {isAuditViewer && <ActivityAuditViewer token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
-      {isOrgTenantStudio && (
+      {isAdministration && (
         <OrganizationTenantStudio
           token={token}
           tenant={tenant}
-          onNavigate={(target) => setActive(target)}
+          activeTab={active}
+          currentEnv={currentEnv}
+          onNavigate={(target) => navigate(target)}
           onSelectTenant={(id) => {
             setTenant(id)
             setLiveNodes([])
@@ -1200,9 +1224,8 @@ function App(){
        <PlatformControlCenterStudio
         token={token}
         initialTab={
-          active === 'Infrastructure Inventory' || active === 'Compute & Capacity' ? 'infrastructure' :
+          active === 'Infrastructure Inventory' ? 'infrastructure' :
           active === 'Platform Configuration & Flags' ? 'diagnostics' :
-          active === 'Licensing & Usage' ? 'subscriptions' :
           'dashboard'
         }
        />
@@ -1224,6 +1247,7 @@ function App(){
        !isGovernance &&
        !isAuditViewer &&
        !isPlatformControlCenter &&
+       !isAdministration &&
        !isPlatformMgmt &&
        !isTenantMgmt &&
        active !== 'Flow Studio' &&
