@@ -13,9 +13,9 @@ import psycopg
 from argon2 import PasswordHasher
 
 DB_URL = "postgresql://architectiq:Mad%407878@127.0.0.1:5433/architectiq_test"
-EMAIL = "admin@architectiq.io"
-PASSWORD = "Password@12345"
-NAME = "Enterprise Admin"
+EMAIL = "ratheesh.ramadasan@gmail.com"
+PASSWORD = "Sid6554*"
+NAME = "Ratheesh Ramadasan"
 
 TENANT_ID = UUID("a0000000-0000-4000-8000-000000000001")
 USER_ID = UUID("a0000000-0000-4000-8000-000000000002")

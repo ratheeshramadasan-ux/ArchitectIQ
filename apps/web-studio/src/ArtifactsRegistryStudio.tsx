@@ -148,7 +148,7 @@ export default function ArtifactsRegistryStudio({
           scope_level: formScopeLevel,
           scope_id: formScopeLevel === 'TENANT' ? tenant : formScopeLevel === 'ENVIRONMENT' ? currentEnv : null,
           storage_uri: formStorageUri.trim() || 's3://architectiq-artifacts/default',
-          metadata: { registeredBy: 'admin@architectiq.io', registeredAt: new Date().toISOString() }
+          metadata: { registeredBy: 'ratheesh.ramadasan@gmail.com', registeredAt: new Date().toISOString() }
         })
       })
       if (res.ok) {

@@ -770,11 +770,11 @@ function App(){
        {!collapsed && <span>Theme / Icons</span>}
       </button>
       <div className="user-identity-card">
-       <span className="user-avatar-circle">A</span>
+       <span className="user-avatar-circle">R</span>
        {!collapsed && (
         <div className="user-names-stack">
-         <strong>Enterprise Administrator</strong>
-         <small>admin@architectiq.io</small>
+         <strong>Ratheesh Ramadasan</strong>
+         <small>ratheesh.ramadasan@gmail.com</small>
         </div>
        )}
       </div>
@@ -863,8 +863,8 @@ function App(){
 
       <div className="topbar-right-cluster">
        {/* 3. User Identity & Role — Pure Text Visual (Name in Bold, Role unbold below User Name) */}
-       <div className="topbar-user-profile-stack" title={`Signed in as Enterprise Administrator (${currentUserRole})`}>
-        <span className="topbar-user-name">Enterprise Administrator</span>
+       <div className="topbar-user-profile-stack" title={`Signed in as Ratheesh Ramadasan (${currentUserRole})`}>
+        <span className="topbar-user-name">Ratheesh Ramadasan</span>
         <div className="topbar-user-role-wrap">
           <select
             aria-label="Active Identity and Role Tier"

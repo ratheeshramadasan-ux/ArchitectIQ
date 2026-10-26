@@ -185,7 +185,7 @@ export default function ManageFoldersStudio({
     packageFeed: 'inherit',
     jobRetentionDays: 90,
     costCenter: 'CC-BANKING-4901',
-    ownerEmail: 'admin@architectiq.io'
+    ownerEmail: 'ratheesh.ramadasan@gmail.com'
   })
 
   // 2. Compute Infrastructure (Pods, Containers, VMs) State
@@ -264,7 +264,7 @@ export default function ManageFoldersStudio({
           packageFeed: 'inherit',
           jobRetentionDays: 90,
           costCenter: `CC-${selectedFolder.name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) || 'BANKING'}-01`,
-          ownerEmail: 'admin@architectiq.io'
+          ownerEmail: 'ratheesh.ramadasan@gmail.com'
         })
       }
 
@@ -555,7 +555,7 @@ export default function ManageFoldersStudio({
             operation: 'GOVERNANCE_LOCK_APPLIED',
             status: 'SUCCESS',
             category: 'Governance',
-            actor: 'Compliance Officer (admin@architectiq.io)',
+            actor: 'Compliance Officer (ratheesh.ramadasan@gmail.com)',
             target: 'Folder: Banking / Core Ledger',
             timestamp: new Date(Date.now() - 3600000).toISOString(),
             durationMs: 45,

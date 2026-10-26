@@ -18,10 +18,10 @@ def clean_database():
     with psycopg.connect(DB_URL) as conn:
         with conn.cursor() as cur:
             # 1. Identify admin user ID
-            cur.execute("SELECT user_id, email FROM public.native_credentials WHERE email = 'admin@architectiq.io'")
+            cur.execute("SELECT user_id, email FROM public.native_credentials WHERE email = 'ratheesh.ramadasan@gmail.com'")
             admin_row = cur.fetchone()
             if not admin_row:
-                print("ERROR: admin@architectiq.io not found in native_credentials!")
+                print("ERROR: ratheesh.ramadasan@gmail.com not found in native_credentials!")
                 sys.exit(1)
             admin_id, admin_email = admin_row
             print(f"Preserving Admin User: {admin_email} (ID: {admin_id})")

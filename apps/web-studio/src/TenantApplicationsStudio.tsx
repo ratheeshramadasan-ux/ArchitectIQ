@@ -37,7 +37,7 @@ const DEFAULT_APPS: AppSolutionItem[] = [
     status: 'ACTIVE',
     folderBinding: 'Banking / Core Ledger',
     version: 'v2.4.1',
-    author: 'admin@architectiq.io',
+    author: 'ratheesh.ramadasan@gmail.com',
     deployments: { dev: true, test: true, uat: true, prod: true }
   },
   {
@@ -59,7 +59,7 @@ const DEFAULT_APPS: AppSolutionItem[] = [
     status: 'ACTIVE',
     folderBinding: 'Global Tenant Scope',
     version: 'v1.2.0',
-    author: 'admin@architectiq.io',
+    author: 'ratheesh.ramadasan@gmail.com',
     deployments: { dev: true, test: true, uat: true, prod: true }
   },
   {
@@ -70,7 +70,7 @@ const DEFAULT_APPS: AppSolutionItem[] = [
     status: 'ACTIVE',
     folderBinding: 'Banking',
     version: 'v1.0.4',
-    author: 'admin@architectiq.io',
+    author: 'ratheesh.ramadasan@gmail.com',
     deployments: { dev: true, test: true, uat: false, prod: false }
   }
 ]

@@ -156,7 +156,7 @@ const DEFAULT_USERS: DirectoryUserItem[] = [
   {
     id: 'usr-1',
     name: 'Ratheesh Ramadasan',
-    email: 'admin@architectiq.io',
+    email: 'ratheesh.ramadasan@gmail.com',
     type: 'HUMAN',
     status: 'ACTIVE',
     roles: ['Platform Administrator', 'Tenant Administrator'],

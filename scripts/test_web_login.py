@@ -2,8 +2,8 @@
 import httpx
 
 BASE_URL = "http://127.0.0.1:8080"
-EMAIL = "admin@architectiq.io"
-PASSWORD = "Password@12345"
+EMAIL = "ratheesh.ramadasan@gmail.com"
+PASSWORD = "Sid6554*"
 
 
 def test_login_flow():
