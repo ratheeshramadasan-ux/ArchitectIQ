@@ -1,4 +1,5 @@
 import WorkspaceLive from './WorkspaceLive'
+import ManageFoldersStudio from './ManageFoldersStudio'
 import FlowStudio from './FlowStudio'
 import JobsMonitor from './JobsMonitor'
 import ApprovalsInbox from './ApprovalsInbox'
@@ -13,7 +14,7 @@ import LoginScreen from './LoginScreen'
 import ThemeAppearanceStudio from './ThemeAppearanceStudio'
 import type { ThemeConfig, FontName, TextSize } from './ThemeAppearanceStudio'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, GitBranch, HelpCircle, KeyRound, LayoutDashboard, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeftClose, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
+import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, FolderTree, GitBranch, HelpCircle, KeyRound, LayoutDashboard, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeftClose, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
 
@@ -91,7 +92,7 @@ type TreeNode = { id: string; name: string; kind: 'org'|'folder'|'project'|'envi
 const groups: {title:string; links:{name:string;icon:LucideIcon}[]}[] = [
   {title:'WORKSPACE',links:[{name:'Dashboard',icon:LayoutDashboard},{name:'Explorer',icon:FolderKanban},{name:'Projects',icon:Layers3},{name:'Environments',icon:GitBranch}]},
   {title:'AUTOMATION HUB',links:[{name:'Flow Studio',icon:Workflow},{name:'Agent Builder',icon:Bot},{name:'App Studio',icon:AppWindow},{name:'Document Studio',icon:FileText},{name:'Queues & Transactions',icon:ListTodo},{name:'Runners & Workers',icon:Boxes},{name:'Schedules',icon:CalendarClock},{name:'Jobs & Executions',icon:Play},{name:'Monitoring',icon:Activity}]},
-  {title:'TENANT',links:[{name:'Workspace Management',icon:Building2},{name:'Roles & Permissions',icon:LockKeyhole},{name:'Groups & Teams',icon:Users},{name:'SSO & Mapping',icon:Network},{name:'Users & Access',icon:UserPlus},{name:'Assets & Credentials',icon:KeyRound}]},
+  {title:'TENANT',links:[{name:'Workspaces & Folders',icon:FolderTree},{name:'Workspace Management',icon:Building2},{name:'Roles & Permissions',icon:LockKeyhole},{name:'Groups & Teams',icon:Users},{name:'SSO & Mapping',icon:Network},{name:'Users & Access',icon:UserPlus},{name:'Assets & Credentials',icon:KeyRound}]},
   {title:'CONTROL PLANE',links:[{name:'Governance',icon:ClipboardCheck},{name:'Approvals',icon:Check},{name:'Audit Logs',icon:FileText},{name:'Administration',icon:Settings2}]},
   {title:'ACCOUNT',links:[{name:'Theme / Icons',icon:Palette},{name:'Profile',icon:Sparkles},{name:'Downloads',icon:Boxes}]},
 ]
@@ -279,9 +280,10 @@ function App(){
  const toggle = (id: string) => setTreeOpen(old => { const n = new Set(old); if (n.has(id)) n.delete(id); else n.add(id); return n })
  const select = (n: TreeNode) => { setSelected(n); setActive('Explorer') }
 
- const isExplorer = active === 'Explorer' || active === 'Projects' || active === 'Environments'
+ const isFoldersStudio = active === 'Explorer' || active === 'Workspaces & Folders' || active === 'Workspace Management'
+ const isExplorer = active === 'Projects' || active === 'Environments'
  const studio = groups[1].links.some(x => x.name === active)
- const isTenantMgmt = groups[2].links.some(x => x.name === active)
+ const isTenantMgmt = groups[2].links.some(x => x.name === active && x.name !== 'Workspaces & Folders' && x.name !== 'Workspace Management')
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
 
@@ -608,6 +610,16 @@ function App(){
        </>
       )}
 
+      {isFoldersStudio && (
+       <ManageFoldersStudio
+        token={token}
+        tenant={tenant}
+        tenantName={tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        currentEnv={currentEnv}
+        onUnauthorized={unauthorized}
+        onChanged={changed}
+       />
+      )}
       {isExplorer && <WorkspaceLive view={active} token={token} tenant={tenant} tenantName={tenants.find(t => t.id === tenant)?.name || 'Workspace'} onUnauthorized={unauthorized} onChanged={changed} />}
       {active === 'Flow Studio' && <FlowStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {active === 'Agent Builder' && <AgentStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
