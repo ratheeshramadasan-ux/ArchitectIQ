@@ -1273,9 +1273,9 @@ button.topbar-tenant-pill:hover {
   border-radius: 0 !important;
   border: 0 !important;
   border-bottom: 1px solid var(--border) !important;
-  background: var(--card);
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  background: color-mix(in srgb, var(--card) 78%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
@@ -1614,9 +1614,9 @@ button.topbar-tenant-pill:hover {
   justify-content: space-between;
   padding: 0 16px;
   border-top: 1px solid var(--border);
-  background: var(--card);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: color-mix(in srgb, var(--card) 78%, transparent) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
   font-size: 0.73rem;
   color: var(--muted-foreground);
   flex-shrink: 0;

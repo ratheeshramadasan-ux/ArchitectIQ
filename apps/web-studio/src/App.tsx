@@ -353,6 +353,40 @@ function App(){
  },[savedSession]);
  const unauthorized=useCallback(()=>{clearSession();setToken('');setTenant('');setLiveNodes([]);setTenants([])},[]);
  const changed=useCallback(()=>{fetch(`/api/v1/tenants/${tenant}/workspace/tree`,{headers:{Authorization:`Bearer ${token}`}}).then(r=>r.ok?r.json():Promise.reject(new Error(`HTTP ${r.status}`))).then(setLiveNodes).catch(e=>setWorkspaceError(String(e)))},[tenant,token]);
+
+ const [activeOrg, setActiveOrg] = useState<{ id?: string; name: string; logo_url?: string }>(() => {
+   try {
+     const saved = localStorage.getItem('architectiq.active_org')
+     if (saved) return JSON.parse(saved)
+   } catch {}
+   return { name: 'Citibank Global', logo_url: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg' }
+ })
+
+ useEffect(() => {
+   const handleOrgUpdate = (e: Event) => {
+     const detail = (e as CustomEvent).detail
+     if (detail && detail.name) {
+       setActiveOrg(prev => ({ ...prev, ...detail }))
+     }
+   }
+   window.addEventListener('architectiq:org_updated', handleOrgUpdate)
+   return () => window.removeEventListener('architectiq:org_updated', handleOrgUpdate)
+ }, [])
+
+ useEffect(() => {
+   if (!token) return
+   fetch('/api/v1/platform/organizations', {
+     headers: { Authorization: `Bearer ${token}` }
+   })
+     .then(r => r.ok ? r.json() : null)
+     .then((list: Array<{ id: string; name: string; slug: string; logo_url?: string }>) => {
+       if (Array.isArray(list) && list.length > 0) {
+         const current = list.find(o => o.slug === 'citibank-global') || list[0]
+         setActiveOrg({ id: current.id, name: current.name, logo_url: current.logo_url || undefined })
+       }
+     })
+     .catch(() => {})
+ }, [token])
  async function logout(){try{await fetch('/api/v1/auth/native/logout',{method:'POST',headers:{Authorization:`Bearer ${token}`}})}finally{clearSession();setToken('');setTenant('');setLiveNodes([]);setTenants([])}}
  async function handleCreateTenant(e: React.FormEvent){
   e.preventDefault();
@@ -704,9 +738,25 @@ function App(){
 
 
        {/* 1. Unified Customer Organization & Tenant Selector Pill */}
-       <div className="topbar-hierarchy-pill" title="Customer Organization and Active Tenant">
-        <Building2 size={13} style={{ color: 'var(--accent, #BA9731)' }} />
-        <span className="topbar-org-name">Citibank Global</span>
+       <div className="topbar-hierarchy-pill" title={`Customer Organization: ${activeOrg.name} and Active Tenant`}>
+        {activeOrg.logo_url ? (
+          <img
+            src={activeOrg.logo_url}
+            alt={activeOrg.name}
+            style={{
+              width: 18,
+              height: 18,
+              objectFit: 'contain',
+              borderRadius: 3,
+            }}
+            onError={(e) => {
+              (e.currentTarget as HTMLElement).style.display = 'none';
+            }}
+          />
+        ) : (
+          <Building2 size={13} style={{ color: 'var(--accent, #BA9731)' }} />
+        )}
+        <span className="topbar-org-name">{activeOrg.name}</span>
         <span className="topbar-sep">/</span>
         <select
           aria-label="Active tenant selector"
@@ -724,13 +774,6 @@ function App(){
             </option>
           ))}
         </select>
-        <button
-          className="topbar-add-tenant-btn"
-          title="Create New Tenant for Organization"
-          onClick={() => setNewTenantModal(true)}
-        >
-          +
-        </button>
        </div>
 
        {/* 2. Environment Switcher Pill on Top */}

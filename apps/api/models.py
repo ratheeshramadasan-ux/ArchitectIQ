@@ -1051,6 +1051,7 @@ class PlatformOrganization(Base):
     region: Mapped[str] = mapped_column(String(50), default="us-east-1", server_default="us-east-1", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ENABLED", server_default="ENABLED", nullable=False)
     contact_email: Mapped[str] = mapped_column(String(200), nullable=False)
+    logo_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     primary_admin_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     security_policy: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{\"mfa_required\": true, \"sso_enforced\": false, \"data_residency\": \"US\"}'::jsonb"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)

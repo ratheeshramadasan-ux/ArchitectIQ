@@ -53,6 +53,7 @@ export interface PlatformOrg {
   region: string
   status: string
   contact_email: string
+  logo_url?: string | null
   created_at: string
   subscription?: {
     tier: string
@@ -156,6 +157,24 @@ export default function PlatformControlCenterStudio({ token, initialTab = 'dashb
   const [newOrgTier, setNewOrgTier] = useState('ENTERPRISE_CORE')
   const [newOrgRegion, setNewOrgRegion] = useState('us-east-1')
   const [newOrgEmail, setNewOrgEmail] = useState('')
+  const [newOrgLogoUrl, setNewOrgLogoUrl] = useState('')
+
+  // Edit Org States
+  const [editingOrg, setEditingOrg] = useState<PlatformOrg | null>(null)
+  const [editOrgName, setEditOrgName] = useState('')
+  const [editOrgTier, setEditOrgTier] = useState('ENTERPRISE_CORE')
+  const [editOrgRegion, setEditOrgRegion] = useState('us-east-1')
+  const [editOrgEmail, setEditOrgEmail] = useState('')
+  const [editOrgLogoUrl, setEditOrgLogoUrl] = useState('')
+
+  const startEditOrg = (org: PlatformOrg) => {
+    setEditingOrg(org)
+    setEditOrgName(org.name)
+    setEditOrgTier(org.tier)
+    setEditOrgRegion(org.region)
+    setEditOrgEmail(org.contact_email)
+    setEditOrgLogoUrl(org.logo_url || '')
+  }
 
   const [showNewTenantModal, setShowNewTenantModal] = useState(false)
   const [newTenantOrgId, setNewTenantOrgId] = useState('')
@@ -257,18 +276,62 @@ export default function PlatformControlCenterStudio({ token, initialTab = 'dashb
           tier: newOrgTier,
           region: newOrgRegion,
           contact_email: newOrgEmail,
+          logo_url: newOrgLogoUrl.trim() || undefined,
         }),
       })
       if (!res.ok) {
         const errJson = await res.json()
         throw new Error(errJson.detail || 'Failed to create organization')
       }
+      const created = await res.json()
       setSuccessMsg(`Organization "${newOrgName}" created successfully!`)
       setShowNewOrgModal(false)
       setNewOrgName('')
       setNewOrgSlug('')
       setNewOrgEmail('')
+      setNewOrgLogoUrl('')
       loadAllData()
+
+      // Notify Top Bar
+      if (created.logo_url) {
+        const payload = { id: created.id, name: created.name, logo_url: created.logo_url }
+        localStorage.setItem('architectiq.active_org', JSON.stringify(payload))
+        window.dispatchEvent(new CustomEvent('architectiq:org_updated', { detail: payload }))
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // Org Update / Edit (including logo)
+  const handleUpdateOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingOrg) return
+    setError(null)
+    try {
+      const res = await fetch(`/api/v1/platform/organizations/${editingOrg.id}`, {
+        method: 'PATCH',
+        headers: authHeaders,
+        body: JSON.stringify({
+          name: editOrgName,
+          tier: editOrgTier,
+          region: editOrgRegion,
+          contact_email: editOrgEmail,
+          logo_url: editOrgLogoUrl.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        const errJson = await res.json()
+        throw new Error(errJson.detail || 'Failed to update organization')
+      }
+      setSuccessMsg(`Organization "${editOrgName}" updated successfully!`)
+      setEditingOrg(null)
+      loadAllData()
+
+      // Notify Top Bar
+      const payload = { id: editingOrg.id, name: editOrgName, logo_url: editOrgLogoUrl.trim() || undefined }
+      localStorage.setItem('architectiq.active_org', JSON.stringify(payload))
+      window.dispatchEvent(new CustomEvent('architectiq:org_updated', { detail: payload }))
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err))
     }
@@ -853,7 +916,22 @@ export default function PlatformControlCenterStudio({ token, initialTab = 'dashb
             <tbody>
               {filteredOrgs.map(o => (
                 <tr key={o.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                  <td style={{ padding: '12px 8px', fontWeight: 600 }}>{o.name}</td>
+                  <td style={{ padding: '12px 8px', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {o.logo_url ? (
+                        <img
+                          src={o.logo_url}
+                          alt={o.name}
+                          style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4, background: 'rgba(255,255,255,0.06)', padding: 1 }}
+                        />
+                      ) : (
+                        <div style={{ width: 22, height: 22, borderRadius: 4, background: 'rgba(186,151,49,0.15)', display: 'grid', placeItems: 'center', color: 'var(--accent, #BA9731)' }}>
+                          <Building2 size={12} />
+                        </div>
+                      )}
+                      <span>{o.name}</span>
+                    </div>
+                  </td>
                   <td style={{ padding: '12px 8px', color: 'var(--muted, #94a3b8)', fontFamily: 'monospace' }}>{o.slug}</td>
                   <td style={{ padding: '12px 8px' }}>
                     <span style={{ padding: '2px 8px', borderRadius: 6, fontSize: '0.72rem', fontWeight: 600, background: o.tier.includes('ULTRA') ? 'rgba(186,151,49,0.2)' : 'rgba(59,130,246,0.2)', color: o.tier.includes('ULTRA') ? 'var(--accent, #BA9731)' : '#3B82F6' }}>
@@ -870,6 +948,12 @@ export default function PlatformControlCenterStudio({ token, initialTab = 'dashb
                   <td style={{ padding: '12px 8px', color: 'var(--muted, #94a3b8)' }}>{o.contact_email}</td>
                   <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: 6 }}>
+                      <button
+                        onClick={() => startEditOrg(o)}
+                        style={{ padding: '4px 10px', borderRadius: 6, fontSize: '0.72rem', background: 'rgba(59, 130, 246, 0.15)', color: '#3B82F6', border: '1px solid rgba(59, 130, 246, 0.3)', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Edit
+                      </button>
                       {o.status === 'ENABLED' ? (
                         <button
                           onClick={() => handleOrgLifecycle(o.id, 'suspend')}
@@ -1375,6 +1459,26 @@ export default function PlatformControlCenterStudio({ token, initialTab = 'dashb
                   style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
                 />
               </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Organization Logo URL (Optional)</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/logo.svg"
+                    value={newOrgLogoUrl}
+                    onChange={e => setNewOrgLogoUrl(e.target.value)}
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
+                  />
+                  {newOrgLogoUrl ? (
+                    <img
+                      src={newOrgLogoUrl}
+                      alt="Logo preview"
+                      style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 6, background: 'rgba(255,255,255,0.08)', padding: 2 }}
+                    />
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
@@ -1383,6 +1487,98 @@ export default function PlatformControlCenterStudio({ token, initialTab = 'dashb
               </button>
               <button type="submit" className="primary-button" style={{ padding: '8px 16px', borderRadius: 6, fontWeight: 600 }}>
                 Create Organization
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: EDIT ORGANIZATION */}
+      {editingOrg && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'grid', placeItems: 'center', zIndex: 9999 }}>
+          <form onSubmit={handleUpdateOrg} style={{ width: 440, background: 'var(--card, #1e293b)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: 24, color: 'var(--foreground)' }}>
+            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.15rem', fontWeight: 700 }}>Edit Organization</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '0.8rem', color: 'var(--muted, #94a3b8)' }}>
+              Update organization attributes, subscription tier, and custom platform logo.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Organization Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editOrgName}
+                  onChange={e => setEditOrgName(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Subscription Tier</label>
+                <select
+                  value={editOrgTier}
+                  onChange={e => setEditOrgTier(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
+                >
+                  <option value="ENTERPRISE_STARTER">Enterprise Starter</option>
+                  <option value="ENTERPRISE_CORE">Enterprise Core</option>
+                  <option value="ENTERPRISE_ULTRA">Enterprise Ultra</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Hosting Region</label>
+                <select
+                  value={editOrgRegion}
+                  onChange={e => setEditOrgRegion(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
+                >
+                  <option value="us-east-1">US East (N. Virginia)</option>
+                  <option value="us-west-2">US West (Oregon)</option>
+                  <option value="eu-central-1">Europe (Frankfurt)</option>
+                  <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Primary Contact Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={editOrgEmail}
+                  onChange={e => setEditOrgEmail(e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Organization Logo URL</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="url"
+                    placeholder="https://example.com/logo.svg"
+                    value={editOrgLogoUrl}
+                    onChange={e => setEditOrgLogoUrl(e.target.value)}
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'var(--foreground)' }}
+                  />
+                  {editOrgLogoUrl ? (
+                    <img
+                      src={editOrgLogoUrl}
+                      alt="Logo preview"
+                      style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 6, background: 'rgba(255,255,255,0.08)', padding: 2 }}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+              <button type="button" onClick={() => setEditingOrg(null)} className="secondary-button" style={{ padding: '8px 14px', borderRadius: 6 }}>
+                Cancel
+              </button>
+              <button type="submit" className="primary-button" style={{ padding: '8px 16px', borderRadius: 6, fontWeight: 600 }}>
+                Save Changes
               </button>
             </div>
           </form>

@@ -262,7 +262,7 @@ describe('Module 01: Platform Control Center Studio', () => {
     })
   })
 
-  it('opens and closes the + New Organization modal', async () => {
+  it('opens and closes the + New Organization modal with logo URL option', async () => {
     render(<PlatformControlCenterStudio token="test-token" initialTab="organizations" />)
 
     const newOrgBtn = screen.getByRole('button', { name: /\+ New Organization/i })
@@ -270,10 +270,39 @@ describe('Module 01: Platform Control Center Studio', () => {
 
     expect(screen.getByText(/Provision New Organization/i)).toBeDefined()
     expect(screen.getByPlaceholderText(/e\.g\. Goldman Sachs Global/i)).toBeDefined()
+    expect(screen.getByPlaceholderText(/https:\/\/example\.com\/logo\.svg/i)).toBeDefined()
 
     // Click Cancel
     fireEvent.click(screen.getByRole('button', { name: /Cancel/i }))
     expect(screen.queryByText(/Provision New Organization/i)).toBeNull()
+  })
+
+  it('opens Edit Organization modal, supports logo URL, and saves updates', async () => {
+    render(<PlatformControlCenterStudio token="test-token" initialTab="organizations" />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Citibank Global')).toBeDefined()
+      expect(screen.getByRole('button', { name: /Edit/i })).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Edit/i }))
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Edit Organization' })).toBeDefined()
+    const logoInput = screen.getByPlaceholderText(/https:\/\/example\.com\/logo\.svg/i)
+    expect(logoInput).toBeDefined()
+
+    fireEvent.change(logoInput, { target: { value: 'https://example.com/citi-new-logo.svg' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }))
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/platform/organizations/org-1'),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.stringContaining('https://example.com/citi-new-logo.svg'),
+        })
+      )
+    })
   })
 
   it('opens and closes the Break-Glass Access modal', async () => {

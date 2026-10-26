@@ -106,6 +106,7 @@ class OrganizationCreateIn(BaseModel):
     tier: str = Field(default="ENTERPRISE_CORE")
     region: str = Field(default="us-east-1")
     contact_email: str = Field(min_length=5, max_length=200)
+    logo_url: str | None = None
     security_policy: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -114,6 +115,7 @@ class OrganizationUpdateIn(BaseModel):
     tier: str | None = None
     region: str | None = None
     contact_email: str | None = None
+    logo_url: str | None = None
     security_policy: dict[str, Any] | None = None
 
 
@@ -291,6 +293,7 @@ def list_platform_organizations(
                 "region": o.region,
                 "status": o.status,
                 "contact_email": o.contact_email,
+                "logo_url": o.logo_url,
                 "tenant_count": tenant_count,
                 "created_at": o.created_at.isoformat(),
                 "updated_at": o.updated_at.isoformat(),
@@ -345,6 +348,7 @@ def create_platform_organization(
             region=body.region,
             status="ENABLED",
             contact_email=body.contact_email,
+            logo_url=body.logo_url,
             security_policy=body.security_policy or {"mfa_required": True, "sso_enforced": False, "data_residency": "US"},
             created_at=utc_now(),
             updated_at=utc_now(),
@@ -396,6 +400,7 @@ def create_platform_organization(
             "region": org.region,
             "status": org.status,
             "contact_email": org.contact_email,
+            "logo_url": org.logo_url,
             "created_at": org.created_at.isoformat(),
         }
 
@@ -424,6 +429,9 @@ def update_platform_organization(
         if body.contact_email is not None:
             diff["contact_email"] = {"old": org.contact_email, "new": body.contact_email}
             org.contact_email = body.contact_email
+        if body.logo_url is not None:
+            diff["logo_url"] = {"old": org.logo_url, "new": body.logo_url}
+            org.logo_url = body.logo_url
         if body.security_policy is not None:
             diff["security_policy"] = body.security_policy
             org.security_policy = body.security_policy
@@ -448,6 +456,7 @@ def update_platform_organization(
             "tier": org.tier,
             "region": org.region,
             "contact_email": org.contact_email,
+            "logo_url": org.logo_url,
             "status": org.status,
             "updated_at": org.updated_at.isoformat(),
         }

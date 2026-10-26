@@ -65,6 +65,7 @@ def test_organization_lifecycle_and_subscription(platform_env):
         "tier": "ENTERPRISE_CORE",
         "region": "us-east-1",
         "contact_email": "admin@acme.example.com",
+        "logo_url": "https://example.com/acme-logo.svg",
     }
     create_resp = client.post("/api/v1/platform/organizations", json=create_payload)
     assert create_resp.status_code == 201
@@ -72,6 +73,7 @@ def test_organization_lifecycle_and_subscription(platform_env):
     assert org_data["slug"] == slug
     assert org_data["tier"] == "ENTERPRISE_CORE"
     assert org_data["status"] == "ENABLED"
+    assert org_data["logo_url"] == "https://example.com/acme-logo.svg"
     org_id = org_data["id"]
 
     # 2. Duplicate slug should return 409 Conflict
@@ -81,11 +83,16 @@ def test_organization_lifecycle_and_subscription(platform_env):
     # 3. Patch Organization
     patch_resp = client.patch(
         f"/api/v1/platform/organizations/{org_id}",
-        json={"contact_email": "updated@acme.example.com", "region": "eu-central-1"},
+        json={
+            "contact_email": "updated@acme.example.com",
+            "region": "eu-central-1",
+            "logo_url": "https://example.com/acme-brand-updated.png",
+        },
     )
     assert patch_resp.status_code == 200
     assert patch_resp.json()["contact_email"] == "updated@acme.example.com"
     assert patch_resp.json()["region"] == "eu-central-1"
+    assert patch_resp.json()["logo_url"] == "https://example.com/acme-brand-updated.png"
 
     # 4. Suspend Organization (no active tenants yet, should succeed)
     lifecycle_resp = client.post(
