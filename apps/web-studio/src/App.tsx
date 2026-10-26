@@ -19,7 +19,7 @@ import TenantIntegrationsStudio from './TenantIntegrationsStudio'
 import EnvironmentTenantModal from './EnvironmentTenantModal'
 import ArtifactsRegistryStudio from './ArtifactsRegistryStudio'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, FolderTree, GitBranch, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeftClose, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
+import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, FolderTree, GitBranch, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeft, PanelLeftClose, PanelLeftOpen, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
 
@@ -260,6 +260,15 @@ function App(){
      return next
    })
  };
+ const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+ const toggleGroup = (title: string) => {
+   setCollapsedGroups(prev => {
+     const next = new Set(prev);
+     if (next.has(title)) next.delete(title);
+     else next.add(title);
+     return next;
+   });
+ };
  useEffect(()=>{if(!token)return;let cancelled=false;fetch(`/api/v1/tenants/${tenant}/workspace/tree`,{headers:{Authorization:`Bearer ${token}`}}).then(async r=>{if(r.status===401){clearSession();setToken('');throw new Error('Session expired')}if(!r.ok)throw new Error(`Workspace HTTP ${r.status}`);return r.json()}).then(data=>{if(!cancelled){setLiveNodes(data);setWorkspaceError('');if(data.length>0){setSelected(prev=>prev||data[0])}}}).catch(e=>{if(!cancelled)setWorkspaceError(String(e))});return()=>{cancelled=true}},[token,tenant]);
  useEffect(()=>{
   if(!token||!tenant)return;let cancelled=false;
@@ -434,84 +443,118 @@ function App(){
    <div className="shell-container">
     {mobile && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobile(false)} />}
     <aside className={`nextgen-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
-     <button className="sidebar-brand-btn" onClick={() => navigate('Folders & Hierarchy')} title="ArchitectIQ Home">
+     <div className="sidebar-top-header">
+      <button className="sidebar-brand-btn" onClick={() => navigate('Folders & Hierarchy')} title="ArchitectIQ Home">
       {collapsed ? (
-       <img key={brandShield} src={brandShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
+       <img key={brandShield} src={brandShield} alt="ArchitectIQ" style={{ width: 28, height: 32, objectFit: 'contain' }} />
       ) : (
-       <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
+       <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 34, maxWidth: 175, objectFit: 'contain', display: 'block' }} />
       )}
      </button>
+     <button
+      type="button"
+      className="sidebar-collapse-toggle-btn"
+      onClick={() => setCollapsed(v => !v)}
+      title={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
+      aria-label={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
+     >
+      {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+     </button>
+    </div>
 
      <nav aria-label="Main navigation" className="sidebar-nav-scroll">
-      {groups.map(group => (
-       <div key={group.title}>
-        <div className="nav-group-title">{group.title}</div>
-        {group.links && (
-         <div className="nav-links-list">
-          {group.links.map(({ name, icon: Icon }) => (
-           <button
-            key={name}
-            title={name}
-            className={`nextgen-nav-item ${active === name ? 'active' : ''}`}
-            onClick={() => navigate(name)}
-           >
-            <Icon size={16} />
-            {!collapsed && <span>{name}</span>}
-            {active === name && <span className="nav-active-dot" />}
-           </button>
-          ))}
-         </div>
-        )}
+      {groups.map(group => {
+       const isGroupCollapsed = collapsedGroups.has(group.title)
+       return (
+        <div key={group.title} className={`nav-group-section ${isGroupCollapsed ? 'is-collapsed' : ''}`}>
+         {!collapsed ? (
+          <button
+           type="button"
+           className="nav-group-header-btn"
+           onClick={() => toggleGroup(group.title)}
+           title={isGroupCollapsed ? `Expand ${group.title}` : `Collapse ${group.title}`}
+           aria-expanded={!isGroupCollapsed}
+          >
+           <span className="nav-group-chevron">
+            {isGroupCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+           </span>
+           <span className="nav-group-title-text">{group.title}</span>
+          </button>
+         ) : (
+          <div className="nav-group-collapsed-divider" title={group.title} />
+         )}
 
-        {group.subSections && (
-         <div className="nav-subsections-list">
-          {group.subSections.map(sub => {
-           const isExpanded = expandedSubSections.has(sub.id)
-           const isSubActive = sub.links.some(l => l.name === active)
-           const SubIcon = sub.icon
-           return (
-            <div key={sub.id} className="nav-subsection">
-             <button
-              className={`nav-subsection-btn ${isSubActive ? 'active-parent' : ''}`}
-              title={sub.title}
-              onClick={() => {
-                if (collapsed) {
-                  navigate(sub.links[0].name)
-                } else {
-                  toggleSubSection(sub.id)
-                }
-              }}
-             >
-              <span className="nav-subsection-chevron">
-               {!collapsed && (isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />)}
-              </span>
-              <SubIcon size={15} />
-              {!collapsed && <span style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{sub.title}</span>}
-             </button>
-
-             {!collapsed && isExpanded && (
-              <div className="nav-sublinks-container">
-               {sub.links.map(({ name, icon: Icon }) => (
-                <button
-                 key={name}
-                 title={name}
-                 className={`nav-sublink-item ${active === name ? 'active' : ''}`}
-                 onClick={() => navigate(name)}
-                >
-                 <Icon size={13} style={{ opacity: 0.8 }} />
-                 <span>{name}</span>
-                 {active === name && <span className="nav-active-dot" />}
-                </button>
-               ))}
-              </div>
-             )}
+         {(!isGroupCollapsed || collapsed) && (
+          <>
+           {group.links && (
+            <div className="nav-links-list">
+             {group.links.map(({ name, icon: Icon }) => (
+              <button
+               key={name}
+               title={name}
+               className={`nextgen-nav-item ${active === name ? 'active' : ''}`}
+               onClick={() => navigate(name)}
+              >
+               <Icon size={16} />
+               {!collapsed && <span>{name}</span>}
+               {active === name && <span className="nav-active-dot" />}
+              </button>
+             ))}
             </div>
-           )
-          })}
-         </div>
-        )}
-       </div>
-      ))}
+           )}
+
+           {group.subSections && (
+            <div className="nav-subsections-list">
+             {group.subSections.map(sub => {
+              const isExpanded = expandedSubSections.has(sub.id)
+              const isSubActive = sub.links.some(l => l.name === active)
+              const SubIcon = sub.icon
+              return (
+               <div key={sub.id} className="nav-subsection">
+                <button
+                 className={`nav-subsection-btn ${isSubActive ? 'active-parent' : ''}`}
+                 title={sub.title}
+                 onClick={() => {
+                   if (collapsed) {
+                     navigate(sub.links[0].name)
+                   } else {
+                     toggleSubSection(sub.id)
+                   }
+                 }}
+                >
+                 <span className="nav-subsection-chevron">
+                  {!collapsed && (isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />)}
+                 </span>
+                 <SubIcon size={15} />
+                 {!collapsed && <span style={{ flex: 1, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{sub.title}</span>}
+                </button>
+
+                {!collapsed && isExpanded && (
+                 <div className="nav-sublinks-container">
+                  {sub.links.map(({ name, icon: Icon }) => (
+                   <button
+                    key={name}
+                    title={name}
+                    className={`nav-sublink-item ${active === name ? 'active' : ''}`}
+                    onClick={() => navigate(name)}
+                   >
+                    <Icon size={13} style={{ opacity: 0.8 }} />
+                    <span>{name}</span>
+                    {active === name && <span className="nav-active-dot" />}
+                   </button>
+                  ))}
+                 </div>
+                )}
+               </div>
+              )
+             })}
+            </div>
+           )}
+          </>
+         )}
+        </div>
+       )
+      })}
      </nav>
 
      <div className="sidebar-foot">
@@ -519,9 +562,13 @@ function App(){
        <Palette size={16} />
        {!collapsed && <span>Theme / Icons</span>}
       </button>
-      <button className="nextgen-nav-item" onClick={() => setCollapsed(v => !v)}>
-       <PanelLeftClose size={16} />
-       {!collapsed && <span>Collapse sidebar</span>}
+      <button
+       className="nextgen-nav-item"
+       onClick={() => setCollapsed(v => !v)}
+       title={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
+      >
+       {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+       {!collapsed && <span>{collapsed ? "Expand Menu Bar" : "Collapse sidebar"}</span>}
       </button>
       <div className="user-identity-card">
        <span className="user-avatar-circle">A</span>
@@ -540,6 +587,15 @@ function App(){
       <div className="topbar-left-cluster">
        <button className="topbar-icon-action mobile-menu" aria-label="Open navigation" onClick={() => setMobile(true)}>
         <Menu size={18} />
+       </button>
+       <button
+        type="button"
+        className="topbar-icon-action desktop-sidebar-toggle"
+        onClick={() => setCollapsed(v => !v)}
+        title={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
+        aria-label={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
+       >
+        <PanelLeft size={18} />
        </button>
        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
         <img key={`topbar-${brandLogo}`} src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
