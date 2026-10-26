@@ -21,6 +21,7 @@ import ArtifactsRegistryStudio from './ArtifactsRegistryStudio'
 import KnowledgeStudio from './KnowledgeStudio'
 import TestStudio from './TestStudio'
 import DeploymentReleasesStudio from './DeploymentReleasesStudio'
+import GuideModal from './GuideModal'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
@@ -63,7 +64,6 @@ import {
   Network,
   PackageCheck,
   Palette,
-  PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
   Play,
@@ -299,8 +299,9 @@ function App(){
  const [overviewData,setOverviewData]=useState<{throughput_24h?:number;open_incidents?:Record<string,number>;sla_health_pct?:number;service_health?:string}|null>(null);
  const [active,setActive]=useState('Folders & Hierarchy');const [currentEnv,setCurrentEnv]=useState<'DEV'|'TEST'|'UAT'|'CANARY'|'PROD'>('DEV');const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
  const [newTenantModal,setNewTenantModal]=useState(false);const [newTenantName,setNewTenantName]=useState('');const [tenantCreating,setTenantCreating]=useState(false);const [tenantCreateError,setTenantCreateError]=useState('');
- const [currentUserRole, setCurrentUserRole] = useState('Org Admin');
+ const [currentUserRole, setCurrentUserRole] = useState('Tenant Admin');
  const [envModalOpen, setEnvModalOpen] = useState(false);
+ const [guideModalOpen, setGuideModalOpen] = useState(false);
  const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(
    new Set(['tenant-envs', '2-roles', '3-groups', '4-sso', '5-users', '6-integrations'])
  );
@@ -624,14 +625,6 @@ function App(){
        <Palette size={16} />
        {!collapsed && <span>Theme / Icons</span>}
       </button>
-      <button
-       className="nextgen-nav-item"
-       onClick={() => setCollapsed(v => !v)}
-       title={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
-      >
-       {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-       {!collapsed && <span>{collapsed ? "Expand Menu Bar" : "Collapse sidebar"}</span>}
-      </button>
       <div className="user-identity-card">
        <span className="user-avatar-circle">A</span>
        {!collapsed && (
@@ -650,77 +643,20 @@ function App(){
        <button className="topbar-icon-action mobile-menu" aria-label="Open navigation" onClick={() => setMobile(true)}>
         <Menu size={18} />
        </button>
-       <button
-        type="button"
-        className="topbar-icon-action desktop-sidebar-toggle"
-        onClick={() => setCollapsed(v => !v)}
-        title={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
-        aria-label={collapsed ? "Expand Menu Bar" : "Collapse Menu Bar into Icons"}
-       >
-        <PanelLeft size={18} />
-       </button>
-       <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
-        <img key={`topbar-${brandLogo}`} src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
-       </div>
 
-       {/* 1. Global Customer Organization Switcher / Badge */}
-       <div style={{
-         display: 'flex',
-         alignItems: 'center',
-         gap: 6,
-         padding: '4px 10px',
-         borderRadius: 6,
-         background: 'var(--card)',
-         border: '1px solid var(--border)',
-         fontSize: '0.74rem',
-         fontWeight: 800,
-         color: 'var(--foreground)'
-       }}>
+       {/* 1. Unified Customer Organization & Tenant Selector Pill */}
+       <div className="topbar-hierarchy-pill" title="Customer Organization and Active Tenant">
         <Building2 size={13} style={{ color: 'var(--accent, #BA9731)' }} />
-        <span>Citibank Global Enterprise</span>
-        <span style={{
-          fontSize: '0.58rem',
-          fontWeight: 900,
-          padding: '1px 5px',
-          borderRadius: 3,
-          background: 'rgba(186,151,49,0.15)',
-          color: 'var(--accent, #BA9731)',
-          letterSpacing: '0.08em'
-        }}>
-          ORG
-        </span>
-       </div>
-
-       {/* 2. Tenant Dropdown Selector on Top */}
-       <div style={{
-         display: 'flex',
-         alignItems: 'center',
-         gap: 4,
-         padding: '2px 4px 2px 8px',
-         borderRadius: 6,
-         background: 'var(--card)',
-         border: '1px solid var(--border)'
-       }}>
-        <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'var(--muted-foreground)', letterSpacing: '0.08em' }}>
-          TENANT:
-        </span>
+        <span className="topbar-org-name">Citibank Global</span>
+        <span className="topbar-sep">/</span>
         <select
           aria-label="Active tenant selector"
+          className="topbar-tenant-select"
           value={tenant}
           onChange={e => {
             setTenant(e.target.value)
             setLiveNodes([])
             sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: e.target.value }))
-          }}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--foreground)',
-            fontSize: '0.76rem',
-            fontWeight: 800,
-            cursor: 'pointer',
-            outline: 'none',
-            paddingRight: 4
           }}
         >
           {tenants.map(t => (
@@ -730,8 +666,7 @@ function App(){
           ))}
         </select>
         <button
-          className="topbar-icon-action"
-          style={{ width: 22, height: 22, fontSize: 12, fontWeight: 'bold', padding: 0 }}
+          className="topbar-add-tenant-btn"
           title="Create New Tenant for Organization"
           onClick={() => setNewTenantModal(true)}
         >
@@ -739,27 +674,15 @@ function App(){
         </button>
        </div>
 
-       {/* 3. Environment Switcher Pill / Dropdown on Top */}
+       {/* 2. Environment Switcher Pill on Top */}
        <button
         className="topbar-tenant-pill"
         onClick={() => setEnvModalOpen(true)}
         title="Configure & Switch Tenant Environment (DEV, UAT, CANARY, PROD)"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 10px',
-          borderRadius: 6,
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          cursor: 'pointer'
-        }}
        >
         <span
+          className="env-status-dot"
           style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
             background:
               currentEnv === 'PROD'
                 ? '#EF4444'
@@ -771,43 +694,25 @@ function App(){
             boxShadow: `0 0 8px ${currentEnv === 'PROD' ? '#EF4444' : currentEnv === 'CANARY' ? '#A855F7' : currentEnv === 'UAT' ? '#F59E0B' : '#10B981'}80`
           }}
         />
-        <strong style={{ fontSize: '0.74rem', letterSpacing: '0.04em' }}>
-          {currentEnv}
-        </strong>
-        <span style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+        <strong>{currentEnv}</strong>
+        <span className="env-label">
           ({currentEnv === 'DEV' ? 'Development' : currentEnv === 'CANARY' ? 'Canary' : currentEnv === 'UAT' ? 'UAT' : 'Production'})
         </span>
-        <ChevronDown size={12} style={{ opacity: 0.6, marginLeft: 2 }} />
+        <ChevronDown size={11} style={{ opacity: 0.6 }} />
        </button>
 
-       {/* 3.5. Folder Breadcrumb Hierarchy */}
-       <div
-        className="topbar-breadcrumb-box"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 10px',
-          borderRadius: 6,
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          fontSize: '0.74rem',
-          color: 'var(--foreground)'
-        }}
-        title="Active Workspace Folder Scope"
-       >
+       {/* 3. Folder Breadcrumb Hierarchy */}
+       <div className="topbar-breadcrumb-box" title="Active Workspace Folder Scope">
         <FolderTree size={13} style={{ color: 'var(--accent, #BA9731)' }} />
-        <span style={{ color: 'var(--muted-foreground)' }}>Workspace</span>
-        <span style={{ opacity: 0.4 }}>/</span>
-        <span style={{ color: 'var(--muted-foreground)' }}>Claims Automation</span>
-        <span style={{ opacity: 0.4 }}>/</span>
-        <strong style={{ color: 'var(--foreground)' }}>
-          {selected?.name || 'Dental Claims'}
-        </strong>
+        <span>Workspace</span>
+        <span className="crumb-sep">/</span>
+        <span>Claims Automation</span>
+        <span className="crumb-sep">/</span>
+        <strong>{selected?.name || 'Dental Claims'}</strong>
        </div>
       </div>
 
-      <div style={{ flex: 1, maxWidth: 360, margin: '0 12px' }}>
+      <div style={{ flex: 1, maxWidth: 360, margin: '0 8px' }}>
        <button className="topbar-search-btn" onClick={() => setSearch(true)}>
         <Search size={14} style={{ opacity: 0.6 }} />
         <span>Search folders, jobs, artifacts...</span>
@@ -817,37 +722,47 @@ function App(){
 
       <div className="topbar-right-cluster">
        {/* 4. Active Access Hierarchy Role Selector */}
-       <div className="topbar-identity-box">
-        <span className="id-label">ROLE & ACCESS</span>
+       <div className="topbar-role-box">
+        <span className="topbar-role-label">ROLE</span>
         <select
           aria-label="Active Identity and Role Tier"
+          className="topbar-role-select"
           value={currentUserRole}
           onChange={e => setCurrentUserRole(e.target.value)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'inherit',
-            fontWeight: 800,
-            fontSize: '0.78rem',
-            cursor: 'pointer',
-            outline: 'none',
-            padding: 0,
-          }}
         >
-          <option value="Tenant Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>👑 Role: Tenant Admin</option>
-          <option value="Org Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Org Admin (Global Org)</option>
-          <option value="Tenant Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Tenant Specific Admin (Tenant)</option>
-          <option value="Environment Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🟢 Environment Specific Admin ({currentEnv})</option>
-          <option value="AI Agent &amp; Flow Architect" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🤖 AI Agent &amp; Flow Architect</option>
-          <option value="Compliance Auditor" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🛡 Security &amp; Compliance Auditor</option>
+          <option value="Tenant Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>👑 Tenant Admin</option>
+          <option value="Org Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Org Admin</option>
+          <option value="Tenant Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Tenant Admin</option>
+          <option value="Environment Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🟢 Env Admin ({currentEnv})</option>
+          <option value="AI Agent & Flow Architect" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🤖 Flow Architect</option>
+          <option value="Compliance Auditor" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🛡 Auditor</option>
         </select>
        </div>
-       <button className="nextgen-nav-item" style={{ width: 'auto', padding: '6px 10px', fontSize: '0.75rem', gap: 5 }} onClick={() => navigate('Theme / Icons')}>
-        <Palette size={14} /> Appearance
+
+       {/* 5. Guide Menu on Top Bar */}
+       <button
+         className="topbar-tool-btn"
+         onClick={() => setGuideModalOpen(true)}
+         title="ArchitectIQ User & Architecture Guide"
+       >
+        <BookOpen size={13} style={{ color: 'var(--accent, #BA9731)' }} />
+        <span>Guide</span>
        </button>
+
+       {/* 6. Theme / Appearance Button */}
+       <button
+         className="topbar-tool-btn"
+         onClick={() => navigate('Theme / Icons')}
+         title="Personalize Theme & Appearance"
+       >
+        <Palette size={13} />
+        <span>Theme</span>
+       </button>
+
        <button className="topbar-icon-action" aria-label="Notifications" onClick={() => setNotification(v => !v)}>
-        <Bell size={16} />
+        <Bell size={15} />
        </button>
+
        <button className="signout-btn" onClick={logout}>
         Sign out
        </button>
@@ -1280,6 +1195,11 @@ function App(){
       sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: id }));
     }}
     userRole={currentUserRole}
+   />
+
+   <GuideModal
+    isOpen={guideModalOpen}
+    onClose={() => setGuideModalOpen(false)}
    />
   </div>
  )

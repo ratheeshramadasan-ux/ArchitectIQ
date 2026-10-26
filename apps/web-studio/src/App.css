@@ -516,12 +516,15 @@
   position: relative;
   z-index: 10;
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   padding: 0;
+  margin: 0;
   gap: 0;
 }
 
-/* Flushed Rectangular Menu Bar (Starts from origin (0,0), No space required) */
+/* Flushed Rectangular Menu Bar (Starts from origin (0,0), Locked to base) */
 .nextgen-sidebar {
   width: 260px;
   min-width: 260px;
@@ -529,20 +532,22 @@
   border: 0 !important;
   border-right: 1px solid var(--border) !important;
   background: var(--sidebar);
-  backdrop-filter: blur(40px) saturate(1.6);
-  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   padding: 16px 12px 14px;
   position: sticky;
   top: 0;
+  bottom: 0;
   left: 0;
   height: 100vh;
   max-height: 100vh;
   overflow: hidden;
   transition: width 0.25s cubic-bezier(0.23, 1, 0.32, 1);
   flex-shrink: 0;
+  z-index: 110;
 }
 
 .nextgen-sidebar.collapsed {
@@ -1265,11 +1270,14 @@ button.topbar-tenant-pill:hover {
 }
 
 .app-root:not(.dark) .nextgen-topbar {
-  background: rgba(255, 255, 255, var(--panel-opacity, 0.62)) !important;
-  backdrop-filter: blur(24px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.5) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+  background: rgba(255, 255, 255, var(--panel-opacity, 0.72)) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03) !important;
 }
 
 .app-root:not(.dark) .glass-card {
@@ -1284,16 +1292,16 @@ button.topbar-tenant-pill:hover {
   background: var(--background) !important;
   backdrop-filter: blur(24px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
 }
 
 .app-root.dark .nextgen-topbar {
-  background: var(--sidebar, var(--card)) !important;
-  backdrop-filter: blur(24px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-  border: 1px solid var(--border) !important;
+  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
 }
 
 .app-root.dark .glass-card {
@@ -1305,12 +1313,21 @@ button.topbar-tenant-pill:hover {
 
 .glass-mode .glass-card,
 .glass-mode .folders-left-pane,
-.glass-mode .folders-right-pane,
-.glass-mode .nextgen-topbar {
+.glass-mode .folders-right-pane {
   background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
   backdrop-filter: blur(24px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
   border: 1px solid var(--border) !important;
+}
+
+.glass-mode .nextgen-topbar {
+  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
 }
 
 .glass-mode .nextgen-sidebar {
@@ -1342,64 +1359,187 @@ button.topbar-tenant-pill:hover {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18) !important;
 }
 
-/* Main Column Area */
+/* Main Column Area - Flush Top & Left, Pinned Layout */
 .nextgen-main-column {
   flex: 1;
   min-width: 0;
+  height: 100vh;
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 12px 16px 14px;
-  gap: 12px;
+  padding: 0;
+  margin: 0;
+  gap: 0;
 }
 
-/* Topbar Header */
+/* Topbar Header - Flushed Rectangular, No Round Corners, Attached to Menu Bar */
 .nextgen-topbar {
   height: 52px;
-  border-radius: 0.85rem;
-  border: 1px solid var(--border);
+  min-height: 52px;
+  max-height: 52px;
+  border-radius: 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--border) !important;
   background: var(--card);
-  backdrop-filter: blur(24px) saturate(1.8);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
   padding: 0 16px;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin: 0 !important;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .topbar-left-cluster {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+}
+
+/* Unified Customer Organization & Tenant Selector Pill */
+.topbar-hierarchy-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 0.80rem;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.topbar-org-name {
+  color: var(--foreground);
+  font-size: 0.80rem;
+  font-weight: 700;
+}
+
+.topbar-sep {
+  opacity: 0.35;
+  margin: 0 2px;
+}
+
+.topbar-tenant-select {
+  background: transparent;
+  border: none;
+  color: var(--foreground);
+  font-size: 0.80rem;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+}
+
+.topbar-add-tenant-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: rgba(128, 128, 128, 0.08);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: 2px;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.topbar-add-tenant-btn:hover {
+  background: var(--accent, #BA9731);
+  color: #000;
+  border-color: var(--accent, #BA9731);
 }
 
 .topbar-tenant-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(128, 128, 128, 0.06);
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--card);
   border: 1px solid var(--border);
-  font-size: 0.78rem;
+  font-size: 0.80rem;
+  cursor: pointer;
+  color: var(--foreground);
+  transition: all 0.15s ease;
+}
+
+.topbar-tenant-pill:hover {
+  border-color: var(--accent, #BA9731);
+}
+
+.topbar-tenant-pill .env-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.topbar-tenant-pill strong {
+  font-size: 0.80rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.topbar-tenant-pill .env-label {
+  font-size: 0.74rem;
+  color: var(--muted-foreground);
+}
+
+.topbar-breadcrumb-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 0.80rem;
+  color: var(--muted-foreground);
+}
+
+.topbar-breadcrumb-box strong {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.topbar-breadcrumb-box .crumb-sep {
+  opacity: 0.35;
 }
 
 .topbar-search-btn {
-  flex: 1;
-  max-width: 380px;
+  height: 32px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 14px;
-  border-radius: 8px;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 6px;
   background: rgba(128, 128, 128, 0.06);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.80rem;
+  width: 100%;
+}
+
+.topbar-search-btn:hover {
+  border-color: var(--accent, #BA9731);
+  color: var(--foreground);
 }
 
 .topbar-search-btn kbd {
@@ -1415,29 +1555,89 @@ button.topbar-tenant-pill:hover {
 .topbar-right-cluster {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-left: auto;
+}
+
+.topbar-role-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 0.80rem;
+}
+
+.topbar-role-label {
+  font-size: 0.65rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: var(--accent, #BA9731);
+}
+
+.topbar-role-select {
+  background: transparent;
+  border: none;
+  color: var(--foreground);
+  font-size: 0.80rem;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+}
+
+.topbar-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  font-size: 0.80rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.topbar-tool-btn:hover {
+  background: rgba(186, 151, 49, 0.12);
+  border-color: var(--accent, #BA9731);
+}
+
+.topbar-tool-btn.active {
+  background: var(--accent, #BA9731);
+  color: #000;
+  border-color: var(--accent, #BA9731);
 }
 
 .topbar-identity-box {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  padding-right: 12px;
-  border-right: 1px solid var(--border);
-  line-height: 1.2;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 0.80rem;
 }
 
 .topbar-identity-box .id-label {
   font-size: 0.65rem;
   font-weight: 800;
-  color: var(--muted-foreground);
+  color: var(--accent, #BA9731);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .topbar-identity-box .id-name {
-  font-size: 0.78rem;
+  font-size: 0.80rem;
   font-weight: 700;
   color: var(--foreground);
 }
@@ -1445,17 +1645,19 @@ button.topbar-tenant-pill:hover {
 .topbar-icon-action {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--border);
-  background: transparent;
+  background: var(--card);
   color: var(--muted-foreground);
   display: grid;
   place-items: center;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .topbar-icon-action:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: rgba(186, 151, 49, 0.12);
+  border-color: var(--accent, #BA9731);
   color: var(--foreground);
 }
 
@@ -1470,17 +1672,22 @@ button.topbar-tenant-pill:hover {
 }
 
 .signout-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
   background: transparent;
-  border: 0;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
-  padding: 4px 6px;
+  transition: all 0.15s ease;
 }
 
 .signout-btn:hover {
-  color: var(--foreground);
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+  border-color: #EF4444;
 }
 
 /* ─── Floating Dashboard Page Shell ─── */
