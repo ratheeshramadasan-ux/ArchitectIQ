@@ -738,6 +738,165 @@
   color: var(--muted-foreground);
 }
 
+/* ==========================================================================
+   HIGH CONTRAST & ACCESSIBLE SIDEBAR / NAVIGATION READABILITY
+   ========================================================================== */
+
+/* 1. When a wallpaper is active behind the UI:
+   Ensure the sidebar has a solid frosted acrylic backdrop with crisp readable text */
+.app-root.has-wallpaper .nextgen-sidebar {
+  background: rgba(11, 15, 25, 0.84) !important;
+  backdrop-filter: blur(32px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(1.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .sidebar-brand-btn .brand-title {
+  color: #ffffff !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .sidebar-brand-btn .brand-sub {
+  color: rgba(226, 232, 240, 0.75) !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .selector-tag,
+.app-root.has-wallpaper .nextgen-sidebar .nav-group-title {
+  color: rgba(148, 163, 184, 0.92) !important;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .selector-pill {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar select {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar select option {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .nextgen-nav-item {
+  color: rgba(241, 245, 249, 0.92) !important;
+  font-weight: 600;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .nextgen-nav-item svg {
+  color: rgba(148, 163, 184, 0.95);
+  transition: all 0.15s ease;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .nextgen-nav-item:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .nextgen-nav-item:hover svg {
+  color: #ffffff !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .nextgen-nav-item.active {
+  background: rgba(186, 151, 49, 0.28) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  border: 1px solid rgba(186, 151, 49, 0.35);
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .nextgen-nav-item.active svg {
+  color: var(--accent, #BA9731) !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .sidebar-foot {
+  border-top-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .sidebar-foot button {
+  color: rgba(226, 232, 240, 0.88);
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .sidebar-foot button:hover {
+  color: #ffffff;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .user-identity-card strong {
+  color: #ffffff !important;
+}
+
+.app-root.has-wallpaper .nextgen-sidebar .user-identity-card small {
+  color: rgba(148, 163, 184, 0.88) !important;
+}
+
+/* 2. Standard themes (when no wallpaper is set) */
+/* Light themes: ensure text has strong contrast (not faint washed-out gray) */
+.app-root:not(.dark):not(.has-wallpaper) .nextgen-sidebar .nextgen-nav-item {
+  color: var(--foreground);
+  opacity: 0.86;
+  font-weight: 600;
+}
+.app-root:not(.dark):not(.has-wallpaper) .nextgen-sidebar .nextgen-nav-item:hover {
+  opacity: 1;
+  color: var(--foreground);
+  background: rgba(0, 0, 0, 0.05);
+}
+.app-root:not(.dark):not(.has-wallpaper) .nextgen-sidebar .nextgen-nav-item.active {
+  opacity: 1;
+  color: var(--foreground);
+  background: rgba(186, 151, 49, 0.18);
+  font-weight: 700;
+}
+.app-root:not(.dark):not(.has-wallpaper) .nextgen-sidebar .nav-group-title {
+  color: var(--foreground);
+  opacity: 0.65;
+  font-weight: 800;
+}
+
+/* Dark themes: crisp light text */
+.app-root.dark:not(.has-wallpaper) .nextgen-sidebar .nextgen-nav-item {
+  color: rgba(241, 245, 249, 0.9);
+  font-weight: 600;
+}
+.app-root.dark:not(.has-wallpaper) .nextgen-sidebar .nextgen-nav-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+.app-root.dark:not(.has-wallpaper) .nextgen-sidebar .nextgen-nav-item.active {
+  color: #ffffff;
+  background: rgba(186, 151, 49, 0.25);
+  font-weight: 700;
+}
+.app-root.dark:not(.has-wallpaper) .nextgen-sidebar .nav-group-title {
+  color: rgba(148, 163, 184, 0.9);
+  font-weight: 800;
+}
+
+/* Topbar Branding & Contrast */
+.topbar-brand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  border-right: 1px solid var(--border);
+}
+
+.topbar-brand-wrap img {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
+  transition: transform 0.2s ease;
+}
+
+.app-root.has-wallpaper .nextgen-topbar {
+  backdrop-filter: blur(28px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.8) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18) !important;
+}
+
 /* Floating Main Area */
 .nextgen-main-column {
   flex: 1;
