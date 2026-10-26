@@ -21,6 +21,7 @@ import ArtifactsRegistryStudio from './ArtifactsRegistryStudio'
 import KnowledgeStudio from './KnowledgeStudio'
 import TestStudio from './TestStudio'
 import DeploymentReleasesStudio from './DeploymentReleasesStudio'
+import PlatformControlCenterStudio from './PlatformControlCenterStudio'
 import GuideModal from './GuideModal'
 import FooterInfoModal, { type FooterModalTab } from './FooterInfoModal'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -250,7 +251,8 @@ const groups: NavGroup[] = [
   {
     title: 'PLATFORM MANAGEMENT',
     links: [
-      { name: 'Platform Overview & Health', icon: HeartPulse },
+      { name: 'Platform Control Center', icon: HeartPulse },
+      { name: 'Platform Overview & Health', icon: Activity },
       { name: 'Infrastructure Inventory', icon: HardDrive },
       { name: 'Background Jobs & Maintenance', icon: RefreshCw },
       { name: 'Platform Configuration & Flags', icon: Settings2 },
@@ -542,7 +544,8 @@ function App(){
  const isObservability = active === 'Observability Dashboard' || active === 'SLA & Performance' || active === 'Incidents & Alerts' || active === 'Support & Runbooks' || active === 'Analytics & Reports' || active === 'Monitoring' || active === 'Monitor & Analyse' || active === 'Observability Console'
  const isGovernance = active === 'Governance Console' || active === 'Security Policies & MFA' || active === 'Data Protection & PII' || active === 'AI Model Governance' || active === 'Compliance & Attestation' || active === 'Governance'
  const isAuditViewer = active === 'Activity Audit Logs' || active === 'Audit Logs'
- const isPlatformMgmt = active === 'Platform Overview & Health' || active === 'Infrastructure Inventory' || active === 'Background Jobs & Maintenance' || active === 'Platform Configuration & Flags' || active === 'Compute & Capacity' || active === 'Licensing & Usage' || active === 'Platform Administration' || active === 'Administration'
+ const isPlatformControlCenter = active === 'Platform Control Center' || active === 'Platform Overview & Health' || active === 'Infrastructure Inventory' || active === 'Platform Configuration & Flags' || active === 'Compute & Capacity' || active === 'Licensing & Usage' || active === 'Platform Administration'
+ const isPlatformMgmt = false
  const isTenantMgmt = active === 'Tenants' || active === 'Manage Tenants' || active === 'Organization & Tenants'
  const studio = flatLinks.some(l => l.name === active)
  const liveThroughput = overviewData?.throughput_24h ?? 0
@@ -1113,6 +1116,18 @@ function App(){
       )}
       {isGovernance && <GovernanceConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {isAuditViewer && <ActivityAuditViewer token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {isPlatformControlCenter && (
+       <PlatformControlCenterStudio
+        token={token}
+        initialTab={
+          active === 'Infrastructure Inventory' || active === 'Compute & Capacity' ? 'infrastructure' :
+          active === 'Platform Configuration & Flags' ? 'diagnostics' :
+          active === 'Licensing & Usage' ? 'subscriptions' :
+          'dashboard'
+        }
+       />
+      )}
+
       {(isPlatformMgmt || isTenantMgmt) && (
        <AdminConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />
       )}
@@ -1132,6 +1147,7 @@ function App(){
        !isObservability &&
        !isGovernance &&
        !isAuditViewer &&
+       !isPlatformControlCenter &&
        !isPlatformMgmt &&
        !isTenantMgmt &&
        active !== 'Flow Studio' &&

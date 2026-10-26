@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -987,7 +988,7 @@ class TenantEnvironment(Base):
     __tablename__ = "tenant_environments"
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_tenant_environments_tenant_name"),
-        CheckConstraint("name IN ('DEV', 'UAT', 'CANARY', 'PROD')", name="ck_tenant_environment_name"),
+        CheckConstraint("name IN ('DEV', 'TEST', 'UAT', 'CANARY', 'PROD')", name="ck_tenant_environment_name"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -1030,3 +1031,118 @@ class Artifact(Base):
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+# ---------------------------------------------------------
+# Milestone M15: Module 01 Platform Control Center Baseline
+# ---------------------------------------------------------
+
+class PlatformOrganization(Base):
+    __tablename__ = "platform_organizations"
+    __table_args__ = (
+        CheckConstraint("status IN ('ENABLED', 'SUSPENDED', 'ARCHIVED', 'DISABLED')", name="ck_platform_org_status"),
+        CheckConstraint("tier IN ('ENTERPRISE_STARTER', 'ENTERPRISE_CORE', 'ENTERPRISE_ULTRA')", name="ck_platform_org_tier"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    tier: Mapped[str] = mapped_column(String(50), default="ENTERPRISE_CORE", server_default="ENTERPRISE_CORE", nullable=False)
+    region: Mapped[str] = mapped_column(String(50), default="us-east-1", server_default="us-east-1", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ENABLED", server_default="ENABLED", nullable=False)
+    contact_email: Mapped[str] = mapped_column(String(200), nullable=False)
+    primary_admin_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    security_policy: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{\"mfa_required\": true, \"sso_enforced\": false, \"data_residency\": \"US\"}'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class PlatformSubscription(Base):
+    __tablename__ = "platform_subscriptions"
+    __table_args__ = (
+        CheckConstraint("status IN ('ACTIVE', 'PAST_DUE', 'EXPIRED', 'SUSPENDED')", name="ck_platform_sub_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platform_organizations.id", ondelete="CASCADE"), nullable=False)
+    tier: Mapped[str] = mapped_column(String(50), default="ENTERPRISE_CORE", server_default="ENTERPRISE_CORE", nullable=False)
+    max_tenants: Mapped[int] = mapped_column(Integer, default=25, server_default="25", nullable=False)
+    max_environments_per_tenant: Mapped[int] = mapped_column(Integer, default=5, server_default="5", nullable=False)
+    max_concurrent_workers: Mapped[int] = mapped_column(Integer, default=50, server_default="50", nullable=False)
+    monthly_token_budget: Mapped[int] = mapped_column(BigInteger, default=100000000, server_default="100000000", nullable=False)
+    tokens_consumed: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", nullable=False)
+    storage_quota_gb: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000", nullable=False)
+    storage_used_gb: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, server_default="0.00", nullable=False)
+    renewal_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class PlatformInfrastructurePool(Base):
+    __tablename__ = "platform_infrastructure_pools"
+    __table_args__ = (
+        CheckConstraint("cluster_type IN ('SHARED', 'DEDICATED')", name="ck_platform_pool_type"),
+        CheckConstraint("status IN ('HEALTHY', 'DEGRADED', 'MAINTENANCE')", name="ck_platform_pool_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    region: Mapped[str] = mapped_column(String(50), nullable=False)
+    cluster_type: Mapped[str] = mapped_column(String(50), default="SHARED", server_default="SHARED", nullable=False)
+    total_cpu_cores: Mapped[int] = mapped_column(Integer, default=64, server_default="64", nullable=False)
+    allocated_cpu_cores: Mapped[int] = mapped_column(Integer, default=16, server_default="16", nullable=False)
+    total_memory_gb: Mapped[int] = mapped_column(Integer, default=256, server_default="256", nullable=False)
+    allocated_memory_gb: Mapped[int] = mapped_column(Integer, default=64, server_default="64", nullable=False)
+    active_pods: Mapped[int] = mapped_column(Integer, default=12, server_default="12", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="HEALTHY", server_default="HEALTHY", nullable=False)
+    assigned_org_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("platform_organizations.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class PlatformAuditEvent(Base):
+    __tablename__ = "platform_audit_events"
+    __table_args__ = (
+        CheckConstraint("outcome IN ('SUCCESS', 'FAILED', 'DENIED')", name="ck_platform_audit_outcome"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    actor_email: Mapped[str] = mapped_column(String(200), default="platform-admin@architectiq.io", server_default="platform-admin@architectiq.io", nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(50), default="PLATFORM_OWNER", server_default="PLATFORM_OWNER", nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    ip_address: Mapped[str] = mapped_column(String(50), default="127.0.0.1", server_default="127.0.0.1", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class PlatformBreakGlassRequest(Base):
+    __tablename__ = "platform_break_glass_requests"
+    __table_args__ = (
+        CheckConstraint("status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED', 'TERMINATED')", name="ck_break_glass_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platform_organizations.id", ondelete="CASCADE"), nullable=False)
+    requester_email: Mapped[str] = mapped_column(String(200), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING", nullable=False)
+    approver_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    lease_hours: Mapped[int] = mapped_column(Integer, default=4, server_default="4", nullable=False)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    session_token: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class PlatformFeatureFlag(Base):
+    __tablename__ = "platform_feature_flags"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    target_tier: Mapped[str] = mapped_column(String(50), default="ALL", server_default="ALL", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
