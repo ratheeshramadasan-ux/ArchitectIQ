@@ -152,6 +152,10 @@ export const fonts: { name: FontName; family: string; desc: string; category: st
 ]
 
 export const backgroundWallpapers = [
+  { id: 'alpine-lake', name: 'Alpine Moraine Lake' },
+  { id: 'bengal-tiger', name: 'Bengal Tiger Sanctuary' },
+  { id: 'rainforest-frog', name: 'Rainforest Tree Frog' },
+  { id: 'mountain-summit', name: 'Mountain Ridge Summit' },
   { id: 'cyber-city', name: 'Cyber City' },
   { id: 'nebula-dreams', name: 'Nebula Dreams' },
   { id: 'emerald-forest', name: 'Emerald Forest' },

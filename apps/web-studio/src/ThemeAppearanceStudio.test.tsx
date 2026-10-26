@@ -206,4 +206,24 @@ describe('ThemeAppearanceStudio — Full Functionality Verification', () => {
     fireEvent.click(defaultBtn!)
     expect(mockOnChange).toHaveBeenCalledWith({ activeBackground: null })
   })
+
+  it('renders and selects new high-resolution platform backgrounds', () => {
+    render(
+      <ThemeAppearanceStudio
+        config={initialConfig}
+        onChange={mockOnChange}
+      />
+    )
+
+    expect(screen.getByText('Alpine Moraine Lake')).toBeDefined()
+    expect(screen.getByText('Bengal Tiger Sanctuary')).toBeDefined()
+    expect(screen.getByText('Rainforest Tree Frog')).toBeDefined()
+    expect(screen.getByText('Mountain Ridge Summit')).toBeDefined()
+
+    const tiger = screen.getByText('Bengal Tiger Sanctuary').closest('button')
+    fireEvent.click(tiger!)
+    expect(mockOnChange).toHaveBeenCalledWith({
+      activeBackground: '/backgrounds/dashboard/bengal-tiger.png',
+    })
+  })
 })
