@@ -1,12 +1,17 @@
 import { useState } from 'react'
+import { Palette } from 'lucide-react'
 import './LoginScreen.css'
 
 type Tenant = { id: string; name: string; slug: string }
 
 export default function LoginScreen({
   onLogin,
+  brandLogo = '/brand/logo-dark.png',
+  activeTheme = 'Champagne Glass',
 }: {
   onLogin: (token: string, tenant: string, tenants: Tenant[]) => void
+  brandLogo?: string
+  activeTheme?: string
 }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -99,8 +104,13 @@ export default function LoginScreen({
     return (
       <main className="iq-login">
         <form className="iq-login-card" onSubmit={submitCreateFirstTenant}>
-          <div style={{ textAlign: 'center', marginBottom: 12 }}>
-            <img src="/brand/logo-dark.png" alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+          <div style={{ textAlign: 'center', marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <img src={brandLogo} alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+            {activeTheme && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+                <Palette size={11} style={{ opacity: 0.7 }} /> {activeTheme}
+              </span>
+            )}
           </div>
           <h2>Create Your First Tenant</h2>
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted, #94a3b8)', marginBottom: 16 }}>
@@ -134,8 +144,13 @@ export default function LoginScreen({
   return (
     <main className="iq-login">
       <form className="iq-login-card" onSubmit={submitLogin}>
-        <div style={{ textAlign: 'center', marginBottom: 12 }}>
-          <img src="/brand/logo-dark.png" alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+        <div style={{ textAlign: 'center', marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <img src={brandLogo} alt="ArchitectIQ" style={{ height: 46, maxWidth: 220, objectFit: 'contain' }} />
+          {activeTheme && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+              <Palette size={11} style={{ opacity: 0.7 }} /> {activeTheme}
+            </span>
+          )}
         </div>
         <h2>Sign in</h2>
         <label>

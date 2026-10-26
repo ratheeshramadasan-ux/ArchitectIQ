@@ -192,13 +192,6 @@ function App(){
   return () => window.removeEventListener('keydown', f)
  }, [])
 
- if (restoring) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>Restoring secure session…</main>
- if (!token) return <LoginScreen onLogin={(value, t, available) => { sessionStorage.setItem(authStorage, JSON.stringify({ token: value, tenant: t })); setTenants(available); setTenant(t); setToken(value) }} />
-
- const navigate = (name: string) => { setActive(name); setSearch(false); setMobile(false); setQuery('') }
- const toggle = (id: string) => setTreeOpen(old => { const n = new Set(old); if (n.has(id)) n.delete(id); else n.add(id); return n })
- const select = (n: TreeNode) => { setSelected(n); setActive('Explorer') }
-
  const rootStyle = {
   '--panel-opacity': themeConfig.panelOpacity,
   fontFamily: fontFamilies[themeConfig.activeFont] || "'Plus Jakarta Sans', sans-serif",
@@ -209,14 +202,47 @@ function App(){
   backgroundAttachment: 'fixed',
  } as React.CSSProperties
 
+ const isDarkTheme = dark || ['Obsidian Glass', 'Aurora Glass', 'Smoky Quartz', 'Midnight Glass'].includes(themeConfig.activeTheme) || !!themeConfig.activeBackground
+ const brandLogo = isDarkTheme ? '/brand/logo-dark.png' : '/brand/logo-light.png'
+ const brandShield = isDarkTheme ? '/brand/shield-hd.png' : '/brand/shield-light.png'
+
+ if (restoring) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--background)', color: 'var(--foreground)' }}>Restoring secure session…</main>
+ if (!token) {
+  return (
+   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
+    {themeConfig.activeBackground && (
+     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
+    )}
+    {isGlass && !themeConfig.activeBackground && (
+     <div className="blob-container">
+      <div className="blob blob-1" />
+      <div className="blob blob-2" />
+      <div className="blob blob-3" />
+     </div>
+    )}
+    <LoginScreen
+     brandLogo={brandLogo}
+     activeTheme={themeConfig.activeTheme}
+     onLogin={(value, t, available) => {
+      sessionStorage.setItem(authStorage, JSON.stringify({ token: value, tenant: t }))
+      setTenants(available)
+      setTenant(t)
+      setToken(value)
+     }}
+    />
+   </div>
+  )
+ }
+
+ const navigate = (name: string) => { setActive(name); setSearch(false); setMobile(false); setQuery('') }
+ const toggle = (id: string) => setTreeOpen(old => { const n = new Set(old); if (n.has(id)) n.delete(id); else n.add(id); return n })
+ const select = (n: TreeNode) => { setSelected(n); setActive('Explorer') }
+
  const isExplorer = active === 'Explorer' || active === 'Projects' || active === 'Environments'
  const studio = groups[1].links.some(x => x.name === active)
  const isTenantMgmt = groups[2].links.some(x => x.name === active)
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
- const isDarkTheme = dark || ['Obsidian Glass', 'Aurora Glass', 'Smoky Quartz', 'Midnight Glass'].includes(themeConfig.activeTheme) || !!themeConfig.activeBackground
- const brandLogo = isDarkTheme ? '/brand/logo-dark.png' : '/brand/logo-light.png'
- const brandShield = isDarkTheme ? '/brand/shield-hd.png' : '/brand/shield-light.png'
 
  return (
   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
