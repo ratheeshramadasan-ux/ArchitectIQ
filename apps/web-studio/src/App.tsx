@@ -237,7 +237,7 @@ function App(){
   ...(themeConfig.accentFg ? { '--accent-foreground': themeConfig.accentFg } : {}),
   ...(themeConfig.backgroundColor ? { '--background': themeConfig.backgroundColor } : {}),
   ...(themeConfig.foregroundColor ? { '--foreground': themeConfig.foregroundColor } : {}),
-  ...(themeConfig.cardColor ? { '--card': themeConfig.cardColor } : {}),
+  ...(themeConfig.cardColor ? { '--card': themeConfig.cardColor, '--card-custom': themeConfig.cardColor } : {}),
   ...(themeConfig.cardFg ? { '--card-foreground': themeConfig.cardFg } : {}),
   ...(themeConfig.borderColor ? { '--border': themeConfig.borderColor } : {}),
  } as React.CSSProperties

@@ -241,8 +241,42 @@ export default function ThemeAppearanceStudio({
     }
     recalculateScale()
     window.addEventListener('resize', recalculateScale)
-    return () => window.removeEventListener('resize', recalculateScale)
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && viewportRef.current) {
+      ro = new ResizeObserver(() => recalculateScale())
+      ro.observe(viewportRef.current)
+      if (contentRef.current) ro.observe(contentRef.current)
+    }
+    return () => {
+      window.removeEventListener('resize', recalculateScale)
+      ro?.disconnect()
+    }
   }, [config.activeTheme, config.activeFont, config.activeIconSet, config.activeTextSize, config.panelOpacity])
+
+  const handleSelectTheme = (themeName: ThemeName) => {
+    setLabActive(false)
+    setLabPrimary('')
+    setLabPrimaryFg('')
+    setLabAccent('')
+    setLabAccentFg('')
+    setLabBg('')
+    setLabFg('')
+    setLabCard('')
+    setLabCardFg('')
+    setLabBorder('')
+    onChange({
+      activeTheme: themeName,
+      primaryColor: undefined,
+      primaryFg: undefined,
+      accentColor: undefined,
+      accentFg: undefined,
+      backgroundColor: undefined,
+      foregroundColor: undefined,
+      cardColor: undefined,
+      cardFg: undefined,
+      borderColor: undefined,
+    })
+  }
 
   const lightThemes = themes.filter((t) => t.category === 'light')
   const darkThemes = themes.filter((t) => t.category === 'dark')
@@ -397,7 +431,7 @@ export default function ThemeAppearanceStudio({
                   return (
                     <button
                       key={t.name}
-                      onClick={() => onChange({ activeTheme: t.name })}
+                      onClick={() => handleSelectTheme(t.name)}
                       className={`theme-card-nextgen ${isActive ? 'active' : ''}`}
                     >
                       {isActive && (
@@ -430,7 +464,7 @@ export default function ThemeAppearanceStudio({
                   return (
                     <button
                       key={t.name}
-                      onClick={() => onChange({ activeTheme: t.name })}
+                      onClick={() => handleSelectTheme(t.name)}
                       className={`theme-card-nextgen ${isActive ? 'active' : ''}`}
                     >
                       {isActive && (
@@ -463,7 +497,7 @@ export default function ThemeAppearanceStudio({
                   return (
                     <button
                       key={t.name}
-                      onClick={() => onChange({ activeTheme: t.name })}
+                      onClick={() => handleSelectTheme(t.name)}
                       className={`theme-card-nextgen is-glass ${isActive ? 'active' : ''}`}
                     >
                       {isActive && (
