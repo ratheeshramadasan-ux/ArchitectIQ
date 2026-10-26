@@ -659,6 +659,98 @@
   gap: 3px;
 }
 
+.nav-subsection {
+  margin-bottom: 4px;
+}
+
+.nav-subsection-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-subsection-btn:hover {
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.nav-subsection-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
+  transition: transform 0.18s ease;
+}
+
+.nav-sublinks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 10px;
+  margin-top: 2px;
+  border-left: 1px dashed var(--border);
+  margin-left: 10px;
+}
+
+.nav-sublink-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.nav-sublink-item:hover {
+  background: rgba(128, 128, 128, 0.08);
+  color: var(--foreground);
+}
+
+.nav-sublink-item.active {
+  background: rgba(186, 151, 49, 0.15);
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.nav-sublink-item .nav-active-dot {
+  margin-left: auto;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent, #BA9731);
+}
+
+button.topbar-tenant-pill {
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+button.topbar-tenant-pill:hover {
+  background: rgba(186, 151, 49, 0.15) !important;
+  border-color: var(--accent, #BA9731) !important;
+}
+
 .nextgen-nav-item {
   display: flex;
   align-items: center;
@@ -816,6 +908,26 @@
   color: var(--accent, #BA9731) !important;
 }
 
+.app-root:not(.dark) .nextgen-sidebar .nav-subsection-btn {
+  color: #1E293B !important;
+}
+
+.app-root:not(.dark) .nextgen-sidebar .nav-sublink-item {
+  color: #475569 !important;
+}
+
+.app-root:not(.dark) .nextgen-sidebar .nav-sublink-item:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: #000000 !important;
+}
+
+.app-root:not(.dark) .nextgen-sidebar .nav-sublink-item.active {
+  background: rgba(186, 151, 49, 0.18) !important;
+  color: #000000 !important;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
 .app-root:not(.dark) .nextgen-sidebar .sidebar-foot {
   border-top-color: rgba(0, 0, 0, 0.08) !important;
 }
@@ -906,6 +1018,25 @@
 
 .app-root.dark .nextgen-sidebar .nextgen-nav-item.active svg {
   color: var(--accent, #BA9731) !important;
+}
+
+.app-root.dark .nextgen-sidebar .nav-subsection-btn {
+  color: rgba(241, 245, 249, 0.95) !important;
+}
+
+.app-root.dark .nextgen-sidebar .nav-sublink-item {
+  color: rgba(148, 163, 184, 0.88) !important;
+}
+
+.app-root.dark .nextgen-sidebar .nav-sublink-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
+}
+
+.app-root.dark .nextgen-sidebar .nav-sublink-item.active {
+  background: rgba(186, 151, 49, 0.28) !important;
+  color: #ffffff !important;
+  font-weight: 700;
 }
 
 .app-root.dark .nextgen-sidebar .sidebar-foot {

@@ -74,47 +74,36 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
     })
   })
 
-  it('renders breadcrumb header, environment switcher pills, and action buttons', async () => {
-    const handleEnvSelect = vi.fn()
+  it('renders breadcrumb header, context badges, and action buttons', async () => {
     render(
       <ManageFoldersStudio
         token="test-token"
         tenant="tenant-citi"
         tenantName="Citibank"
         currentEnv="DEV"
-        onSelectEnv={handleEnvSelect}
       />
     )
 
     expect(screen.getByText(/Workspace \/ Manage Folders/i)).toBeDefined()
     expect(screen.getByRole('heading', { level: 1, name: 'Folders' })).toBeDefined()
-    expect(screen.getByText('Citibank Global Enterprise')).toBeDefined()
-    expect(screen.getByText('Citibank')).toBeDefined()
+    expect(screen.getAllByText('Citibank').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/Default Workspace/i).length).toBeGreaterThanOrEqual(1)
     expect(screen.getByRole('button', { name: 'Admin Config' })).toBeDefined()
     expect(screen.getByText('View Audit')).toBeDefined()
     expect(screen.getByText('New Folder')).toBeDefined()
-
-    // Environment switcher pills
-    expect(screen.getByRole('button', { name: /^DEV$/ })).toBeDefined()
-    expect(screen.getByRole('button', { name: /^UAT$/ })).toBeDefined()
-    expect(screen.getByRole('button', { name: /^PROD$/ })).toBeDefined()
-
-    fireEvent.click(screen.getByRole('button', { name: /^UAT$/ }))
-    expect(handleEnvSelect).toHaveBeenCalledWith('UAT')
   })
 
-  it('displays architecture note clarifying environments vs folders', async () => {
+  it('displays active environment context badge', async () => {
     render(
       <ManageFoldersStudio
         token="test-token"
         tenant="tenant-citi"
         tenantName="Citibank"
-        currentEnv="DEV"
+        currentEnv="UAT"
       />
     )
 
-    expect(screen.getByText(/DEV, TEST, UAT & PROD are/i)).toBeDefined()
-    expect(screen.getByText(/Environments/i)).toBeDefined()
+    expect(screen.getAllByText(/Default Workspace \[UAT\]/i).length).toBeGreaterThanOrEqual(1)
   })
 
   it('loads hierarchical folder tree from API and renders nodes', async () => {

@@ -1,0 +1,14 @@
+/* ==========================================================================
+   TENANT INTEGRATIONS STUDIO — NEXT GEN FIDELITY
+   ========================================================================== */
+
+.integrations-studio-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  gap: 16px;
+  overflow: hidden;
+  animation: fadeIn 0.3s ease-in-out;
+}

@@ -158,11 +158,15 @@
 }
 
 /* Dual Pane Layout */
-.folders-dual-pane {
-  display: flex;
+.folders-dual-pane,
+.folders-dual-pane-body {
+  display: flex !important;
+  flex-direction: row !important;
   gap: 16px;
   flex: 1;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -170,7 +174,8 @@
 .folders-left-pane {
   width: 320px;
   min-width: 280px;
-  max-width: 360px;
+  max-width: 340px;
+  flex-shrink: 0 !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -394,6 +399,7 @@
 /* Right Pane: Detail & Tabs */
 .folders-right-pane {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;

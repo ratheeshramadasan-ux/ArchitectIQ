@@ -1,0 +1,408 @@
+/* ==========================================================================
+   IAM ROLES & PERMISSIONS STUDIO — NEXT GEN FIDELITY
+   ========================================================================== */
+
+.iam-roles-studio-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  gap: 16px;
+  overflow: hidden;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.iam-header-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+}
+
+.iam-header-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.iam-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid var(--border);
+}
+
+.iam-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.iam-tab-btn:hover {
+  color: var(--foreground);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.iam-tab-btn.active {
+  background: var(--foreground);
+  color: var(--background);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.iam-main-scroll-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.iam-tab-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.iam-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Roles Grid */
+.iam-roles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.iam-role-card {
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.2s ease;
+}
+
+.iam-role-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.iam-role-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.iam-role-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--border);
+}
+
+.iam-scope-badge {
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.iam-scope-badge.platform {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8B5CF6;
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.iam-scope-badge.customer {
+  background: rgba(186, 151, 49, 0.15);
+  color: var(--accent, #BA9731);
+  border-color: rgba(186, 151, 49, 0.4);
+}
+
+.iam-scope-badge.tenant {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.iam-role-desc {
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+  line-height: 1.4;
+  margin: 0;
+  flex: 1;
+}
+
+.iam-role-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border);
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--muted-foreground);
+}
+
+.iam-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.iam-role-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* Builder Layout */
+.iam-builder-grid {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.iam-builder-meta-card {
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.iam-builder-perm-card {
+  padding: 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.iam-perm-editor-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.iam-perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid var(--border);
+  transition: all 0.15s ease;
+}
+
+.iam-perm-row:hover {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.iam-perm-code-tag {
+  font-family: monospace;
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--muted-foreground);
+}
+
+.iam-tristate-group {
+  display: flex;
+  gap: 4px;
+}
+
+.iam-tristate-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.iam-tristate-btn.allow:hover {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+}
+
+.iam-tristate-btn.allow.active {
+  background: #10B981;
+  color: white;
+  border-color: #10B981;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.35);
+}
+
+.iam-tristate-btn.deny:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+}
+
+.iam-tristate-btn.deny.active {
+  background: #EF4444;
+  color: white;
+  border-color: #EF4444;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.35);
+}
+
+/* Matrix Table */
+.matrix-table-wrap {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.iam-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.iam-matrix-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+  background: rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid var(--border);
+}
+
+.iam-matrix-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.iam-category-pill {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+}
+
+.matrix-check-allowed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  font-weight: 900;
+  font-size: 0.75rem;
+}
+
+.matrix-check-denied {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  font-weight: 900;
+  font-size: 0.75rem;
+}
+
+/* SoD Cards */
+.sod-card-item {
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.sod-sev-badge {
+  font-size: 0.58rem;
+  font-weight: 900;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.sod-sev-badge.critical {
+  background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.sod-sev-badge.high {
+  background: rgba(245, 158, 11, 0.15);
+  color: #D97706;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.sod-sev-badge.medium {
+  background: rgba(56, 189, 248, 0.15);
+  color: #0284C7;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.sim-result-card {
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.sim-result-card.allowed {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #10B981;
+}
+
+.sim-result-card.denied {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #EF4444;
+}

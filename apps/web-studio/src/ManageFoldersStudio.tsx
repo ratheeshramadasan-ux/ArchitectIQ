@@ -30,7 +30,6 @@ import {
   HardDrive,
   Box,
   Layers,
-  AlertTriangle,
   Play,
   Sliders
 } from 'lucide-react'
@@ -93,7 +92,7 @@ export default function ManageFoldersStudio({
   onSelectTenant,
   onOpenNewTenant,
   currentEnv = 'DEV',
-  onSelectEnv,
+  onSelectEnv: _onSelectEnv,
   onUnauthorized,
   onChanged,
 }: ManageFoldersStudioProps) {
@@ -650,10 +649,6 @@ export default function ManageFoldersStudio({
     const hasChildren = Boolean(node.children && node.children.length > 0)
     const isExpanded = Boolean(expandedFolders[node.id])
 
-    // Detect if a folder is mistakenly named as an environment (e.g. DEV, PROD, TEST, UAT)
-    const upperName = node.name.trim().toUpperCase()
-    const isEnvName = ['DEV', 'TEST', 'PROD', 'UAT', 'STAGING'].includes(upperName)
-
     return (
       <div key={node.id} className="tree-node-wrapper" style={{ display: 'flex', flexDirection: 'column' }}>
         <div
@@ -690,15 +685,6 @@ export default function ManageFoldersStudio({
               <span className="node-scope-sub">SCOPE: {selectedWorkspace?.name || tenantName}</span>
             )}
           </div>
-
-          {isEnvName && (
-            <span
-              className="node-env-warning-badge"
-              title="DEV, TEST, UAT & PROD are Environments, not folders. Folders should represent business domains."
-            >
-              <AlertTriangle size={10} /> Env Name
-            </span>
-          )}
 
           {node.isGovernanceLocked && (
             <Lock size={11} style={{ color: isSelected ? 'inherit' : '#D97706', flexShrink: 0, marginLeft: 4 }} />
@@ -753,60 +739,18 @@ export default function ManageFoldersStudio({
             <h1>Folders</h1>
             <div className="folders-divider-v" />
 
-            {/* Context: Customer Organization & Active Tenant */}
+            {/* Clean Next Gen Context Badges */}
             <div className="folders-context-badges">
-              {/* Customer Organization Badge */}
-              <button
-                className="context-tenant-badge"
-                style={{ cursor: 'pointer' }}
-                onClick={() => setAdminConfigModal(true)}
-                title="Customer Organization: Click to open Admin Config"
-              >
-                <Building2 size={12} style={{ color: 'var(--accent, #BA9731)' }} />
-                <span>{organizationName}</span>
-              </button>
-
-              <ChevronRight size={12} style={{ opacity: 0.3 }} />
-
-              {/* Tenant Selector Dropdown */}
               <div className="context-tenant-badge">
                 <span className="status-dot-green" />
-                {tenants.length > 1 ? (
-                  <select
-                    value={tenant}
-                    onChange={(e) => onSelectTenant?.(e.target.value)}
-                    style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 800, fontSize: '0.65rem', outline: 'none', cursor: 'pointer' }}
-                  >
-                    {tenants.map(t => (
-                      <option key={t.id} value={t.id} style={{ background: 'var(--card)', color: 'var(--foreground)' }}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <span>{tenantName}</span>
-                )}
+                <span>{tenantName}</span>
               </div>
 
               <ChevronRight size={12} style={{ opacity: 0.3 }} />
 
-              {/* Environment Switcher Pills (Explicit: DEV, TEST, UAT, PROD are Environments, not folders) */}
-              <div className="env-switcher-group" title="Active Runtime Environment">
-                <span className="env-group-label">ENV:</span>
-                {(['DEV', 'TEST', 'UAT', 'PROD'] as const).map(env => (
-                  <button
-                    key={env}
-                    className={`env-pill-btn ${activeEnv === env ? 'active' : ''}`}
-                    onClick={() => {
-                      setActiveEnv(env)
-                      onSelectEnv?.(env)
-                      showToast(`Switched active environment context to ${env}`, 'info')
-                    }}
-                  >
-                    <span className="env-dot" />
-                    <span>{env}</span>
-                  </button>
-                ))}
+              <div className="context-scope-badge">
+                <LayoutGrid size={12} />
+                <span>{selectedWorkspace?.name || `Default Workspace [${activeEnv === 'DEV' ? 'Development' : activeEnv}]`}</span>
               </div>
             </div>
           </div>
@@ -819,7 +763,7 @@ export default function ManageFoldersStudio({
             onClick={() => setAdminConfigModal(true)}
             title="Customer Organization & Multi-Tenant Configuration"
           >
-            <Settings2 size={14} />
+            <Building2 size={13} style={{ color: 'var(--accent, #BA9731)' }} />
             <span>Admin Config</span>
           </button>
 
@@ -841,18 +785,10 @@ export default function ManageFoldersStudio({
         </div>
       </header>
 
-      {/* Main Dual-Pane Body */}
-      <div className="folders-dual-pane-body">
+      {/* Main Dual-Pane Body — Horizontal Side-by-Side */}
+      <div className="folders-dual-pane">
         {/* Left Pane: Scope, Filters, and Hierarchical Tree */}
         <aside className="folders-left-pane glass-card">
-          {/* Architecture Clarification Callout */}
-          <div className="folders-architecture-tip">
-            <Layers size={13} style={{ color: 'var(--accent, #BA9731)', flexShrink: 0, marginTop: 1 }} />
-            <span>
-              <strong>Architecture Note:</strong> DEV, TEST, UAT &amp; PROD are <strong>Environments</strong> (runtime stages), not folders. Folders represent your organizational business domains.
-            </span>
-          </div>
-
           {/* Folder Scope Selector */}
           <div className="folders-scope-section">
             <span className="pane-section-label">Folder Scope</span>
