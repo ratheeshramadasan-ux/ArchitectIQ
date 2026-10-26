@@ -354,39 +354,48 @@ function App(){
  const unauthorized=useCallback(()=>{clearSession();setToken('');setTenant('');setLiveNodes([]);setTenants([])},[]);
  const changed=useCallback(()=>{fetch(`/api/v1/tenants/${tenant}/workspace/tree`,{headers:{Authorization:`Bearer ${token}`}}).then(r=>r.ok?r.json():Promise.reject(new Error(`HTTP ${r.status}`))).then(setLiveNodes).catch(e=>setWorkspaceError(String(e)))},[tenant,token]);
 
- const [activeOrg, setActiveOrg] = useState<{ id?: string; name: string; logo_url?: string }>(() => {
-   try {
-     const saved = localStorage.getItem('architectiq.active_org')
-     if (saved) return JSON.parse(saved)
-   } catch {}
-   return { name: 'Citibank Global', logo_url: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg' }
- })
-
- useEffect(() => {
-   const handleOrgUpdate = (e: Event) => {
-     const detail = (e as CustomEvent).detail
-     if (detail && detail.name) {
-       setActiveOrg(prev => ({ ...prev, ...detail }))
-     }
-   }
-   window.addEventListener('architectiq:org_updated', handleOrgUpdate)
-   return () => window.removeEventListener('architectiq:org_updated', handleOrgUpdate)
- }, [])
-
- useEffect(() => {
-   if (!token) return
-   fetch('/api/v1/platform/organizations', {
-     headers: { Authorization: `Bearer ${token}` }
-   })
-     .then(r => r.ok ? r.json() : null)
-     .then((list: Array<{ id: string; name: string; slug: string; logo_url?: string }>) => {
-       if (Array.isArray(list) && list.length > 0) {
-         const current = list.find(o => o.slug === 'citibank-global') || list[0]
-         setActiveOrg({ id: current.id, name: current.name, logo_url: current.logo_url || undefined })
-       }
-     })
-     .catch(() => {})
- }, [token])
+  const [activeOrg, setActiveOrg] = useState<{ id?: string; name: string; logo_url?: string }>(() => {
+    try {
+      const saved = localStorage.getItem('architectiq.active_org')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed?.name && !parsed.name.includes('Break Glass') && !parsed.name.includes('Test Org')) {
+          return parsed
+        }
+      }
+    } catch {}
+    return { name: 'Citibank Global', logo_url: 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg' }
+  })
+  useEffect(() => {
+    const handleOrgUpdate = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail && detail.name) {
+        setActiveOrg(prev => ({ ...prev, ...detail }))
+        try {
+          localStorage.setItem('architectiq.active_org', JSON.stringify({ id: detail.id, name: detail.name, logo_url: detail.logo_url }))
+        } catch {}
+      }
+    }
+    window.addEventListener('architectiq:org_updated', handleOrgUpdate)
+    return () => window.removeEventListener('architectiq:org_updated', handleOrgUpdate)
+  }, [])
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/v1/platform/organizations', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((list: Array<{ id: string; name: string; slug: string; logo_url?: string }>) => {
+        if (Array.isArray(list) && list.length > 0) {
+          const current = list.find(o => o.slug === 'citibank-global' || o.name.toLowerCase().includes('citibank')) || list[0]
+          setActiveOrg({ id: current.id, name: current.name, logo_url: current.logo_url || undefined })
+          try {
+            localStorage.setItem('architectiq.active_org', JSON.stringify({ id: current.id, name: current.name, logo_url: current.logo_url }))
+          } catch {}
+        }
+      })
+      .catch(() => {})
+  }, [token])
  async function logout(){try{await fetch('/api/v1/auth/native/logout',{method:'POST',headers:{Authorization:`Bearer ${token}`}})}finally{clearSession();setToken('');setTenant('');setLiveNodes([]);setTenants([])}}
  async function handleCreateTenant(e: React.FormEvent){
   e.preventDefault();

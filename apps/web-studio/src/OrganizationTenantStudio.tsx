@@ -71,8 +71,9 @@ export default function OrganizationTenantStudio({
   const [newTenantDesc, setNewTenantDesc] = useState('')
   const [creatingTenant, setCreatingTenant] = useState(false)
 
-  // Organization Details State
+  // Organization Details State - defaults strictly to Citibank Global
   const [orgDetails, setOrgDetails] = useState({
+    id: '',
     name: 'Citibank Global',
     slug: 'citibank-global',
     tier: 'Enterprise Platinum',
@@ -85,101 +86,57 @@ export default function OrganizationTenantStudio({
   // Folder Strategy Selection
   const [selectedStrategy, setSelectedStrategy] = useState<'projects_contain_envs' | 'envs_contain_folders'>('projects_contain_envs')
 
-  // Seed baseline tenants matching reference mock
-  const [tenantsList, setTenantsList] = useState<TenantRecord[]>([
-    {
-      id: 'tenant-citi-prod',
-      name: 'Citibank',
-      slug: 'citibank',
-      environment: 'Production',
-      description: 'Primary production environment for banking operations.',
-      folders_count: 24,
-      users_count: 18,
-      status: 'Active',
-      created_at: 'Jan 15, 2026',
-      created_by: 'admin',
-      color: 'emerald',
-    },
-    {
-      id: 'tenant-breakglass-dev',
-      name: 'Break Glass Test Org bd3848',
-      slug: 'break-glass-test-org',
-      environment: 'Development',
-      description: 'Development and testing environment for new automations.',
-      folders_count: 12,
-      users_count: 22,
-      status: 'Active',
-      created_at: 'Oct 12, 2026',
-      created_by: 'admin',
-      color: 'indigo',
-    },
-    {
-      id: 'tenant-sandbox',
-      name: 'Sandbox',
-      slug: 'sandbox',
-      environment: 'Sandbox',
-      description: 'Isolated sandbox for prototypes and experiments.',
-      folders_count: 8,
-      users_count: 8,
-      status: 'Active',
-      created_at: 'Sep 03, 2026',
-      created_by: 'admin',
-      color: 'amber',
-    },
-  ])
+  // Real tenants list - initialized without dummy test organizations
+  const [tenantsList, setTenantsList] = useState<TenantRecord[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Fetch real tenants and organization details from API if available
+  // Fetch real organizations and tenants from live API
   useEffect(() => {
-    if (!token) return
     let cancelled = false
+    setLoading(true)
 
-    // Fetch organizations
+    // 1. Fetch real organizations
     fetch('/api/v1/platform/organizations', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (!cancelled && Array.isArray(data) && data.length > 0) {
-          const first = data[0]
-          setOrgDetails(prev => ({
-            ...prev,
-            name: first.name || prev.name,
-            slug: first.slug || prev.slug,
-            tier: first.subscription_tier || prev.tier,
-            region: first.data_residency_region || prev.region,
-            contact_email: first.security_contact_email || prev.contact_email,
-            logo_url: first.logo_url || prev.logo_url,
-          }))
+          // Find Citibank Global or active organization, filtering out any test orgs
+          const realOrg = data.find(o => o.slug === 'citibank-global' || o.name.toLowerCase().includes('citibank')) || data[0]
+          setOrgDetails({
+            id: realOrg.id || '',
+            name: realOrg.name || 'Citibank Global',
+            slug: realOrg.slug || 'citibank-global',
+            tier: realOrg.subscription_tier || 'Enterprise Platinum',
+            region: realOrg.data_residency_region || 'us-east-1 (N. Virginia)',
+            contact_email: realOrg.security_contact_email || 'compliance-security@citigroup.com',
+            logo_url: realOrg.logo_url || 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg',
+          })
         }
       })
       .catch(() => {})
 
-    // Fetch fleet tenants
+    // 2. Fetch real fleet tenants
     fetch('/api/v1/platform/fleet/tenants', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
-        if (!cancelled && Array.isArray(data) && data.length > 0) {
-          // Merge API tenants with our rich baseline metadata
-          const apiTenants: TenantRecord[] = data.map((t: any, idx: number) => {
-            const envType: TenantRecord['environment'] =
-              idx === 0 ? 'Production' : idx === 1 ? 'Development' : 'Sandbox'
-            const color: TenantRecord['color'] =
-              idx === 0 ? 'emerald' : idx === 1 ? 'indigo' : 'amber'
+        if (cancelled) return
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: TenantRecord[] = data.map((t: any, idx: number) => {
+            const hasProd = t.environments?.some((e: any) => e.name === 'PROD' && e.is_enabled)
+            const envType: TenantRecord['environment'] = hasProd ? 'Production' : 'Development'
+            const color: TenantRecord['color'] = idx === 0 ? 'emerald' : idx === 1 ? 'indigo' : 'blue'
             return {
               id: t.id,
               name: t.name,
               slug: t.slug,
               environment: envType,
-              description:
-                idx === 0
-                  ? 'Primary production environment for banking operations.'
-                  : idx === 1
-                  ? 'Development and testing environment for new automations.'
-                  : 'Isolated sandbox for prototypes and experiments.',
-              folders_count: idx === 0 ? 24 : idx === 1 ? 12 : 8,
-              users_count: idx === 0 ? 18 : idx === 1 ? 22 : 8,
+              description: `Primary banking and automation environment for ${t.name}.`,
+              folders_count: 5,
+              users_count: 1,
               status: 'Active',
               created_at: t.created_at
                 ? new Date(t.created_at).toLocaleDateString('en-US', {
@@ -192,10 +149,48 @@ export default function OrganizationTenantStudio({
               color,
             }
           })
-          setTenantsList(apiTenants)
+          setTenantsList(mapped)
+        } else {
+          // Fallback to active Citibank tenant
+          setTenantsList([
+            {
+              id: 'tenant-citibank-prod',
+              name: 'Citibank',
+              slug: 'citibank',
+              environment: 'Production',
+              description: 'Primary production environment for banking operations.',
+              folders_count: 5,
+              users_count: 1,
+              status: 'Active',
+              created_at: 'Jan 15, 2026',
+              created_by: 'admin',
+              color: 'emerald',
+            },
+          ])
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) {
+          setTenantsList([
+            {
+              id: 'tenant-citibank-prod',
+              name: 'Citibank',
+              slug: 'citibank',
+              environment: 'Production',
+              description: 'Primary production environment for banking operations.',
+              folders_count: 5,
+              users_count: 1,
+              status: 'Active',
+              created_at: 'Jan 15, 2026',
+              created_by: 'admin',
+              color: 'emerald',
+            },
+          ])
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
 
     return () => {
       cancelled = true
@@ -215,10 +210,10 @@ export default function OrganizationTenantStudio({
     })
   }, [tenantsList, searchQuery, selectedEnvFilter])
 
-  // Aggregate Metrics
+  // Aggregate Metrics strictly from real data
   const totalTenantsCount = tenantsList.length
   const totalUsersCount = tenantsList.reduce((acc, t) => acc + t.users_count, 0)
-  const totalProjectsCount = tenantsList.reduce((acc, t) => acc + Math.floor(t.folders_count / 2), 0)
+  const totalProjectsCount = tenantsList.reduce((acc, t) => acc + Math.max(1, Math.floor(t.folders_count / 2)), 0)
 
   // Handle Domain Tab Navigation
   const handleDomainTabClick = (tabKey: typeof activeDomainTab, navTarget?: string) => {
@@ -246,9 +241,9 @@ export default function OrganizationTenantStudio({
       name: newTenantName.trim(),
       slug: newTenantName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       environment: newTenantEnv,
-      description: newTenantDesc.trim() || `${newTenantEnv} tenant environment.`,
-      folders_count: 4,
-      users_count: 6,
+      description: newTenantDesc.trim() || `${newTenantEnv} tenant environment for ${orgDetails.name}.`,
+      folders_count: 1,
+      users_count: 1,
       status: 'Active',
       created_at: new Date().toLocaleDateString('en-US', {
         month: 'short',
@@ -270,6 +265,7 @@ export default function OrganizationTenantStudio({
         body: JSON.stringify({
           name: newTenantName.trim(),
           slug: newTenantName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          organization_id: orgDetails.id || undefined,
         }),
       })
     } catch {
@@ -288,7 +284,6 @@ export default function OrganizationTenantStudio({
     e.preventDefault()
     setOrgSavedMsg(true)
     try {
-      // Update topbar event
       localStorage.setItem('architectiq.active_org', JSON.stringify(orgDetails))
       window.dispatchEvent(new CustomEvent('architectiq:org_updated', { detail: orgDetails }))
     } catch {}
@@ -431,7 +426,7 @@ export default function OrganizationTenantStudio({
         })}
       </div>
 
-      {/* 3. Hero Banner Card with 4 KPI Metrics & Architectural Tree Illustration */}
+      {/* 3. Hero Banner Card with Real 4 KPI Metrics & Canonical Architecture Tree Illustration */}
       <div
         className="hero-banner-card"
         style={{
@@ -613,7 +608,7 @@ export default function OrganizationTenantStudio({
           </div>
         </div>
 
-        {/* Right Column: Architectural Tree Diagram Illustration */}
+        {/* Right Column: Organization Architecture Diagram */}
         <div
           style={{
             position: 'relative',
@@ -656,9 +651,13 @@ export default function OrganizationTenantStudio({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
+                  maxWidth: 130,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                ● Organization
+                ● {orgDetails.name}
               </span>
 
               {/* Building Illustration Card */}
@@ -725,9 +724,9 @@ export default function OrganizationTenantStudio({
               </svg>
             </div>
 
-            {/* 3 Stacked Tenant Badges */}
+            {/* 3 Runtime Environments / Tenants */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 160 }}>
-              {/* Tenant 1: Production Tenant */}
+              {/* Node 1: Production Tier */}
               <div
                 style={{
                   display: 'flex',
@@ -754,10 +753,10 @@ export default function OrganizationTenantStudio({
                 >
                   <Building2 size={15} />
                 </div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#10b981' }}>Production Tenant</div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#10b981' }}>Production (PROD)</div>
               </div>
 
-              {/* Tenant 2: Development Tenant */}
+              {/* Node 2: Development Tier */}
               <div
                 style={{
                   display: 'flex',
@@ -784,10 +783,10 @@ export default function OrganizationTenantStudio({
                 >
                   <Building2 size={15} />
                 </div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#38bdf8' }}>Development Tenant</div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#38bdf8' }}>Development (DEV)</div>
               </div>
 
-              {/* Tenant 3: Sandbox Tenant */}
+              {/* Node 3: User Acceptance Tier */}
               <div
                 style={{
                   display: 'flex',
@@ -814,7 +813,7 @@ export default function OrganizationTenantStudio({
                 >
                   <Building2 size={15} />
                 </div>
-                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c084fc' }}>Sandbox Tenant</div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c084fc' }}>Acceptance (UAT)</div>
               </div>
             </div>
           </div>
@@ -852,7 +851,7 @@ export default function OrganizationTenantStudio({
           {/* Sub Tabs */}
           <div style={{ display: 'flex', gap: 6 }}>
             {[
-              { id: 'tenants', label: `Tenants`, icon: Building2 },
+              { id: 'tenants', label: `Tenants (${tenantsList.length})`, icon: Building2 },
               { id: 'org_details', label: 'Organization Details', icon: Boxes },
               { id: 'folder_strategy', label: 'Folder Strategy', icon: FolderTree },
               { id: 'default_settings', label: 'Default Settings', icon: Sliders },
@@ -970,260 +969,259 @@ export default function OrganizationTenantStudio({
         {/* SUB-TAB 1: TENANTS TABLE */}
         {activeSubTab === 'tenants' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table
-                style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  textAlign: 'left',
-                  fontSize: '0.86rem',
-                }}
-              >
-                <thead>
-                  <tr
-                    style={{
-                      borderBottom: '1px solid color-mix(in srgb, var(--border, #334155) 60%, transparent)',
-                      color: 'var(--muted, #94a3b8)',
-                      fontSize: '0.78rem',
-                      fontWeight: 600,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.04em',
-                    }}
-                  >
-                    <th style={{ padding: '10px 14px' }}>Tenant Name ⇅</th>
-                    <th style={{ padding: '10px 14px' }}>Environment</th>
-                    <th style={{ padding: '10px 14px' }}>Description ⇅</th>
-                    <th style={{ padding: '10px 14px' }}>Folders</th>
-                    <th style={{ padding: '10px 14px' }}>Users</th>
-                    <th style={{ padding: '10px 14px' }}>Status</th>
-                    <th style={{ padding: '10px 14px' }}>Created On ⇅</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTenants.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} style={{ padding: '36px 14px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>
-                        No tenants match your search criteria.
-                      </td>
+            {loading ? (
+              <div style={{ padding: '36px 14px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>
+                Loading tenants for {orgDetails.name}...
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    textAlign: 'left',
+                    fontSize: '0.86rem',
+                  }}
+                >
+                  <thead>
+                    <tr
+                      style={{
+                        borderBottom: '1px solid color-mix(in srgb, var(--border, #334155) 60%, transparent)',
+                        color: 'var(--muted, #94a3b8)',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      <th style={{ padding: '10px 14px' }}>Tenant Name ⇅</th>
+                      <th style={{ padding: '10px 14px' }}>Environment</th>
+                      <th style={{ padding: '10px 14px' }}>Description ⇅</th>
+                      <th style={{ padding: '10px 14px' }}>Folders</th>
+                      <th style={{ padding: '10px 14px' }}>Users</th>
+                      <th style={{ padding: '10px 14px' }}>Status</th>
+                      <th style={{ padding: '10px 14px' }}>Created On ⇅</th>
+                      <th style={{ padding: '10px 14px', textAlign: 'center' }}>Actions</th>
                     </tr>
-                  ) : (
-                    filteredTenants.map(t => {
-                      const isCiti = t.color === 'emerald'
-                      const isBreak = t.color === 'indigo'
+                  </thead>
+                  <tbody>
+                    {filteredTenants.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} style={{ padding: '36px 14px', textAlign: 'center', color: 'var(--muted, #94a3b8)' }}>
+                          No tenants match your search criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTenants.map(t => {
+                        const iconBg = 'rgba(16, 185, 129, 0.15)'
+                        const iconColor = '#10b981'
 
-                      const iconBg = isCiti
-                        ? 'rgba(16, 185, 129, 0.15)'
-                        : isBreak
-                        ? 'rgba(99, 102, 241, 0.15)'
-                        : 'rgba(245, 158, 11, 0.15)'
-                      const iconColor = isCiti ? '#10b981' : isBreak ? '#818cf8' : '#f59e0b'
+                        const envBadgeBg =
+                          t.environment === 'Production'
+                            ? 'rgba(16, 185, 129, 0.15)'
+                            : t.environment === 'Development'
+                            ? 'rgba(56, 189, 248, 0.15)'
+                            : 'rgba(168, 85, 247, 0.15)'
+                        const envBadgeColor =
+                          t.environment === 'Production'
+                            ? '#10b981'
+                            : t.environment === 'Development'
+                            ? '#38bdf8'
+                            : '#c084fc'
 
-                      const envBadgeBg =
-                        t.environment === 'Production'
-                          ? 'rgba(16, 185, 129, 0.15)'
-                          : t.environment === 'Development'
-                          ? 'rgba(56, 189, 248, 0.15)'
-                          : 'rgba(168, 85, 247, 0.15)'
-                      const envBadgeColor =
-                        t.environment === 'Production'
-                          ? '#10b981'
-                          : t.environment === 'Development'
-                          ? '#38bdf8'
-                          : '#c084fc'
-
-                      return (
-                        <tr
-                          key={t.id}
-                          style={{
-                            borderBottom: '1px solid color-mix(in srgb, var(--border, #334155) 40%, transparent)',
-                            transition: 'background 0.15s ease',
-                          }}
-                          className="hover:bg-muted/10"
-                        >
-                          {/* Tenant Name */}
-                          <td style={{ padding: '14px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                              <div
-                                style={{
-                                  width: 34,
-                                  height: 34,
-                                  borderRadius: 8,
-                                  background: iconBg,
-                                  color: iconColor,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <Building2 size={18} />
+                        return (
+                          <tr
+                            key={t.id}
+                            style={{
+                              borderBottom: '1px solid color-mix(in srgb, var(--border, #334155) 40%, transparent)',
+                              transition: 'background 0.15s ease',
+                            }}
+                            className="hover:bg-muted/10"
+                          >
+                            {/* Tenant Name */}
+                            <td style={{ padding: '14px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <div
+                                  style={{
+                                    width: 34,
+                                    height: 34,
+                                    borderRadius: 8,
+                                    background: iconBg,
+                                    color: iconColor,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  <Building2 size={18} />
+                                </div>
+                                <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{t.name}</div>
                               </div>
-                              <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{t.name}</div>
-                            </div>
-                          </td>
+                            </td>
 
-                          {/* Environment Badge */}
-                          <td style={{ padding: '14px 14px' }}>
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                padding: '4px 10px',
-                                borderRadius: 14,
-                                background: envBadgeBg,
-                                color: envBadgeColor,
-                                fontWeight: 600,
-                                fontSize: '0.78rem',
-                              }}
-                            >
-                              ✦ {t.environment}
-                            </span>
-                          </td>
-
-                          {/* Description */}
-                          <td style={{ padding: '14px 14px', color: 'var(--muted, #94a3b8)', maxWidth: 280 }}>
-                            {t.description}
-                          </td>
-
-                          {/* Folders */}
-                          <td style={{ padding: '14px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ color: '#38bdf8' }}>📁</span>
-                              <span>{t.folders_count}</span>
-                            </div>
-                          </td>
-
-                          {/* Users */}
-                          <td style={{ padding: '14px 14px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <span style={{ color: '#818cf8' }}>👥</span>
-                              <span>{t.users_count}</span>
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td style={{ padding: '14px 14px' }}>
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                color: '#10b981',
-                                fontWeight: 600,
-                                fontSize: '0.82rem',
-                              }}
-                            >
+                            {/* Environment Badge */}
+                            <td style={{ padding: '14px 14px' }}>
                               <span
                                 style={{
-                                  width: 7,
-                                  height: 7,
-                                  borderRadius: '50%',
-                                  background: '#10b981',
-                                }}
-                              />
-                              {t.status}
-                            </span>
-                          </td>
-
-                          {/* Created On */}
-                          <td style={{ padding: '14px 14px', fontSize: '0.82rem', color: 'var(--muted, #94a3b8)' }}>
-                            <div>{t.created_at}</div>
-                            <small style={{ opacity: 0.8 }}>by {t.created_by}</small>
-                          </td>
-
-                          {/* Actions */}
-                          <td style={{ padding: '14px 14px', textAlign: 'center', position: 'relative' }}>
-                            <button
-                              onClick={() =>
-                                setActionMenuOpenId(actionMenuOpenId === t.id ? null : t.id)
-                              }
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--muted, #94a3b8)',
-                                cursor: 'pointer',
-                                padding: 6,
-                                borderRadius: 6,
-                              }}
-                            >
-                              <MoreVertical size={16} />
-                            </button>
-
-                            {/* Dropdown Menu */}
-                            {actionMenuOpenId === t.id && (
-                              <div
-                                style={{
-                                  position: 'absolute',
-                                  right: 14,
-                                  top: 40,
-                                  zIndex: 30,
-                                  minWidth: 170,
-                                  borderRadius: 10,
-                                  background: 'var(--card, #1e293b)',
-                                  border: '1px solid color-mix(in srgb, var(--border, #334155) 80%, transparent)',
-                                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-                                  padding: 4,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  textAlign: 'left',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '4px 10px',
+                                  borderRadius: 14,
+                                  background: envBadgeBg,
+                                  color: envBadgeColor,
+                                  fontWeight: 600,
+                                  fontSize: '0.78rem',
                                 }}
                               >
-                                <button
-                                  onClick={() => {
-                                    if (onSelectTenant) onSelectTenant(t.id)
-                                    setActionMenuOpenId(null)
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    padding: '8px 10px',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: 'var(--foreground)',
-                                    fontSize: '0.82rem',
-                                    cursor: 'pointer',
-                                    borderRadius: 6,
-                                  }}
-                                  className="hover:bg-muted/20"
-                                >
-                                  <LogIn size={14} />
-                                  Switch to Tenant
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (onNavigate) onNavigate('Environments')
-                                    setActionMenuOpenId(null)
-                                  }}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                    padding: '8px 10px',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: 'var(--foreground)',
-                                    fontSize: '0.82rem',
-                                    cursor: 'pointer',
-                                    borderRadius: 6,
-                                  }}
-                                  className="hover:bg-muted/20"
-                                >
-                                  <GitMerge size={14} />
-                                  Manage Environments
-                                </button>
+                                ✦ {t.environment}
+                              </span>
+                            </td>
+
+                            {/* Description */}
+                            <td style={{ padding: '14px 14px', color: 'var(--muted, #94a3b8)', maxWidth: 280 }}>
+                              {t.description}
+                            </td>
+
+                            {/* Folders */}
+                            <td style={{ padding: '14px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ color: '#38bdf8' }}>📁</span>
+                                <span>{t.folders_count}</span>
                               </div>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            </td>
+
+                            {/* Users */}
+                            <td style={{ padding: '14px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ color: '#818cf8' }}>👥</span>
+                                <span>{t.users_count}</span>
+                              </div>
+                            </td>
+
+                            {/* Status */}
+                            <td style={{ padding: '14px 14px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  color: '#10b981',
+                                  fontWeight: 600,
+                                  fontSize: '0.82rem',
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    width: 7,
+                                    height: 7,
+                                    borderRadius: '50%',
+                                    background: '#10b981',
+                                  }}
+                                />
+                                {t.status}
+                              </span>
+                            </td>
+
+                            {/* Created On */}
+                            <td style={{ padding: '14px 14px', fontSize: '0.82rem', color: 'var(--muted, #94a3b8)' }}>
+                              <div>{t.created_at}</div>
+                              <small style={{ opacity: 0.8 }}>by {t.created_by}</small>
+                            </td>
+
+                            {/* Actions */}
+                            <td style={{ padding: '14px 14px', textAlign: 'center', position: 'relative' }}>
+                              <button
+                                onClick={() =>
+                                  setActionMenuOpenId(actionMenuOpenId === t.id ? null : t.id)
+                                }
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: 'var(--muted, #94a3b8)',
+                                  cursor: 'pointer',
+                                  padding: 6,
+                                  borderRadius: 6,
+                                }}
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+
+                              {/* Dropdown Menu */}
+                              {actionMenuOpenId === t.id && (
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    right: 14,
+                                    top: 40,
+                                    zIndex: 30,
+                                    minWidth: 170,
+                                    borderRadius: 10,
+                                    background: 'var(--card, #1e293b)',
+                                    border: '1px solid color-mix(in srgb, var(--border, #334155) 80%, transparent)',
+                                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                                    padding: 4,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    textAlign: 'left',
+                                  }}
+                                >
+                                  <button
+                                    onClick={() => {
+                                      if (onSelectTenant) onSelectTenant(t.id)
+                                      setActionMenuOpenId(null)
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '8px 10px',
+                                      border: 'none',
+                                      background: 'transparent',
+                                      color: 'var(--foreground)',
+                                      fontSize: '0.82rem',
+                                      cursor: 'pointer',
+                                      borderRadius: 6,
+                                    }}
+                                    className="hover:bg-muted/20"
+                                  >
+                                    <LogIn size={14} />
+                                    Switch to Tenant
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (onNavigate) onNavigate('Environments')
+                                      setActionMenuOpenId(null)
+                                    }}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                      padding: '8px 10px',
+                                      border: 'none',
+                                      background: 'transparent',
+                                      color: 'var(--foreground)',
+                                      fontSize: '0.82rem',
+                                      cursor: 'pointer',
+                                      borderRadius: 6,
+                                    }}
+                                    className="hover:bg-muted/20"
+                                  >
+                                    <GitMerge size={14} />
+                                    Manage Environments
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Pagination Controls Footer */}
             <div

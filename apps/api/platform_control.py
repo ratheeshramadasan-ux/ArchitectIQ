@@ -537,7 +537,7 @@ def list_fleet_tenants(
     organization_id: UUID | None = None,
 ):
     with SessionLocal() as db:
-        query = select(Tenant)
+        query = select(Tenant).where(Tenant.organization_id.in_(select(PlatformOrganization.id)))
         if organization_id:
             query = query.where(Tenant.organization_id == organization_id)
 
@@ -588,7 +588,11 @@ def provision_fleet_tenant(
 
     with SessionLocal() as db, db.begin():
         # Verify organization exists and is ENABLED
-        org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == body.organization_id))
+        org = None
+        if body.organization_id:
+            org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == body.organization_id))
+        else:
+            org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.status == "ENABLED").order_by(PlatformOrganization.created_at))
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
         if org.status != "ENABLED":

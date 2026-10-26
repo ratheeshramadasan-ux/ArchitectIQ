@@ -32,19 +32,8 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
                 id: 't-1',
                 name: 'Citibank',
                 slug: 'citibank',
+                environments: [{ name: 'PROD', is_enabled: true }],
                 created_at: '2026-01-15T00:00:00Z',
-              },
-              {
-                id: 't-2',
-                name: 'Break Glass Test Org bd3848',
-                slug: 'break-glass-test-org',
-                created_at: '2026-10-12T00:00:00Z',
-              },
-              {
-                id: 't-3',
-                name: 'Sandbox',
-                slug: 'sandbox',
-                created_at: '2026-09-03T00:00:00Z',
               },
             ]),
         })
@@ -82,7 +71,7 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(onNavigateMock).toHaveBeenCalledWith('Environments')
   })
 
-  it('renders Hero Banner with 4 KPI metrics and architectural tree illustration', () => {
+  it('renders Hero Banner with 4 KPI metrics and architectural tree illustration', async () => {
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
 
     expect(screen.getByRole('heading', { level: 2, name: 'Organization & Tenant Management' })).toBeDefined()
@@ -93,24 +82,27 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.getByText('100%')).toBeDefined()
 
     // Architecture illustration elements
-    expect(screen.getByText('● Organization')).toBeDefined()
-    expect(screen.getByText('Production Tenant')).toBeDefined()
-    expect(screen.getByText('Development Tenant')).toBeDefined()
-    expect(screen.getByText('Sandbox Tenant')).toBeDefined()
+    await waitFor(() => {
+      expect(screen.getByText(/● Citibank Global/i)).toBeDefined()
+    })
+    expect(screen.getByText('Production (PROD)')).toBeDefined()
+    expect(screen.getByText('Development (DEV)')).toBeDefined()
+    expect(screen.getByText('Acceptance (UAT)')).toBeDefined()
   })
 
-  it('renders tenants table with Citibank, Break Glass, and Sandbox', async () => {
+  it('renders tenants table with real tenant Citibank and zero dummy data', async () => {
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
 
     await waitFor(() => {
       expect(screen.getAllByText('Citibank').length).toBeGreaterThanOrEqual(1)
-      expect(screen.getByText('Break Glass Test Org bd3848')).toBeDefined()
-      expect(screen.getAllByText('Sandbox').length).toBeGreaterThanOrEqual(1)
     })
 
     expect(screen.getByText('✦ Production')).toBeDefined()
-    expect(screen.getByText('✦ Development')).toBeDefined()
-    expect(screen.getByText('✦ Sandbox')).toBeDefined()
+    expect(screen.getByText(/Primary banking and automation environment for Citibank/i)).toBeDefined()
+
+    // Verify zero dummy test data
+    expect(screen.queryByText(/Break Glass Test Org/i)).toBeNull()
+    expect(screen.queryByText(/Isolated sandbox for prototypes/i)).toBeNull()
   })
 
   it('opens and closes the Create Tenant modal', () => {
