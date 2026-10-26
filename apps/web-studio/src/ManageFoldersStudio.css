@@ -162,26 +162,28 @@
 .folders-dual-pane-body {
   display: flex !important;
   flex-direction: row !important;
-  gap: 16px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Left Pane: Tree & Scope */
 .folders-left-pane {
-  width: 320px;
-  min-width: 280px;
-  max-width: 340px;
+  width: 240px;
+  min-width: 200px;
+  max-width: 260px;
   flex-shrink: 0 !important;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   overflow: hidden;
   border-radius: 8px;
-  padding: 14px;
+  padding: 10px;
 }
 
 .pane-section-label {
@@ -400,6 +402,7 @@
 .folders-right-pane {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -445,10 +448,10 @@
 
 /* Detail Header */
 .folder-detail-header {
-  padding: 16px 20px 0;
+  padding: 12px 14px 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
@@ -529,45 +532,26 @@
 .folder-tabs-strip {
   display: flex;
   align-items: center;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(140, 140, 160, 0.35) transparent;
-  padding-bottom: 2px;
-}
-
-.folder-tabs-strip::-webkit-scrollbar {
-  height: 4px;
-}
-
-.folder-tabs-strip::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.folder-tabs-strip::-webkit-scrollbar-thumb {
-  background: rgba(140, 140, 160, 0.35);
-  border-radius: 4px;
-}
-
-.folder-tabs-strip::-webkit-scrollbar-thumb:hover {
-  background: rgba(140, 140, 160, 0.6);
+  overflow-x: hidden;
+  padding-bottom: 4px;
 }
 
 .folder-tab-btn {
   background: none;
   border: none;
-  padding: 8px 2px;
-  font-size: 0.72rem;
+  padding: 6px 4px;
+  font-size: 0.70rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   color: var(--muted-foreground);
   cursor: pointer;
   position: relative;
   transition: all 0.15s ease;
   white-space: nowrap;
-  flex-shrink: 0;
 }
 
 .folder-tab-btn:hover {
@@ -592,10 +576,10 @@
 .folder-subviews-strip {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  padding: 8px 0 4px;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  padding: 6px 0 4px;
+  overflow-x: hidden;
 }
 
 .subview-pill-btn {
@@ -630,10 +614,13 @@
 .folder-detail-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  overflow-x: hidden;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 /* Structure Form */
@@ -1464,7 +1451,7 @@
 /* Vector Storage Tab */
 .vector-mode-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
 
