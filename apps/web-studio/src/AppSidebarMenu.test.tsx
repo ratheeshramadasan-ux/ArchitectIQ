@@ -106,4 +106,37 @@ describe('App Sidebar Menu — Collapse/Expand Groups & Icon Rail', () => {
     fireEvent.click(expandBtns[0])
     expect(aside?.classList.contains('collapsed')).toBe(false)
   })
+
+  it('does not render hamburger menu on top bar, and renders nextgen footer with Ratheesh Technology Ltd and modal links', async () => {
+    const { container } = render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Citibank Global/i)).toBeDefined()
+    })
+
+    // Verify top bar hamburger icon is removed
+    expect(container.querySelector('.topbar-icon-action.mobile-menu')).toBeNull()
+    expect(screen.queryByLabelText('Open navigation')).toBeNull()
+
+    // Verify footer elements
+    const footer = container.querySelector('footer.nextgen-footer')
+    expect(footer).toBeDefined()
+    expect(screen.getByText(/© 2026 Ratheesh Technology Ltd. All rights reserved./i)).toBeDefined()
+
+    const aboutBtn = screen.getByRole('button', { name: 'About' })
+    const roadmapBtn = screen.getByRole('button', { name: 'Roadmap' })
+    const contactBtn = screen.getByRole('button', { name: 'Contact' })
+    expect(aboutBtn).toBeDefined()
+    expect(roadmapBtn).toBeDefined()
+    expect(contactBtn).toBeDefined()
+
+    // Test clicking About opens the FooterInfoModal
+    fireEvent.click(aboutBtn)
+    expect(screen.getByText('About ArchitectIQ')).toBeDefined()
+    expect(screen.getByText('Multi-Tenant Governance')).toBeDefined()
+
+    // Close modal
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByText('About ArchitectIQ')).toBeNull()
+  })
 })

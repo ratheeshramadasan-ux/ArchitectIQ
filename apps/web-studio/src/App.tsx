@@ -22,6 +22,7 @@ import KnowledgeStudio from './KnowledgeStudio'
 import TestStudio from './TestStudio'
 import DeploymentReleasesStudio from './DeploymentReleasesStudio'
 import GuideModal from './GuideModal'
+import FooterInfoModal, { type FooterModalTab } from './FooterInfoModal'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Activity,
@@ -59,7 +60,6 @@ import {
   LayoutDashboard,
   ListTodo,
   LockKeyhole,
-  Menu,
   MoreHorizontal,
   Network,
   PackageCheck,
@@ -302,6 +302,7 @@ function App(){
  const [currentUserRole, setCurrentUserRole] = useState('Tenant Admin');
  const [envModalOpen, setEnvModalOpen] = useState(false);
  const [guideModalOpen, setGuideModalOpen] = useState(false);
+ const [footerModalTab, setFooterModalTab] = useState<FooterModalTab | null>(null);
  const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(
    new Set(['tenant-envs', '2-roles', '3-groups', '4-sso', '5-users', '6-integrations'])
  );
@@ -654,9 +655,7 @@ function App(){
     <div className="nextgen-main-column">
      <header className="nextgen-topbar">
       <div className="topbar-left-cluster">
-       <button className="topbar-icon-action mobile-menu" aria-label="Open navigation" onClick={() => setMobile(true)}>
-        <Menu size={18} />
-       </button>
+
 
        {/* 1. Unified Customer Organization & Tenant Selector Pill */}
        <div className="topbar-hierarchy-pill" title="Customer Organization and Active Tenant">
@@ -1142,9 +1141,20 @@ function App(){
        </>
       )}
      </main>
-     <footer className="footer">
-      <span>ArchitectIQ · Enterprise AI &amp; Automation Studio</span>
-      <span>Tenant-scoped workspace · Live Telemetry</span>
+     <footer className="nextgen-footer">
+      <div className="footer-left">
+       <img src={brandShield} alt="ArchitectIQ" className="footer-logo-img" />
+       <strong className="footer-tool-name">ArchitectIQ</strong>
+       <span className="footer-sep">|</span>
+       <span className="footer-copyright">© 2026 Ratheesh Technology Ltd. All rights reserved.</span>
+      </div>
+      <div className="footer-right">
+       <button className="footer-nav-link" onClick={() => setFooterModalTab('about')}>About</button>
+       <span className="footer-dot">•</span>
+       <button className="footer-nav-link" onClick={() => setFooterModalTab('roadmap')}>Roadmap</button>
+       <span className="footer-dot">•</span>
+       <button className="footer-nav-link" onClick={() => setFooterModalTab('contact')}>Contact</button>
+      </div>
      </footer>
     </div>
    </div>
@@ -1214,6 +1224,13 @@ function App(){
    <GuideModal
     isOpen={guideModalOpen}
     onClose={() => setGuideModalOpen(false)}
+   />
+
+   <FooterInfoModal
+    isOpen={footerModalTab !== null}
+    initialTab={footerModalTab || 'about'}
+    onClose={() => setFooterModalTab(null)}
+    brandShield={brandShield}
    />
   </div>
  )

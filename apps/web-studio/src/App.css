@@ -1701,7 +1701,7 @@ button.topbar-tenant-pill:hover {
 .dashboard-page-shell {
   flex: 1;
   min-height: 0;
-  margin: 10px 12px 12px 12px;
+  margin: 8px 12px 6px 12px;
   border-radius: 0.85rem;
   border: 1px solid var(--border);
   background: var(--card);
@@ -1731,6 +1731,96 @@ button.topbar-tenant-pill:hover {
 
 .dashboard-page-shell::-webkit-scrollbar-thumb:hover {
   background: rgba(140, 140, 160, 0.6);
+}
+
+/* ==========================================================================
+   NEXT GEN FOOTER BAR (Flush base, Informational & Navigation)
+   ========================================================================== */
+
+.nextgen-footer {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  font-size: 0.73rem;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  z-index: 50;
+  box-sizing: border-box;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-logo-img {
+  width: 15px;
+  height: 17px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+}
+
+.footer-tool-name {
+  font-weight: 800;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+
+.footer-sep {
+  opacity: 0.35;
+  font-size: 0.75rem;
+}
+
+.footer-copyright {
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-nav-link {
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  font-size: 0.73rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.footer-nav-link:hover {
+  color: var(--foreground);
+  background: rgba(186, 151, 49, 0.12);
+}
+
+.footer-dot {
+  opacity: 0.4;
+  font-size: 0.6rem;
+}
+
+.app-root:not(.dark) .nextgen-footer {
+  background: rgba(255, 255, 255, var(--panel-opacity, 0.72)) !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+.app-root.dark .nextgen-footer {
+  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
+  border-top: 1px solid var(--border) !important;
 }
 
 /* ==========================================================================
