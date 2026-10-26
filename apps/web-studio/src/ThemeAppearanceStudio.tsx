@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import {
   Palette,
   Check,
@@ -230,32 +230,6 @@ export default function ThemeAppearanceStudio({
   const [labBorder, setLabBorder] = useState('')
   const [labActive, setLabActive] = useState(false)
   const [activeLabField, setActiveLabField] = useState<string>('primary')
-  const [contentScale, setContentScale] = useState(1)
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const recalculateScale = () => {
-      if (!viewportRef.current || !contentRef.current) return
-      const availableHeight = viewportRef.current.clientHeight
-      const contentHeight = contentRef.current.scrollHeight
-      if (availableHeight <= 0 || contentHeight <= 0) return
-      const nextScale = Math.min(1, Math.max(0.85, availableHeight / contentHeight))
-      setContentScale(nextScale)
-    }
-    recalculateScale()
-    window.addEventListener('resize', recalculateScale)
-    let ro: ResizeObserver | null = null
-    if (typeof ResizeObserver !== 'undefined' && viewportRef.current) {
-      ro = new ResizeObserver(() => recalculateScale())
-      ro.observe(viewportRef.current)
-      if (contentRef.current) ro.observe(contentRef.current)
-    }
-    return () => {
-      window.removeEventListener('resize', recalculateScale)
-      ro?.disconnect()
-    }
-  }, [config.activeTheme, config.activeFont, config.activeIconSet, config.activeTextSize, config.panelOpacity])
 
   const handleSelectTheme = (themeName: ThemeName) => {
     setLabActive(false)
@@ -377,16 +351,8 @@ export default function ThemeAppearanceStudio({
 
 
   return (
-    <div ref={viewportRef} className="nextgen-appearance-viewport" style={{ width: '100%', height: '100%', overflowY: 'auto' }}>
-      <div
-        ref={contentRef}
-        className="nextgen-appearance-page"
-        style={{
-          transform: `scale(${contentScale})`,
-          transformOrigin: 'top center',
-          width: `${100 / contentScale}%`,
-        }}
-      >
+    <div className="nextgen-appearance-viewport">
+      <div className="nextgen-appearance-page">
       {/* ─── Header ─── */}
       <div className="appearance-top-header">
         <div className="header-branding">

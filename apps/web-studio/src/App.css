@@ -740,16 +740,17 @@ html {
 .nav-group-section {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   width: 100%;
 }
 
+/* 1. Top Level — Bold, uppercase, prominent category headers */
 .nav-group-header-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  padding: 4px 6px;
+  padding: 6px 8px;
   border-radius: 6px;
   border: 0;
   background: transparent;
@@ -757,28 +758,30 @@ html {
   text-align: left;
   user-select: none;
   transition: all 0.15s ease;
+  margin-top: 6px;
+  margin-bottom: 2px;
 }
 
 .nav-group-header-btn:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: color-mix(in srgb, var(--accent, #BA9731) 12%, transparent);
 }
 
 .nav-group-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--muted-foreground);
+  width: 15px;
+  height: 15px;
+  color: var(--accent, #BA9731);
   transition: transform 0.15s ease;
   flex-shrink: 0;
 }
 
 .nav-group-title-text {
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 800;
-  color: var(--muted-foreground);
-  letter-spacing: 0.08em;
+  color: var(--foreground);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   flex: 1;
   white-space: nowrap;
@@ -786,8 +789,7 @@ html {
   text-overflow: ellipsis;
 }
 
-.nav-group-header-btn:hover .nav-group-title-text,
-.nav-group-header-btn:hover .nav-group-chevron {
+.nav-group-header-btn:hover .nav-group-title-text {
   color: var(--foreground);
 }
 
@@ -800,90 +802,110 @@ html {
 }
 
 .nav-group-title {
-  font-size: 0.65rem;
+  font-size: 0.79rem;
   font-weight: 800;
-  color: var(--muted-foreground);
-  letter-spacing: 0.08em;
-  padding: 0 10px 4px;
+  color: var(--foreground);
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  text-transform: uppercase;
 }
 
 .nav-links-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .nav-subsection {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
+/* 2. Level 2 — Unbold, smaller font, indented sub-menus & items */
 .nav-subsection-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 5px 8px 5px 12px;
   border-radius: 6px;
   border: 0;
   background: transparent;
-  color: var(--foreground);
-  font-size: 0.76rem;
-  font-weight: 700;
+  color: color-mix(in srgb, var(--foreground) 75%, transparent);
+  font-size: 0.73rem;
+  font-weight: 450;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .nav-subsection-btn:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+
+.nav-subsection-btn.active-parent {
+  color: var(--foreground);
+  font-weight: 600;
 }
 
 .nav-subsection-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  opacity: 0.7;
+  width: 13px;
+  height: 13px;
+  opacity: 0.75;
   transition: transform 0.18s ease;
 }
 
+/* 3. Level 3 — Deepest drill-down, smaller font, fully unbold with hierarchy guide line */
 .nav-sublinks-container {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-left: 10px;
+  padding-left: 8px;
   margin-top: 2px;
-  border-left: 1px dashed var(--border);
-  margin-left: 10px;
+  border-left: 1.5px solid color-mix(in srgb, var(--border) 70%, transparent);
+  margin-left: 18px;
 }
 
 .nav-sublink-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  border-radius: 6px;
+  gap: 7px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 5px;
   border: 0;
   background: transparent;
   color: var(--muted-foreground);
-  font-size: 0.74rem;
-  font-weight: 600;
+  font-size: 0.67rem;
+  font-weight: 400;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
   width: 100%;
+  white-space: nowrap;
+}
+
+.nav-sublink-item svg {
+  width: 13px;
+  height: 13px;
+  opacity: 0.65;
+  flex-shrink: 0;
 }
 
 .nav-sublink-item:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
   color: var(--foreground);
 }
 
 .nav-sublink-item.active {
-  background: rgba(186, 151, 49, 0.15);
+  background: color-mix(in srgb, var(--accent, #BA9731) 16%, transparent);
   color: var(--foreground);
-  font-weight: 700;
+  font-weight: 600;
+  border-left: 2px solid var(--accent, #BA9731);
+  border-radius: 0 5px 5px 0;
 }
 
 .nav-sublink-item .nav-active-dot {
@@ -908,29 +930,50 @@ button.topbar-tenant-pill:hover {
 .nextgen-nav-item {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 8px 11px;
-  border-radius: 8px;
+  gap: 9px;
+  padding: 5px 8px 5px 12px;
+  border-radius: 6px;
   border: 0;
   background: transparent;
-  color: var(--muted-foreground);
-  font-size: 0.8rem;
-  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 75%, transparent);
+  font-size: 0.73rem;
+  font-weight: 450;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
   width: 100%;
+  white-space: nowrap;
+}
+
+.nextgen-nav-item svg {
+  width: 15px;
+  height: 15px;
+  opacity: 0.75;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 
 .nextgen-nav-item:hover {
-  background: rgba(128, 128, 128, 0.08);
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
   color: var(--foreground);
 }
 
+.nextgen-nav-item:hover svg {
+  opacity: 1;
+  color: var(--accent, #BA9731);
+}
+
 .nextgen-nav-item.active {
-  background: rgba(186, 151, 49, 0.15);
+  background: color-mix(in srgb, var(--accent, #BA9731) 18%, transparent);
   color: var(--foreground);
-  font-weight: 700;
+  font-weight: 600;
+  border-left: 2.5px solid var(--accent, #BA9731);
+  border-radius: 0 6px 6px 0;
+}
+
+.nextgen-nav-item.active svg {
+  color: var(--accent, #BA9731);
+  opacity: 1;
 }
 
 .nextgen-nav-item .nav-active-dot {
@@ -1056,9 +1099,9 @@ button.topbar-tenant-pill:hover {
 .nextgen-sidebar .selector-tag,
 .nextgen-sidebar .nav-group-title,
 .nextgen-sidebar .nav-group-title-text {
-  color: var(--muted-foreground) !important;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  color: var(--foreground) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
 }
 
 .nextgen-sidebar .selector-pill {
@@ -1080,8 +1123,8 @@ button.topbar-tenant-pill:hover {
 }
 
 .nextgen-sidebar .nextgen-nav-item {
-  color: var(--muted-foreground) !important;
-  font-weight: 600;
+  color: color-mix(in srgb, var(--foreground) 75%, transparent) !important;
+  font-weight: 450 !important;
 }
 
 .nextgen-sidebar .nextgen-nav-item svg {
@@ -1099,10 +1142,10 @@ button.topbar-tenant-pill:hover {
 }
 
 .nextgen-sidebar .nextgen-nav-item.active {
-  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  background: color-mix(in srgb, var(--accent) 18%, transparent) !important;
   color: var(--foreground) !important;
-  font-weight: 700;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent) !important;
+  font-weight: 600 !important;
+  border-left: 2.5px solid var(--accent) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
 }
 
@@ -1111,11 +1154,13 @@ button.topbar-tenant-pill:hover {
 }
 
 .nextgen-sidebar .nav-subsection-btn {
-  color: var(--foreground) !important;
+  color: color-mix(in srgb, var(--foreground) 75%, transparent) !important;
+  font-weight: 450 !important;
 }
 
 .nextgen-sidebar .nav-sublink-item {
   color: var(--muted-foreground) !important;
+  font-weight: 400 !important;
 }
 
 .nextgen-sidebar .nav-sublink-item:hover {
@@ -1124,9 +1169,9 @@ button.topbar-tenant-pill:hover {
 }
 
 .nextgen-sidebar .nav-sublink-item.active {
-  background: color-mix(in srgb, var(--accent) 20%, transparent) !important;
+  background: color-mix(in srgb, var(--accent) 16%, transparent) !important;
   color: var(--foreground) !important;
-  font-weight: 700;
+  font-weight: 600 !important;
   border-left: 2px solid var(--accent) !important;
 }
 
@@ -1659,11 +1704,22 @@ button.topbar-tenant-pill:hover {
    APPEARANCE STUDIO (Exact 1:1 Presentation)
    ========================================================================== */
 
+.nextgen-appearance-viewport {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden !important;
+  box-sizing: border-box;
+}
+
 .nextgen-appearance-page {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding-bottom: 24px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Header */
