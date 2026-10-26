@@ -192,14 +192,25 @@ function App(){
   return () => window.removeEventListener('keydown', f)
  }, [])
 
+ const hasWallpaper = Boolean(themeConfig.activeBackground)
  const rootStyle = {
   '--panel-opacity': themeConfig.panelOpacity,
   fontFamily: fontFamilies[themeConfig.activeFont] || "'Plus Jakarta Sans', sans-serif",
   fontSize: textSizeScales[themeConfig.activeTextSize] || '0.92rem',
+  '--wallpaper-url': themeConfig.activeBackground ? `url('${themeConfig.activeBackground}')` : 'none',
   backgroundImage: themeConfig.activeBackground ? `url('${themeConfig.activeBackground}')` : undefined,
   backgroundSize: 'cover',
   backgroundPosition: 'center',
   backgroundAttachment: 'fixed',
+  ...(themeConfig.primaryColor ? { '--primary': themeConfig.primaryColor } : {}),
+  ...(themeConfig.primaryFg ? { '--primary-foreground': themeConfig.primaryFg } : {}),
+  ...(themeConfig.accentColor ? { '--accent': themeConfig.accentColor } : {}),
+  ...(themeConfig.accentFg ? { '--accent-foreground': themeConfig.accentFg } : {}),
+  ...(themeConfig.backgroundColor ? { '--background': themeConfig.backgroundColor } : {}),
+  ...(themeConfig.foregroundColor ? { '--foreground': themeConfig.foregroundColor } : {}),
+  ...(themeConfig.cardColor ? { '--card': themeConfig.cardColor } : {}),
+  ...(themeConfig.cardFg ? { '--card-foreground': themeConfig.cardFg } : {}),
+  ...(themeConfig.borderColor ? { '--border': themeConfig.borderColor } : {}),
  } as React.CSSProperties
 
  const isDarkTheme = dark || ['Obsidian Glass', 'Aurora Glass', 'Smoky Quartz', 'Midnight Glass'].includes(themeConfig.activeTheme) || !!themeConfig.activeBackground
@@ -209,7 +220,7 @@ function App(){
  if (restoring) return <main style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--background)', color: 'var(--foreground)' }}>Restoring secure session…</main>
  if (!token) {
   return (
-   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
+   <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} ${hasWallpaper ? 'has-wallpaper' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
     {themeConfig.activeBackground && (
      <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
     )}
@@ -245,7 +256,7 @@ function App(){
  const hasRuns = liveThroughput > 0
 
  return (
-  <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
+  <div className={`app-root ${themeClass} ${isGlass ? 'glass-mode' : ''} ${dark ? 'dark' : ''} ${hasWallpaper ? 'has-wallpaper' : ''} icon-set-${themeConfig.activeIconSet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} style={rootStyle}>
    {themeConfig.activeBackground && (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)', pointerEvents: 'none', zIndex: 1 }} />
    )}

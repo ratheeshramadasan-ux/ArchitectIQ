@@ -84,7 +84,14 @@ export interface ThemeConfig {
   panelOpacity: number
   activeBackground: string | null
   primaryColor?: string
+  primaryFg?: string
   accentColor?: string
+  accentFg?: string
+  backgroundColor?: string
+  foregroundColor?: string
+  cardColor?: string
+  cardFg?: string
+  borderColor?: string
 }
 
 export const themes: { name: ThemeName; colors: string[]; desc: string; category: 'light' | 'dark' | 'glass' }[] = [
@@ -214,6 +221,28 @@ export default function ThemeAppearanceStudio({
   const darkThemes = themes.filter((t) => t.category === 'dark')
   const glassThemes = themes.filter((t) => t.category === 'glass')
 
+  const getThemePalette = (theme: ThemeName) => {
+    const base = themes.find((t) => t.name === theme)?.colors || ['#3B82F6', '#6366F1', '#8B5CF6']
+    switch (theme) {
+      case 'Sand Serenity':
+        return ['#714329', '#E5D8C9', '#B08463', '#5A3521', '#F5F5F5', '#2A1F12']
+      case 'Ink Wash':
+        return ['#252525', '#F8F9FA', '#7D7D7D', '#E0E0E0', '#000000', '#FFFFFF']
+      case 'Midnight Aurora':
+        return ['#14B8A6', '#020617', '#F43F5E', '#10B981', '#1E1B4B', '#0D9488']
+      case 'Arctic Reflection':
+        return ['#5289AD', '#F4FCFB', '#243C4C', '#BEE3F8', '#2C5282', '#EBF8FF']
+      case 'Next Gen Ultra':
+        return ['#00D1FF', '#050505', '#A855F7', '#38BDF8', '#7C3AED', '#1E1E1E']
+      case 'Champagne Glass':
+        return ['#0D0D0D', '#F2F2F2', '#FEFEFE', '#BA9731', '#DACE84']
+      default:
+        return Array.from(new Set([...base, '#0F172A', '#1E293B', '#334155', '#F1F5F9', '#FFFFFF']))
+    }
+  }
+
+  const currentPalette = getThemePalette(config.activeTheme)
+
   const handlePaletteClick = (color: string) => {
     setLabActive(true)
     switch (activeLabField) {
@@ -223,6 +252,7 @@ export default function ThemeAppearanceStudio({
         break
       case 'primaryFg':
         setLabPrimaryFg(color)
+        onChange({ primaryFg: color })
         break
       case 'accent':
         setLabAccent(color)
@@ -230,21 +260,27 @@ export default function ThemeAppearanceStudio({
         break
       case 'accentFg':
         setLabAccentFg(color)
+        onChange({ accentFg: color })
         break
       case 'bg':
         setLabBg(color)
+        onChange({ backgroundColor: color })
         break
       case 'fg':
         setLabFg(color)
+        onChange({ foregroundColor: color })
         break
       case 'card':
         setLabCard(color)
+        onChange({ cardColor: color })
         break
       case 'cardFg':
         setLabCardFg(color)
+        onChange({ cardFg: color })
         break
       case 'border':
         setLabBorder(color)
+        onChange({ borderColor: color })
         break
     }
   }
@@ -261,10 +297,19 @@ export default function ThemeAppearanceStudio({
     setLabCardFg('')
     setLabBorder('')
     setActiveLabField('primary')
-    onChange({ primaryColor: undefined, accentColor: undefined })
+    onChange({
+      primaryColor: undefined,
+      primaryFg: undefined,
+      accentColor: undefined,
+      accentFg: undefined,
+      backgroundColor: undefined,
+      foregroundColor: undefined,
+      cardColor: undefined,
+      cardFg: undefined,
+      borderColor: undefined,
+    })
   }
 
-  const currentTheme = themes.find((t) => t.name === config.activeTheme) || themes[themes.length - 1]
 
   return (
     <div className="nextgen-appearance-page">
@@ -447,7 +492,17 @@ export default function ThemeAppearanceStudio({
                     setLabCard('#12121A')
                     setLabCardFg('#A0A0B0')
                     setLabBorder('#222233')
-                    onChange({ primaryColor: '#6366F1', accentColor: '#F43F5E' })
+                    onChange({
+                      primaryColor: '#6366F1',
+                      primaryFg: '#FFFFFF',
+                      accentColor: '#F43F5E',
+                      accentFg: '#FFFFFF',
+                      backgroundColor: '#05050A',
+                      foregroundColor: '#E8E8F0',
+                      cardColor: '#12121A',
+                      cardFg: '#A0A0B0',
+                      borderColor: '#222233',
+                    })
                   }}
                   className="lab-preset-btn preset-indigo"
                 >
@@ -465,7 +520,17 @@ export default function ThemeAppearanceStudio({
                     setLabCard('#FFFFFF')
                     setLabCardFg('#404040')
                     setLabBorder('#E7E7E7')
-                    onChange({ primaryColor: '#FF634A', accentColor: '#D2D2D4' })
+                    onChange({
+                      primaryColor: '#FF634A',
+                      primaryFg: '#FFFFFF',
+                      accentColor: '#D2D2D4',
+                      accentFg: '#1A1A1A',
+                      backgroundColor: '#FAF9F6',
+                      foregroundColor: '#1A1A1A',
+                      cardColor: '#FFFFFF',
+                      cardFg: '#404040',
+                      borderColor: '#E7E7E7',
+                    })
                   }}
                   className="lab-preset-btn preset-rose"
                 >
@@ -503,6 +568,7 @@ export default function ThemeAppearanceStudio({
                         onChange={(v) => {
                           setLabActive(true)
                           setLabPrimaryFg(v)
+                          onChange({ primaryFg: v })
                         }}
                       />
                     </div>
@@ -534,6 +600,7 @@ export default function ThemeAppearanceStudio({
                         onChange={(v) => {
                           setLabActive(true)
                           setLabAccentFg(v)
+                          onChange({ accentFg: v })
                         }}
                       />
                     </div>
@@ -554,6 +621,7 @@ export default function ThemeAppearanceStudio({
                         onChange={(v) => {
                           setLabActive(true)
                           setLabBg(v)
+                          onChange({ backgroundColor: v })
                         }}
                       />
                       <ColorInput
@@ -564,6 +632,7 @@ export default function ThemeAppearanceStudio({
                         onChange={(v) => {
                           setLabActive(true)
                           setLabFg(v)
+                          onChange({ foregroundColor: v })
                         }}
                       />
                     </div>
@@ -584,6 +653,7 @@ export default function ThemeAppearanceStudio({
                         onChange={(v) => {
                           setLabActive(true)
                           setLabCard(v)
+                          onChange({ cardColor: v })
                         }}
                       />
                       <ColorInput
@@ -594,6 +664,7 @@ export default function ThemeAppearanceStudio({
                         onChange={(v) => {
                           setLabActive(true)
                           setLabCardFg(v)
+                          onChange({ cardFg: v })
                         }}
                       />
                     </div>
@@ -608,12 +679,13 @@ export default function ThemeAppearanceStudio({
                       <span className="p-map">mapping to: {activeLabField || 'none'}</span>
                     </div>
                     <div className="palette-bubbles">
-                      {currentTheme.colors.map((c, idx) => (
+                      {currentPalette.map((c, idx) => (
                         <button
                           key={`${c}-${idx}`}
                           onClick={() => handlePaletteClick(c)}
                           className="swatch-bubble-btn"
                           style={{ backgroundColor: c }}
+                          title={`Apply ${c} to ${activeLabField}`}
                         />
                       ))}
                     </div>
@@ -627,6 +699,7 @@ export default function ThemeAppearanceStudio({
                       onChange={(v) => {
                         setLabActive(true)
                         setLabBorder(v)
+                        onChange({ borderColor: v })
                       }}
                     />
                   </div>

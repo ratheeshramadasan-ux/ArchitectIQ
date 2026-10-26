@@ -412,20 +412,28 @@
 .glass-mode.theme-frosted-glass {
   background: linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%) !important;
 }
-.glass-mode.theme-obsidian-glass {
-  background: linear-gradient(135deg, #090979 0%, #00d4ff 100%) !important;
+.glass-mode.theme-obsidian-glass:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #090979 0%, #00d4ff 100%);
 }
-.glass-mode.theme-silk-glass {
-  background: linear-gradient(135deg, #FAF9F6 0%, #DED9D5 100%) !important;
+.glass-mode.theme-silk-glass:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #FAF9F6 0%, #DED9D5 100%);
 }
-.glass-mode.theme-horizon-glass {
-  background: linear-gradient(135deg, #8BC6EC 0%, #9599E2 100%) !important;
+.glass-mode.theme-horizon-glass:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #8BC6EC 0%, #9599E2 100%);
 }
-.glass-mode.theme-lavender-mist {
-  background: linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%) !important;
+.glass-mode.theme-lavender-mist:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #EDE9FE 0%, #DDD6FE 100%);
 }
-.glass-mode.theme-champagne-glass {
-  background: linear-gradient(135deg, #FEFEFE 0%, #DACE84 55%, #BA9731 100%) !important;
+.glass-mode.theme-champagne-glass:not(.has-wallpaper) {
+  background: linear-gradient(135deg, #FEFEFE 0%, #DACE84 55%, #BA9731 100%);
+}
+
+.app-root.has-wallpaper {
+  background-image: var(--wallpaper-url) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
 }
 
 /* Noise overlay */
