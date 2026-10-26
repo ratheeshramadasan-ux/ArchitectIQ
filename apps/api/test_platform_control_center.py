@@ -49,7 +49,7 @@ def platform_env():
         )
         conn.execute(
             text(
-                "DELETE FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global') OR (organization_id = '9a1c6757-4268-42ab-9f98-38441eab424c' AND slug NOT IN ('citibank', 'citibank-sandbox'))"
+                "DELETE FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global') OR (organization_id = '9a1c6757-4268-42ab-9f98-38441eab424c' AND slug NOT IN ('citibank'))"
             )
         )
         conn.execute(

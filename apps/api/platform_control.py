@@ -180,6 +180,14 @@ class FeatureFlagToggleIn(BaseModel):
     is_enabled: bool
 
 
+class PlatformAuditEventIn(BaseModel):
+    action: str
+    target_type: str
+    target_id: str
+    outcome: str = "SUCCESS"
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 # ---------------------------------------------------------------------------
 # 1. Executive Fleet & Platform Dashboard Summary
 # ---------------------------------------------------------------------------
@@ -1168,6 +1176,26 @@ def query_platform_audit_trail(
             }
             for e in events
         ]
+
+
+@router.post("/audit-trail", status_code=status.HTTP_201_CREATED)
+def record_platform_audit_event(
+    payload: PlatformAuditEventIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        log_platform_audit(
+            db,
+            actor_id=identity.user_id,
+            actor_email=identity.email,
+            actor_role=identity.role,
+            action=payload.action,
+            target_type=payload.target_type,
+            target_id=payload.target_id,
+            outcome=payload.outcome,
+            details=payload.details,
+        )
+        return {"status": "recorded", "action": payload.action, "outcome": payload.outcome}
 
 
 # ---------------------------------------------------------------------------

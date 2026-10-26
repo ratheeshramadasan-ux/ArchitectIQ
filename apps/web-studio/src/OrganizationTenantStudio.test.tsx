@@ -69,6 +69,7 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.getByRole('button', { name: /Repositories & Artifacts/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /Compute & Capacity/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /Licensing & Usage/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Audit & Logs/i })).toBeDefined()
 
     fireEvent.click(screen.getByRole('button', { name: /Environments/i }))
     expect(onNavigateMock).toHaveBeenCalledWith('Environments')
@@ -96,6 +97,11 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     fireEvent.click(screen.getByRole('button', { name: /Licensing & Usage/i }))
     expect(screen.getByText(/Subscription Entitlements & Licensing/i)).toBeDefined()
     expect(screen.getByText(/Tenant Fleet Quota/i)).toBeDefined()
+
+    // Click Audit & Logs
+    fireEvent.click(screen.getByRole('button', { name: /Audit & Logs/i }))
+    expect(screen.getByText(/Platform & Module Audit Logs/i)).toBeDefined()
+    expect(screen.getByText(/Total Audit Events/i)).toBeDefined()
   })
 
   it('renders Hero Banner with 4 KPI metrics and architectural tree illustration', async () => {

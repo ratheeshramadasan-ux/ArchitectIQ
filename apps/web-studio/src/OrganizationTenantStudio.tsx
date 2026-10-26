@@ -23,6 +23,9 @@ import {
   Trash2,
   Shield,
   Network,
+  ScrollText,
+  Clock,
+  Download,
 } from 'lucide-react'
 import AccessDirectoryStudio from './AccessDirectoryStudio'
 import IamRolesStudio from './IamRolesStudio'
@@ -53,6 +56,7 @@ export type DomainTabId =
   | 'repositories'
   | 'compute'
   | 'licensing'
+  | 'audit_logs'
 
 interface OrganizationTenantStudioProps {
   token: string
@@ -83,6 +87,7 @@ export default function OrganizationTenantStudio({
     if (lower.includes('repo') || lower.includes('artifact')) return 'repositories'
     if (lower.includes('compute') || lower.includes('capacity')) return 'compute'
     if (lower.includes('license') || lower.includes('licensing') || lower.includes('usage')) return 'licensing'
+    if (lower.includes('audit') || lower.includes('log')) return 'audit_logs'
     return 'org_tenant'
   }
 
@@ -134,11 +139,56 @@ export default function OrganizationTenantStudio({
     active_projects: number
     policy_compliance_pct: number
   }>({
-    total_tenants: 2,
+    total_tenants: 1,
     total_users: 48,
     active_projects: 12,
     policy_compliance_pct: 100,
   })
+
+  // Audit Logs State
+  const [auditLogs, setAuditLogs] = useState<any[]>([])
+  const [loadingAudit, setLoadingAudit] = useState(false)
+  const [auditOutcomeFilter, setAuditOutcomeFilter] = useState<'ALL' | 'SUCCESS' | 'FAILED' | 'DENIED'>('ALL')
+  const [auditSearchQuery, setAuditSearchQuery] = useState('')
+  const [selectedAuditLog, setSelectedAuditLog] = useState<any | null>(null)
+
+  const loadAuditLogs = () => {
+    setLoadingAudit(true)
+    fetch('/api/v1/platform/audit-trail', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAuditLogs(data)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingAudit(false))
+  }
+
+  const recordAuditEvent = async (action: string, target_type: string, target_id: string, details: any = {}) => {
+    try {
+      await fetch('/api/v1/platform/audit-trail', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action,
+          target_type,
+          target_id,
+          outcome: 'SUCCESS',
+          details,
+        }),
+      })
+      loadAuditLogs()
+    } catch (err) {
+      console.error('Failed to record audit event:', err)
+    }
+  }
+
 
   // Folder Strategy Selection
   const [selectedStrategy, setSelectedStrategy] = useState<'projects_contain_envs' | 'envs_contain_folders'>('projects_contain_envs')
@@ -198,7 +248,9 @@ export default function OrganizationTenantStudio({
       .then(data => {
         if (cancelled) return
         if (Array.isArray(data) && data.length > 0) {
-          const mapped: TenantRecord[] = data.map((t: any, idx: number) => {
+          const mapped: TenantRecord[] = data
+            .filter((t: any) => !t.name?.toLowerCase().includes('sandbox') && !t.slug?.toLowerCase().includes('sandbox'))
+            .map((t: any, idx: number) => {
             const hasProd = t.environments?.some((e: any) => e.name === 'PROD' && e.is_enabled)
             const isSandbox = t.name.toLowerCase().includes('sandbox') || t.slug?.toLowerCase().includes('sandbox')
             const envType: TenantRecord['environment'] = isSandbox ? 'Sandbox' : hasProd ? 'Production' : 'Development'
@@ -290,7 +342,7 @@ export default function OrganizationTenantStudio({
   }, [tenantsList, searchQuery, selectedEnvFilter])
 
   // Aggregate Metrics strictly from real data
-  const totalTenantsCount = overviewMetrics.total_tenants || tenantsList.length || 2
+  const totalTenantsCount = overviewMetrics.total_tenants || tenantsList.length || 1
   const totalUsersCount = overviewMetrics.total_users || tenantsList.reduce((acc, t) => acc + t.users_count, 0) || 48
   const totalProjectsCount = overviewMetrics.active_projects || tenantsList.reduce((acc, t) => acc + Math.max(1, Math.floor(t.folders_count / 2)), 0) || 12
 
@@ -370,6 +422,12 @@ export default function OrganizationTenantStudio({
       localStorage.setItem('architectiq.active_org', JSON.stringify(orgDetails))
       window.dispatchEvent(new CustomEvent('architectiq:org_updated', { detail: orgDetails }))
     } catch {}
+    recordAuditEvent('ORGANIZATION_UPDATED', 'ORGANIZATION', orgDetails.id || orgDetails.slug, {
+      name: orgDetails.name,
+      tier: orgDetails.tier,
+      region: orgDetails.region,
+      contact_email: orgDetails.contact_email,
+    })
     setTimeout(() => setOrgSavedMsg(false), 3000)
   }
 
@@ -443,6 +501,7 @@ export default function OrganizationTenantStudio({
     { id: 'repositories', label: 'Repositories & Artifacts', icon: FolderTree, target: 'Repositories & Artifacts' },
     { id: 'compute', label: 'Compute & Capacity', icon: Boxes, target: 'Compute & Capacity' },
     { id: 'licensing', label: 'Licensing & Usage', icon: CreditCard, target: 'Licensing & Usage' },
+    { id: 'audit_logs', label: 'Audit & Logs', icon: ScrollText, target: 'Audit & Logs' },
   ]
 
   return (
@@ -941,6 +1000,8 @@ export default function OrganizationTenantStudio({
               gap: 14,
               width: '100%',
               boxSizing: 'border-box',
+              flex: 1,
+              minHeight: 'calc(100vh - 430px)',
             }}
           >
             {/* Sub-Tabs and Search/Filter/Create Toolbar */}
@@ -1993,6 +2054,391 @@ export default function OrganizationTenantStudio({
                   <div style={{ width: '14%', height: '100%', background: '#10b981' }} />
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW 10: Audit & Logs (Immutable Audit Trail for Administration Events)    */}
+      {/* ========================================================================= */}
+      {activeDomainTab === 'audit_logs' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, flex: 1 }}>
+          <div
+            style={{
+              padding: 22,
+              borderRadius: 16,
+              background: 'color-mix(in srgb, var(--card, #1e293b) 85%, transparent)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
+              flex: 1,
+              minHeight: 'calc(100vh - 280px)',
+            }}
+          >
+            {/* Header & Controls */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                  Platform & Module Audit Logs
+                </h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                  Immutable audit trail capturing all configuration, tenant fleet, security, and administrative events for {orgDetails.name}.
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  onClick={loadAuditLogs}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                    color: 'var(--foreground)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <RefreshCw size={14} className={loadingAudit ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+
+                <button
+                  onClick={() => {
+                    const csvRows = [
+                      ['Timestamp', 'Actor', 'Action', 'Target Type', 'Target ID', 'Outcome', 'IP Address'],
+                      ...auditLogs.map(l => [
+                        l.created_at,
+                        l.actor_email,
+                        l.action,
+                        l.target_type,
+                        l.target_id,
+                        l.outcome,
+                        l.ip_address,
+                      ]),
+                    ]
+                    const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.map(e => e.join(',')).join('\n')
+                    const encodedUri = encodeURI(csvContent)
+                    const link = document.createElement('a')
+                    link.setAttribute('href', encodedUri)
+                    link.setAttribute('download', `audit_logs_${new Date().toISOString().slice(0, 10)}.csv`)
+                    document.body.appendChild(link)
+                    link.click()
+                    document.body.removeChild(link)
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '7px 14px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: 'var(--primary, #0284c7)',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  <Download size={14} />
+                  Export CSV
+                </button>
+              </div>
+            </div>
+
+            {/* Quick KPI Counters */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div style={{ padding: 14, borderRadius: 12, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>Total Audit Events</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--foreground)' }}>{auditLogs.length} Events</div>
+              </div>
+              <div style={{ padding: 14, borderRadius: 12, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>Successful Mutations</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>
+                  {auditLogs.filter(l => l.outcome === 'SUCCESS').length} Approved
+                </div>
+              </div>
+              <div style={{ padding: 14, borderRadius: 12, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>Security / Policy Denials</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#f59e0b' }}>
+                  {auditLogs.filter(l => l.outcome === 'DENIED' || l.outcome === 'FAILED').length} Blocked
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Toolbar */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: 'color-mix(in srgb, var(--foreground) 5%, transparent)',
+                  border: '1px solid var(--border)',
+                  flex: 1,
+                  minWidth: 220,
+                }}
+              >
+                <Search size={14} style={{ color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }} />
+                <input
+                  type="text"
+                  placeholder="Filter by action, actor email, or target..."
+                  value={auditSearchQuery}
+                  onChange={e => setAuditSearchQuery(e.target.value)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    outline: 'none',
+                    color: 'var(--foreground)',
+                    fontSize: '0.82rem',
+                    width: '100%',
+                  }}
+                />
+              </div>
+
+              <select
+                value={auditOutcomeFilter}
+                onChange={e => setAuditOutcomeFilter(e.target.value as any)}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: 'color-mix(in srgb, var(--foreground) 5%, transparent)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--foreground)',
+                  fontSize: '0.8rem',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="ALL">All Outcomes</option>
+                <option value="SUCCESS">Outcome: SUCCESS</option>
+                <option value="FAILED">Outcome: FAILED</option>
+                <option value="DENIED">Outcome: DENIED</option>
+              </select>
+            </div>
+
+            {/* Audit Trail Table */}
+            <div style={{ flex: 1, overflowX: 'auto' }}>
+              {auditLogs.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                  No audit logs found. Perform actions in this module to record events.
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem' }}>TIMESTAMP</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem' }}>ACTOR</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem' }}>ACTION</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem' }}>TARGET</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem' }}>OUTCOME</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem' }}>IP ADDRESS</th>
+                      <th style={{ padding: '10px 12px', fontWeight: 700, fontSize: '0.72rem', textAlign: 'right' }}>DETAILS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs
+                      .filter(l => {
+                        if (auditOutcomeFilter !== 'ALL' && l.outcome !== auditOutcomeFilter) return false
+                        if (!auditSearchQuery) return true
+                        const q = auditSearchQuery.toLowerCase()
+                        return (
+                          l.action?.toLowerCase().includes(q) ||
+                          l.actor_email?.toLowerCase().includes(q) ||
+                          l.target_id?.toLowerCase().includes(q) ||
+                          l.target_type?.toLowerCase().includes(q)
+                        )
+                      })
+                      .map((log: any, idx: number) => {
+                        const isSuccess = log.outcome === 'SUCCESS'
+                        const isDenied = log.outcome === 'DENIED'
+                        const badgeColor = isSuccess ? '#10b981' : isDenied ? '#f59e0b' : '#ef4444'
+                        const badgeBg = isSuccess
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : isDenied
+                          ? 'rgba(245, 158, 11, 0.15)'
+                          : 'rgba(239, 68, 68, 0.15)'
+                        return (
+                          <tr
+                            key={log.id || idx}
+                            style={{
+                              borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
+                              transition: 'background 0.15s ease',
+                            }}
+                          >
+                            <td style={{ padding: '10px 12px', whiteSpace: 'nowrap', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Clock size={13} style={{ opacity: 0.6 }} />
+                                {new Date(log.created_at).toLocaleString('en-US', {
+                                  month: 'short',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                })}
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontWeight: 600, color: 'var(--foreground)' }}>{log.actor_email}</div>
+                              <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>{log.actor_role}</div>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '3px 8px',
+                                  borderRadius: 6,
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  background: 'color-mix(in srgb, var(--primary, #0284c7) 12%, transparent)',
+                                  color: 'var(--primary, #0284c7)',
+                                }}
+                              >
+                                {log.action}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px', color: 'var(--foreground)' }}>
+                              <span style={{ fontWeight: 600 }}>{log.target_type}:</span>{' '}
+                              <span style={{ fontSize: '0.74rem', opacity: 0.8 }}>{log.target_id}</span>
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              <span
+                                style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: 12,
+                                  fontSize: '0.72rem',
+                                  fontWeight: 700,
+                                  background: badgeBg,
+                                  color: badgeColor,
+                                }}
+                              >
+                                ● {log.outcome}
+                              </span>
+                            </td>
+                            <td style={{ padding: '10px 12px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', fontSize: '0.74rem' }}>
+                              {log.ip_address}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                              <button
+                                onClick={() => setSelectedAuditLog(log)}
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid var(--border)',
+                                  background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                                  color: 'var(--foreground)',
+                                  cursor: 'pointer',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                View Payload
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Audit Payload Viewer Modal */}
+      {selectedAuditLog && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 580,
+              borderRadius: 14,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              padding: 22,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ScrollText size={18} style={{ color: 'var(--primary, #0284c7)' }} />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                  Audit Event Details
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedAuditLog(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--foreground)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.8rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+              Action: <strong style={{ color: 'var(--foreground)' }}>{selectedAuditLog.action}</strong> | Target:{' '}
+              <strong style={{ color: 'var(--foreground)' }}>{selectedAuditLog.target_type}:{selectedAuditLog.target_id}</strong>
+            </div>
+
+            <pre
+              style={{
+                margin: 0,
+                padding: 14,
+                borderRadius: 8,
+                background: 'rgba(0,0,0,0.4)',
+                border: '1px solid var(--border)',
+                color: '#38bdf8',
+                fontSize: '0.78rem',
+                maxHeight: 280,
+                overflowY: 'auto',
+                fontFamily: 'monospace',
+              }}
+            >
+              {JSON.stringify(selectedAuditLog.details || {}, null, 2)}
+            </pre>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setSelectedAuditLog(null)}
+                style={{
+                  padding: '7px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: 'var(--primary, #0284c7)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.8rem',
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

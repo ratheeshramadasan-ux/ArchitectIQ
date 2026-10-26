@@ -606,7 +606,9 @@ function App(){
    active === 'Repositories & Artifacts' ||
    active === 'Repositories & APIs' ||
    active === 'Compute & Capacity' ||
-   active === 'Licensing & Usage'
+   active === 'Licensing & Usage' ||
+    active === 'Audit & Logs' ||
+    active === 'Audit & Log'
  const isTenantEnvs = !isAdministration && (active === 'Environment Settings' || active === 'Tenant Environments')
  const isExplorer = active === 'Projects'
  const isTenantAppsStudio = active === 'Applications' || active === 'General Settings' || active === 'App Studio'
