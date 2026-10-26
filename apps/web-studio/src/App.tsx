@@ -8,7 +8,6 @@ import DocumentStudio from './DocumentStudio'
 import ObservabilityConsole from './ObservabilityConsole'
 import GovernanceConsole from './GovernanceConsole'
 import ActivityAuditViewer from './ActivityAuditViewer'
-import AdminConsole from './AdminConsole'
 import LoginScreen from './LoginScreen'
 import ThemeAppearanceStudio from './ThemeAppearanceStudio'
 import type { ThemeConfig, FontName, TextSize } from './ThemeAppearanceStudio'
@@ -578,9 +577,24 @@ function App(){
  const isObservability = active === 'Observability Dashboard' || active === 'SLA & Performance' || active === 'Incidents & Alerts' || active === 'Support & Runbooks' || active === 'Analytics & Reports' || active === 'Monitoring' || active === 'Monitor & Analyse' || active === 'Observability Console'
  const isGovernance = active === 'Governance Console' || active === 'Security Policies & MFA' || active === 'Data Protection & PII' || active === 'AI Model Governance' || active === 'Compliance & Attestation' || active === 'Governance'
  const isAuditViewer = active === 'Activity Audit Logs' || active === 'Audit Logs'
- const isPlatformControlCenter = active === 'Platform Control Center' || active === 'Platform Overview & Health' || active === 'Infrastructure Inventory' || active === 'Platform Configuration & Flags' || active === 'Compute & Capacity' || active === 'Licensing & Usage' || active === 'Platform Administration'
+ const isPlatformControlCenter =
+   active === 'Platform Control Center' ||
+   active === 'Platform Overview & Health' ||
+   active === 'Infrastructure Inventory' ||
+   active === 'Platform Configuration & Flags' ||
+   active === 'Compute & Capacity' ||
+   active === 'Licensing & Usage' ||
+   active === 'Platform Administration' ||
+   active === 'Organization & Tenants' ||
+   active === 'Manage Organizations & Tenants' ||
+   active === 'Manage Organization and Tenant' ||
+   active === 'Manage Organization & Tenant' ||
+   active === 'Manage Organizations' ||
+   active === 'Tenants' ||
+   active === 'Manage Tenants' ||
+   active === 'Tenant Fleet'
  const isPlatformMgmt = false
- const isTenantMgmt = active === 'Tenants' || active === 'Manage Tenants' || active === 'Organization & Tenants'
+ const isTenantMgmt = false
  const studio = flatLinks.some(l => l.name === active)
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
@@ -1163,16 +1177,14 @@ function App(){
        <PlatformControlCenterStudio
         token={token}
         initialTab={
+          active === 'Organization & Tenants' || active === 'Manage Organizations' || active === 'Manage Organization and Tenant' || active === 'Manage Organization & Tenant' || active === 'Manage Organizations & Tenants' ? 'organizations' :
+          active === 'Tenants' || active === 'Manage Tenants' || active === 'Tenant Fleet' ? 'fleet' :
           active === 'Infrastructure Inventory' || active === 'Compute & Capacity' ? 'infrastructure' :
           active === 'Platform Configuration & Flags' ? 'diagnostics' :
           active === 'Licensing & Usage' ? 'subscriptions' :
           'dashboard'
         }
        />
-      )}
-
-      {(isPlatformMgmt || isTenantMgmt) && (
-       <AdminConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />
       )}
 
       {studio &&

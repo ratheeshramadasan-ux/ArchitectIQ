@@ -135,6 +135,10 @@ interface PlatformControlCenterProps {
 
 export default function PlatformControlCenterStudio({ token, initialTab = 'dashboard' }: PlatformControlCenterProps) {
   const [activeTab, setActiveTab] = useState<string>(initialTab)
+
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
