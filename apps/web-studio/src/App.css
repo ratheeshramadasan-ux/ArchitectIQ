@@ -1265,11 +1265,11 @@ button.topbar-tenant-pill:hover {
   gap: 0;
 }
 
-/* Topbar Header - Flushed Rectangular, No Round Corners, Attached to Menu Bar */
+/* Topbar Header - Flushed Rectangular, Compact Optimized Enterprise Header */
 .nextgen-topbar {
-  height: 52px;
-  min-height: 52px;
-  max-height: 52px;
+  height: 46px;
+  min-height: 46px;
+  max-height: 46px;
   border-radius: 0 !important;
   border: 0 !important;
   border-bottom: 1px solid var(--border) !important;
@@ -1279,8 +1279,8 @@ button.topbar-tenant-pill:hover {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
   display: flex;
   align-items: center;
-  padding: 0 16px;
-  gap: 10px;
+  padding: 0 14px;
+  gap: 8px;
   margin: 0 !important;
   flex-shrink: 0;
   position: sticky;
@@ -1299,19 +1299,19 @@ button.topbar-tenant-pill:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 10px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   background: var(--card);
   border: 1px solid var(--border);
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--foreground);
 }
 
 .topbar-org-name {
   color: var(--foreground);
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -1324,7 +1324,7 @@ button.topbar-tenant-pill:hover {
   background: transparent;
   border: none;
   color: var(--foreground);
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   outline: none;
@@ -1332,13 +1332,13 @@ button.topbar-tenant-pill:hover {
 }
 
 .topbar-add-tenant-btn {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 4px;
   border: 1px solid var(--border);
   background: rgba(128, 128, 128, 0.08);
   color: var(--foreground);
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 800;
   display: inline-flex;
   align-items: center;
@@ -1359,12 +1359,12 @@ button.topbar-tenant-pill:hover {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 10px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   background: var(--card);
   border: 1px solid var(--border);
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   cursor: pointer;
   color: var(--foreground);
   transition: all 0.15s ease;
@@ -1375,57 +1375,35 @@ button.topbar-tenant-pill:hover {
 }
 
 .topbar-tenant-pill .env-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .topbar-tenant-pill strong {
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.03em;
 }
 
 .topbar-tenant-pill .env-label {
-  font-size: 0.74rem;
+  font-size: 0.68rem;
   color: var(--muted-foreground);
-}
-
-.topbar-breadcrumb-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  font-size: 0.80rem;
-  color: var(--muted-foreground);
-}
-
-.topbar-breadcrumb-box strong {
-  color: var(--foreground);
-  font-weight: 700;
-}
-
-.topbar-breadcrumb-box .crumb-sep {
-  opacity: 0.35;
 }
 
 .topbar-search-btn {
-  height: 32px;
+  height: 28px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: 7px;
+  padding: 0 10px;
   border-radius: 6px;
   background: rgba(128, 128, 128, 0.06);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
   cursor: pointer;
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   width: 100%;
 }
 
@@ -1436,9 +1414,9 @@ button.topbar-tenant-pill:hover {
 
 .topbar-search-btn kbd {
   margin-left: auto;
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 800;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--card);
@@ -1451,47 +1429,72 @@ button.topbar-tenant-pill:hover {
   margin-left: auto;
 }
 
-.topbar-role-box {
+/* User Profile Stack — Pure Text (Name in Bold, Role unbold below Name) */
+.topbar-user-profile-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  line-height: 1.15;
+  padding: 0 4px;
+  gap: 1px;
+  user-select: none;
+}
+
+.topbar-user-name {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.topbar-user-role-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  font-size: 0.80rem;
+  gap: 3px;
 }
 
-.topbar-role-label {
-  font-size: 0.65rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: var(--accent, #BA9731);
-}
-
-.topbar-role-select {
+.topbar-user-role-select {
   background: transparent;
   border: none;
-  color: var(--foreground);
-  font-size: 0.80rem;
-  font-weight: 700;
+  color: var(--muted-foreground);
+  font-size: 0.65rem;
+  font-weight: 400;
   cursor: pointer;
   outline: none;
   padding: 0;
+  margin: 0;
+  transition: color 0.15s ease;
+}
+
+.topbar-user-role-select:hover {
+  color: var(--foreground);
+}
+
+.topbar-user-role-select option {
+  background: var(--card);
+  color: var(--card-foreground);
+  font-size: 0.75rem;
+}
+
+.role-dropdown-chevron {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .topbar-tool-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
+  gap: 5px;
+  height: 28px;
+  padding: 0 8px;
   border-radius: 6px;
   background: var(--card);
   border: 1px solid var(--border);
   color: var(--foreground);
-  font-size: 0.80rem;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1508,35 +1511,9 @@ button.topbar-tenant-pill:hover {
   border-color: var(--accent, #BA9731);
 }
 
-.topbar-identity-box {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  font-size: 0.80rem;
-}
-
-.topbar-identity-box .id-label {
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: var(--accent, #BA9731);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.topbar-identity-box .id-name {
-  font-size: 0.80rem;
-  font-weight: 700;
-  color: var(--foreground);
-}
-
 .topbar-icon-action {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--card);
@@ -1553,6 +1530,12 @@ button.topbar-tenant-pill:hover {
   color: var(--foreground);
 }
 
+.signout-icon-btn:hover {
+  background: rgba(239, 68, 68, 0.14) !important;
+  border-color: #EF4444 !important;
+  color: #EF4444 !important;
+}
+
 .tenant-badge-pill {
   padding: 3px 9px;
   border-radius: 6px;
@@ -1564,13 +1547,13 @@ button.topbar-tenant-pill:hover {
 }
 
 .signout-btn {
-  height: 32px;
-  padding: 0 12px;
+  height: 28px;
+  padding: 0 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted-foreground);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1586,14 +1569,14 @@ button.topbar-tenant-pill:hover {
 .dashboard-page-shell {
   flex: 1;
   min-height: 0;
-  margin: 8px 12px 6px 12px;
+  margin: 6px 12px 6px 12px;
   border-radius: 0.85rem;
   border: 1px solid var(--border);
   background: var(--card);
   backdrop-filter: blur(24px) saturate(1.8);
   -webkit-backdrop-filter: blur(24px) saturate(1.8);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
-  padding: 14px 16px;
+  padding: 14px 20px 14px 16px;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -1710,6 +1693,24 @@ button.topbar-tenant-pill:hover {
   overflow-y: auto;
   overflow-x: hidden !important;
   box-sizing: border-box;
+  padding-right: 18px;
+}
+
+.nextgen-appearance-viewport::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nextgen-appearance-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nextgen-appearance-viewport::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 160, 0.35);
+  border-radius: 4px;
+}
+
+.nextgen-appearance-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(140, 140, 160, 0.6);
 }
 
 .nextgen-appearance-page {
@@ -1717,6 +1718,7 @@ button.topbar-tenant-pill:hover {
   flex-direction: column;
   gap: 16px;
   padding-bottom: 24px;
+  padding-right: 6px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -1777,9 +1779,11 @@ button.topbar-tenant-pill:hover {
 /* 3-Column Grid */
 .appearance-main-grid {
   display: grid;
-  grid-template-columns: 1.25fr 0.92fr 0.88fr;
+  grid-template-columns: 1.22fr 0.94fr 0.84fr;
   gap: 16px;
   align-items: start;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (max-width: 1440px) {

@@ -60,6 +60,7 @@ import {
   LayoutDashboard,
   ListTodo,
   LockKeyhole,
+  LogOut,
   MoreHorizontal,
   Network,
   PackageCheck,
@@ -755,16 +756,6 @@ function App(){
         </span>
         <ChevronDown size={11} style={{ opacity: 0.6 }} />
        </button>
-
-       {/* 3. Folder Breadcrumb Hierarchy */}
-       <div className="topbar-breadcrumb-box" title="Active Workspace Folder Scope">
-        <FolderTree size={13} style={{ color: 'var(--accent, #BA9731)' }} />
-        <span>Workspace</span>
-        <span className="crumb-sep">/</span>
-        <span>Claims Automation</span>
-        <span className="crumb-sep">/</span>
-        <strong>{selected?.name || 'Dental Claims'}</strong>
-       </div>
       </div>
 
       <div style={{ flex: 1, maxWidth: 360, margin: '0 8px' }}>
@@ -776,25 +767,28 @@ function App(){
       </div>
 
       <div className="topbar-right-cluster">
-       {/* 4. Active Access Hierarchy Role Selector */}
-       <div className="topbar-role-box">
-        <span className="topbar-role-label">ROLE</span>
-        <select
-          aria-label="Active Identity and Role Tier"
-          className="topbar-role-select"
-          value={currentUserRole}
-          onChange={e => setCurrentUserRole(e.target.value)}
-        >
-          <option value="Tenant Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>👑 Tenant Admin</option>
-          <option value="Org Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Org Admin</option>
-          <option value="Tenant Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Tenant Admin</option>
-          <option value="Environment Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🟢 Env Admin ({currentEnv})</option>
-          <option value="AI Agent & Flow Architect" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🤖 Flow Architect</option>
-          <option value="Compliance Auditor" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🛡 Auditor</option>
-        </select>
+       {/* 3. User Identity & Role — Pure Text Visual (Name in Bold, Role unbold below User Name) */}
+       <div className="topbar-user-profile-stack" title={`Signed in as Enterprise Administrator (${currentUserRole})`}>
+        <span className="topbar-user-name">Enterprise Administrator</span>
+        <div className="topbar-user-role-wrap">
+          <select
+            aria-label="Active Identity and Role Tier"
+            className="topbar-user-role-select"
+            value={currentUserRole}
+            onChange={e => setCurrentUserRole(e.target.value)}
+          >
+            <option value="Tenant Admin">Tenant Admin</option>
+            <option value="Org Admin">Org Admin</option>
+            <option value="Tenant Specific Admin">Tenant Admin</option>
+            <option value="Environment Specific Admin">Env Admin ({currentEnv})</option>
+            <option value="AI Agent & Flow Architect">Flow Architect</option>
+            <option value="Compliance Auditor">Auditor</option>
+          </select>
+          <ChevronDown size={9} className="role-dropdown-chevron" />
+        </div>
        </div>
 
-       {/* 5. Guide Menu on Top Bar */}
+       {/* 4. Guide Menu on Top Bar */}
        <button
          className="topbar-tool-btn"
          onClick={() => setGuideModalOpen(true)}
@@ -804,7 +798,7 @@ function App(){
         <span>Guide</span>
        </button>
 
-       {/* 6. Theme / Appearance Button */}
+       {/* 5. Theme / Appearance Button */}
        <button
          className="topbar-tool-btn"
          onClick={() => navigate('Theme / Icons')}
@@ -815,11 +809,12 @@ function App(){
        </button>
 
        <button className="topbar-icon-action" aria-label="Notifications" onClick={() => setNotification(v => !v)}>
-        <Bell size={15} />
+        <Bell size={14} />
        </button>
 
-       <button className="signout-btn" onClick={logout}>
-        Sign out
+       {/* 6. Sign Out Icon Button */}
+       <button className="topbar-icon-action signout-icon-btn" aria-label="Sign out" title="Sign out" onClick={logout}>
+        <LogOut size={13} />
        </button>
       </div>
      </header>
