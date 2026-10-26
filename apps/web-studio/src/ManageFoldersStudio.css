@@ -76,7 +76,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.65rem;
@@ -120,7 +120,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.75rem;
@@ -132,7 +132,7 @@
 }
 
 .folders-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.6);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
   border-color: var(--foreground);
 }
 
@@ -184,6 +184,8 @@
   overflow: hidden;
   border-radius: 8px;
   padding: 10px;
+  background: color-mix(in srgb, var(--card) 75%, transparent);
+  border: 1px solid var(--border);
 }
 
 .pane-section-label {
@@ -208,7 +210,7 @@
   padding: 8px 10px;
   border-radius: 4px;
   text-align: left;
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   color: var(--foreground);
   font-size: 0.75rem;
@@ -218,13 +220,13 @@
 }
 
 .scope-option-btn:hover {
-  background: rgba(255, 255, 255, 0.55);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .scope-option-btn.active {
-  background: rgba(186, 151, 49, 0.15);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
   border-color: var(--accent, #BA9731);
-  color: var(--accent, #BA9731);
+  color: var(--foreground);
 }
 
 .scope-active-dot {
@@ -259,7 +261,7 @@
   width: 100%;
   padding: 6px 8px 6px 28px;
   font-size: 0.75rem;
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--background) 50%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--foreground);
@@ -269,7 +271,7 @@
 
 .folders-search-field:focus {
   border-color: var(--primary);
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
 }
 
 .tree-level-btns {
@@ -280,7 +282,7 @@
 
 .tree-icon-btn {
   padding: 5px 6px;
-  background: rgba(255, 255, 255, 0.35);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--muted-foreground);
@@ -298,7 +300,7 @@
 
 .tree-level-btn {
   padding: 4px 6px;
-  background: rgba(255, 255, 255, 0.35);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.65rem;
@@ -333,21 +335,22 @@
   transition: all 0.15s ease;
   user-select: none;
   border: 1px solid transparent;
+  color: var(--foreground);
 }
 
 .tree-node-item:hover {
-  background: rgba(255, 255, 255, 0.45);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .tree-node-item.selected {
-  background: var(--primary, #0D0D0D) !important;
-  color: var(--primary-foreground, #FFFFFF) !important;
+  background: var(--accent, #BA9731) !important;
+  color: var(--accent-foreground, #FFFFFF) !important;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
 }
 
 .tree-node-item.selected span,
 .tree-node-item.selected svg {
-  color: var(--primary-foreground, #FFFFFF) !important;
+  color: var(--accent-foreground, #FFFFFF) !important;
 }
 
 .node-chevron-btn {
@@ -408,6 +411,8 @@
   min-height: 0;
   overflow: hidden;
   border-radius: 8px;
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+  border: 1px solid var(--border);
 }
 
 /* Empty State */
@@ -426,7 +431,7 @@
 .empty-icon-wrap {
   padding: 20px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
 }
@@ -510,7 +515,7 @@
 
 .detail-icon-action {
   padding: 7px 9px;
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--foreground);
@@ -519,7 +524,7 @@
 }
 
 .detail-icon-action:hover {
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
 }
 
 .detail-icon-action.danger:hover {
@@ -635,7 +640,7 @@
   padding: 10px 12px;
   font-size: 0.88rem;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--background) 50%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--foreground);
@@ -645,7 +650,7 @@
 
 .structure-text-input:focus {
   border-color: var(--primary);
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
 }
 
 .structure-text-input[readonly] {
@@ -730,7 +735,7 @@
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -739,7 +744,7 @@
 .infra-icon-wrap {
   padding: 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--card) 80%, transparent);
   color: var(--muted-foreground);
 }
 
@@ -1005,7 +1010,7 @@
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
 }
 
 /* Modals */
@@ -1035,7 +1040,7 @@
 .modal-head {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--card) 75%, transparent);
 }
 
 .modal-head h2 {
@@ -1070,7 +1075,7 @@
   font-size: 0.82rem;
   font-weight: 700;
   font-family: inherit;
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--background) 50%, transparent);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--foreground);
@@ -1081,7 +1086,7 @@
 .modal-footer {
   padding: 14px 20px;
   border-top: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--card) 75%, transparent);
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1419,7 +1424,7 @@
   letter-spacing: 0.08em;
   color: var(--muted-foreground);
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.35);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
 }
 
 .pods-status-table td {
@@ -1444,7 +1449,7 @@
   justify-content: space-between;
   padding: 8px 12px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
 }
 
@@ -1458,7 +1463,7 @@
 .vector-mode-card {
   padding: 14px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 2px solid var(--border);
   cursor: pointer;
   display: flex;
@@ -1469,7 +1474,7 @@
 
 .vector-mode-card.selected {
   border-color: var(--primary);
-  background: rgba(186, 151, 49, 0.08);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .vector-mode-head {
@@ -1499,7 +1504,7 @@
 .query-tester-box {
   padding: 12px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -1529,7 +1534,7 @@
   display: flex;
   flex-direction: column;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--card) 50%, transparent);
   border: 1px solid var(--border);
   overflow: hidden;
   transition: all 0.15s ease;
@@ -1541,11 +1546,11 @@
   justify-content: space-between;
   padding: 10px 14px;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--card) 75%, transparent);
 }
 
 .ops-telemetry-head:hover {
-  background: rgba(255, 255, 255, 0.4);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
 }
 
 .ops-status-badge {
@@ -1584,7 +1589,7 @@
   padding: 6px 14px;
   font-size: 0.65rem;
   color: var(--muted-foreground);
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--card) 50%, transparent);
   border-top: 1px solid var(--border);
 }
 
@@ -1615,6 +1620,6 @@
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.3);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
   border: 1px solid var(--border);
 }

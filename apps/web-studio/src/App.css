@@ -1033,317 +1033,157 @@ button.topbar-tenant-pill:hover {
 }
 
 /* ==========================================================================
-   HIGH CONTRAST & ACCESSIBLE SIDEBAR / NAVIGATION READABILITY
+   DYNAMIC THEME ENGINE — SIDEBAR, TOPBAR & CENTRAL PANEL FIDELITY
+   Seamlessly applies active theme variables across all views and navigation
    ========================================================================== */
 
-/* 1. Light & Glass Themes (like Champagne Glass):
-   Crisp translucent light frosted glass with razor-sharp dark typography matching Image 2 */
-.app-root:not(.dark) .nextgen-sidebar {
-  background: rgba(255, 255, 255, var(--panel-opacity, 0.62)) !important;
-  backdrop-filter: blur(40px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(1.6) !important;
-  border: 0 !important;
-  border-right: 1px solid rgba(0, 0, 0, 0.08) !important;
-  border-radius: 0 !important;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.03) !important;
+.nextgen-sidebar {
+  background: color-mix(in srgb, var(--sidebar, var(--card)) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border-right: 1px solid var(--border) !important;
+  color: var(--foreground) !important;
 }
 
-.app-root:not(.dark) .nextgen-sidebar .sidebar-brand-btn .brand-title {
-  color: #0D0D0D !important;
+.nextgen-sidebar .sidebar-brand-btn .brand-title {
+  color: var(--foreground) !important;
 }
 
-.app-root:not(.dark) .nextgen-sidebar .sidebar-brand-btn .brand-sub {
-  color: #4A4A4A !important;
+.nextgen-sidebar .sidebar-brand-btn .brand-sub {
+  color: var(--muted-foreground) !important;
 }
 
-.app-root:not(.dark) .nextgen-sidebar .selector-tag,
-.app-root:not(.dark) .nextgen-sidebar .nav-group-title,
-.app-root:not(.dark) .nextgen-sidebar .nav-group-title-text {
-  color: #334155 !important;
+.nextgen-sidebar .selector-tag,
+.nextgen-sidebar .nav-group-title,
+.nextgen-sidebar .nav-group-title-text {
+  color: var(--muted-foreground) !important;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
-.app-root:not(.dark) .nextgen-sidebar .selector-pill {
-  background: rgba(255, 255, 255, 0.65) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  color: #0D0D0D !important;
+.nextgen-sidebar .selector-pill {
+  background: color-mix(in srgb, var(--card) 70%, transparent) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--foreground) !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 }
 
-.app-root:not(.dark) .nextgen-sidebar select {
-  background: rgba(255, 255, 255, 0.65) !important;
-  color: #0D0D0D !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar select option {
-  background: #FFFFFF;
-  color: #0D0D0D;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nextgen-nav-item {
-  color: #1E293B !important;
-  font-weight: 600;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nextgen-nav-item svg {
-  color: #475569;
-  transition: all 0.15s ease;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nextgen-nav-item:hover {
-  background: rgba(255, 255, 255, 0.5) !important;
-  color: #000000 !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nextgen-nav-item:hover svg {
-  color: #000000 !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nextgen-nav-item.active {
-  background: rgba(255, 255, 255, 0.88) !important;
-  color: #000000 !important;
-  font-weight: 700;
-  border: 1px solid rgba(255, 255, 255, 0.7) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nextgen-nav-item.active svg {
-  color: var(--accent, #BA9731) !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nav-subsection-btn {
-  color: #1E293B !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nav-sublink-item {
-  color: #475569 !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nav-sublink-item:hover {
-  background: rgba(0, 0, 0, 0.05) !important;
-  color: #000000 !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .nav-sublink-item.active {
-  background: rgba(186, 151, 49, 0.18) !important;
-  color: #000000 !important;
-  font-weight: 700;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
-}
-
-.app-root:not(.dark) .nextgen-sidebar .sidebar-foot {
-  border-top-color: rgba(0, 0, 0, 0.08) !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .sidebar-foot button {
-  color: #1E293B !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .sidebar-foot button:hover {
-  color: #000000 !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .user-identity-card strong {
-  color: #0D0D0D !important;
-}
-
-.app-root:not(.dark) .nextgen-sidebar .user-identity-card small {
-  color: #4A4A4A !important;
-}
-
-/* 2. Dark Themes (like Next Gen Ultra, Jet Black, Woodland):
-   Deep frosted dark glass with luminous light typography */
-.app-root.dark .nextgen-sidebar {
-  background: rgba(10, 14, 24, var(--panel-opacity, 0.78)) !important;
-  backdrop-filter: blur(40px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(40px) saturate(1.8) !important;
-  border: 0 !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 0 !important;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.25) !important;
-}
-
-.app-root.dark .nextgen-sidebar .sidebar-brand-btn .brand-title {
-  color: #ffffff !important;
-}
-
-.app-root.dark .nextgen-sidebar .sidebar-brand-btn .brand-sub {
-  color: rgba(226, 232, 240, 0.75) !important;
-}
-
-.app-root.dark .nextgen-sidebar .selector-tag,
-.app-root.dark .nextgen-sidebar .nav-group-title {
-  color: rgba(148, 163, 184, 0.92) !important;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-
-.app-root.dark .nextgen-sidebar .selector-pill {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(255, 255, 255, 0.15) !important;
-  color: #ffffff !important;
-}
-
-.app-root.dark .nextgen-sidebar select {
-  background: rgba(255, 255, 255, 0.09) !important;
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.18) !important;
-}
-
-.app-root.dark .nextgen-sidebar select option {
-  background: #0f172a;
-  color: #ffffff;
-}
-
-.app-root.dark .nextgen-sidebar .nextgen-nav-item {
-  color: rgba(241, 245, 249, 0.92) !important;
-  font-weight: 600;
-}
-
-.app-root.dark .nextgen-sidebar .nextgen-nav-item svg {
-  color: rgba(148, 163, 184, 0.95);
-  transition: all 0.15s ease;
-}
-
-.app-root.dark .nextgen-sidebar .nextgen-nav-item:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
-  color: #ffffff !important;
-}
-
-.app-root.dark .nextgen-sidebar .nextgen-nav-item:hover svg {
-  color: #ffffff !important;
-}
-
-.app-root.dark .nextgen-sidebar .nextgen-nav-item.active {
-  background: rgba(186, 151, 49, 0.28) !important;
-  color: #ffffff !important;
-  font-weight: 700;
-  border: 1px solid rgba(186, 151, 49, 0.35);
-}
-
-.app-root.dark .nextgen-sidebar .nextgen-nav-item.active svg {
-  color: var(--accent, #BA9731) !important;
-}
-
-.app-root.dark .nextgen-sidebar .nav-subsection-btn {
-  color: rgba(241, 245, 249, 0.95) !important;
-}
-
-.app-root.dark .nextgen-sidebar .nav-sublink-item {
-  color: rgba(148, 163, 184, 0.88) !important;
-}
-
-.app-root.dark .nextgen-sidebar .nav-sublink-item:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: #ffffff !important;
-}
-
-.app-root.dark .nextgen-sidebar .nav-sublink-item.active {
-  background: rgba(186, 151, 49, 0.28) !important;
-  color: #ffffff !important;
-  font-weight: 700;
-}
-
-.app-root.dark .nextgen-sidebar .sidebar-foot {
-  border-top-color: rgba(255, 255, 255, 0.12) !important;
-}
-
-.app-root.dark .nextgen-sidebar .sidebar-foot button {
-  color: rgba(226, 232, 240, 0.88);
-}
-
-.app-root.dark .nextgen-sidebar .sidebar-foot button:hover {
-  color: #ffffff;
-}
-
-.app-root.dark .nextgen-sidebar .user-identity-card strong {
-  color: #ffffff !important;
-}
-
-.app-root.dark .nextgen-sidebar .user-identity-card small {
-  color: rgba(148, 163, 184, 0.88) !important;
-}
-
-/* 3. Outer Shell & Cards Glassmorphic Depth */
-.app-root:not(.dark) .dashboard-page-shell {
-  background: rgba(255, 255, 255, calc(var(--panel-opacity, 0.85) * 0.72)) !important;
-  backdrop-filter: blur(24px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.5) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.05) !important;
-}
-
-.app-root:not(.dark) .nextgen-topbar {
-  background: rgba(255, 255, 255, var(--panel-opacity, 0.72)) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  border: 0 !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03) !important;
-}
-
-.app-root:not(.dark) .glass-card {
-  background: var(--card-custom, var(--card)) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
-}
-
-.app-root.dark .dashboard-page-shell {
-  background: var(--background) !important;
-  backdrop-filter: blur(24px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-}
-
-.app-root.dark .nextgen-topbar {
-  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
-  backdrop-filter: blur(28px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  border: 0 !important;
-  border-bottom: 1px solid var(--border) !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
-}
-
-.app-root.dark .glass-card {
-  background: var(--card-custom, var(--card)) !important;
-  backdrop-filter: blur(20px) !important;
-  -webkit-backdrop-filter: blur(20px) !important;
+.nextgen-sidebar select {
+  background: color-mix(in srgb, var(--card) 70%, transparent) !important;
+  color: var(--foreground) !important;
   border: 1px solid var(--border) !important;
 }
 
-.glass-mode .glass-card,
-.glass-mode .folders-left-pane,
-.glass-mode .folders-right-pane {
+.nextgen-sidebar select option {
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.nextgen-sidebar .nextgen-nav-item {
+  color: var(--muted-foreground) !important;
+  font-weight: 600;
+}
+
+.nextgen-sidebar .nextgen-nav-item svg {
+  color: var(--muted-foreground);
+  transition: all 0.15s ease;
+}
+
+.nextgen-sidebar .nextgen-nav-item:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent) !important;
+  color: var(--foreground) !important;
+}
+
+.nextgen-sidebar .nextgen-nav-item:hover svg {
+  color: var(--foreground) !important;
+}
+
+.nextgen-sidebar .nextgen-nav-item.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+  color: var(--foreground) !important;
+  font-weight: 700;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+}
+
+.nextgen-sidebar .nextgen-nav-item.active svg {
+  color: var(--accent) !important;
+}
+
+.nextgen-sidebar .nav-subsection-btn {
+  color: var(--foreground) !important;
+}
+
+.nextgen-sidebar .nav-sublink-item {
+  color: var(--muted-foreground) !important;
+}
+
+.nextgen-sidebar .nav-sublink-item:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent) !important;
+  color: var(--foreground) !important;
+}
+
+.nextgen-sidebar .nav-sublink-item.active {
+  background: color-mix(in srgb, var(--accent) 20%, transparent) !important;
+  color: var(--foreground) !important;
+  font-weight: 700;
+  border-left: 2px solid var(--accent) !important;
+}
+
+.nextgen-sidebar .sidebar-foot {
+  border-top-color: var(--border) !important;
+}
+
+.nextgen-sidebar .sidebar-foot button {
+  color: var(--muted-foreground) !important;
+}
+
+.nextgen-sidebar .sidebar-foot button:hover {
+  color: var(--foreground) !important;
+}
+
+.nextgen-sidebar .user-identity-card strong {
+  color: var(--foreground) !important;
+}
+
+.nextgen-sidebar .user-identity-card small {
+  color: var(--muted-foreground) !important;
+}
+
+/* Outer Shell, Topbar & Central Dashboard Page Shell Glassmorphic Depth */
+.dashboard-page-shell {
   background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
   backdrop-filter: blur(24px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
   border: 1px solid var(--border) !important;
+  color: var(--foreground) !important;
 }
 
-.glass-mode .nextgen-topbar {
+.nextgen-topbar {
   background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
   backdrop-filter: blur(28px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
-  border: 0 !important;
   border-bottom: 1px solid var(--border) !important;
-  border-radius: 0 !important;
-  margin: 0 !important;
+  color: var(--foreground) !important;
 }
 
-.glass-mode .nextgen-sidebar {
+.nextgen-footer {
   background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
-  backdrop-filter: blur(24px) saturate(1.8) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
-  border: 0 !important;
-  border-right: 1px solid var(--border) !important;
-  border-radius: 0 !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border-top: 1px solid var(--border) !important;
+  color: var(--muted-foreground) !important;
+}
+
+.glass-card,
+.folders-left-pane,
+.folders-right-pane,
+.workspace-panel {
+  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
+  backdrop-filter: blur(20px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.8) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--foreground) !important;
 }
 
 /* Topbar Branding & Contrast */
@@ -1813,15 +1653,7 @@ button.topbar-tenant-pill:hover {
   font-size: 0.6rem;
 }
 
-.app-root:not(.dark) .nextgen-footer {
-  background: rgba(255, 255, 255, var(--panel-opacity, 0.72)) !important;
-  border-top: 1px solid rgba(0, 0, 0, 0.08) !important;
-}
 
-.app-root.dark .nextgen-footer {
-  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
-  border-top: 1px solid var(--border) !important;
-}
 
 /* ==========================================================================
    APPEARANCE STUDIO (Exact 1:1 Presentation)

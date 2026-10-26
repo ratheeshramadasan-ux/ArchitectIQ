@@ -406,6 +406,48 @@ function App(){
   document.documentElement.style.setProperty('--app-font-size', targetPx)
  }, [themeConfig.activeTextSize])
 
+ useEffect(() => {
+  const root = document.documentElement
+  const classes = Array.from(root.classList).filter(c => !c.startsWith('theme-') && c !== 'dark' && c !== 'glass-mode')
+  classes.push(themeClass)
+  if (dark) classes.push('dark')
+  if (isGlass) classes.push('glass-mode')
+  root.className = classes.join(' ')
+  document.body.className = root.className
+
+  if (themeConfig.primaryColor) root.style.setProperty('--primary', themeConfig.primaryColor)
+  else root.style.removeProperty('--primary')
+
+  if (themeConfig.primaryFg) root.style.setProperty('--primary-foreground', themeConfig.primaryFg)
+  else root.style.removeProperty('--primary-foreground')
+
+  if (themeConfig.accentColor) root.style.setProperty('--accent', themeConfig.accentColor)
+  else root.style.removeProperty('--accent')
+
+  if (themeConfig.accentFg) root.style.setProperty('--accent-foreground', themeConfig.accentFg)
+  else root.style.removeProperty('--accent-foreground')
+
+  if (themeConfig.backgroundColor) root.style.setProperty('--background', themeConfig.backgroundColor)
+  else root.style.removeProperty('--background')
+
+  if (themeConfig.foregroundColor) root.style.setProperty('--foreground', themeConfig.foregroundColor)
+  else root.style.removeProperty('--foreground')
+
+  if (themeConfig.cardColor) {
+    root.style.setProperty('--card', themeConfig.cardColor)
+    root.style.setProperty('--card-custom', themeConfig.cardColor)
+  } else {
+    root.style.removeProperty('--card')
+    root.style.removeProperty('--card-custom')
+  }
+
+  if (themeConfig.cardFg) root.style.setProperty('--card-foreground', themeConfig.cardFg)
+  else root.style.removeProperty('--card-foreground')
+
+  if (themeConfig.borderColor) root.style.setProperty('--border', themeConfig.borderColor)
+  else root.style.removeProperty('--border')
+ }, [themeClass, dark, isGlass, themeConfig])
+
  const matches = useMemo(() => flatLinks.filter(x => x.name.toLowerCase().includes(query.toLowerCase())), [query])
 
  useEffect(() => {
