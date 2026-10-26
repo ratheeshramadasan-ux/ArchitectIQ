@@ -199,6 +199,10 @@ function App(){
  const isGlass = GLASS_THEMES.includes(themeConfig.activeTheme)
  const dark = DARK_THEMES.includes(themeConfig.activeTheme)
 
+ useEffect(() => {
+  document.documentElement.style.setProperty('--panel-opacity', themeConfig.panelOpacity.toString())
+ }, [themeConfig.panelOpacity])
+
  const matches = useMemo(() => flatLinks.filter(x => x.name.toLowerCase().includes(query.toLowerCase())), [query])
 
  useEffect(() => {
