@@ -21,6 +21,7 @@ import KnowledgeStudio from './KnowledgeStudio'
 import TestStudio from './TestStudio'
 import DeploymentReleasesStudio from './DeploymentReleasesStudio'
 import PlatformControlCenterStudio from './PlatformControlCenterStudio'
+import OrganizationTenantStudio from './OrganizationTenantStudio'
 import GuideModal from './GuideModal'
 import FooterInfoModal, { type FooterModalTab } from './FooterInfoModal'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -577,6 +578,14 @@ function App(){
  const isObservability = active === 'Observability Dashboard' || active === 'SLA & Performance' || active === 'Incidents & Alerts' || active === 'Support & Runbooks' || active === 'Analytics & Reports' || active === 'Monitoring' || active === 'Monitor & Analyse' || active === 'Observability Console'
  const isGovernance = active === 'Governance Console' || active === 'Security Policies & MFA' || active === 'Data Protection & PII' || active === 'AI Model Governance' || active === 'Compliance & Attestation' || active === 'Governance'
  const isAuditViewer = active === 'Activity Audit Logs' || active === 'Audit Logs'
+ const isOrgTenantStudio =
+   active === 'Organization & Tenants' ||
+   active === 'Manage Organizations & Tenants' ||
+   active === 'Manage Organization and Tenant' ||
+   active === 'Manage Organization & Tenant' ||
+   active === 'Manage Organizations' ||
+   active === 'Tenants' ||
+   active === 'Manage Tenants'
  const isPlatformControlCenter =
    active === 'Platform Control Center' ||
    active === 'Platform Overview & Health' ||
@@ -585,13 +594,6 @@ function App(){
    active === 'Compute & Capacity' ||
    active === 'Licensing & Usage' ||
    active === 'Platform Administration' ||
-   active === 'Organization & Tenants' ||
-   active === 'Manage Organizations & Tenants' ||
-   active === 'Manage Organization and Tenant' ||
-   active === 'Manage Organization & Tenant' ||
-   active === 'Manage Organizations' ||
-   active === 'Tenants' ||
-   active === 'Manage Tenants' ||
    active === 'Tenant Fleet'
  const isPlatformMgmt = false
  const isTenantMgmt = false
@@ -1173,12 +1175,22 @@ function App(){
       )}
       {isGovernance && <GovernanceConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {isAuditViewer && <ActivityAuditViewer token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {isOrgTenantStudio && (
+        <OrganizationTenantStudio
+          token={token}
+          tenant={tenant}
+          onNavigate={(target) => setActive(target)}
+          onSelectTenant={(id) => {
+            setTenant(id)
+            setLiveNodes([])
+            sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: id }))
+          }}
+        />
+      )}
       {isPlatformControlCenter && (
        <PlatformControlCenterStudio
         token={token}
         initialTab={
-          active === 'Organization & Tenants' || active === 'Manage Organizations' || active === 'Manage Organization and Tenant' || active === 'Manage Organization & Tenant' || active === 'Manage Organizations & Tenants' ? 'organizations' :
-          active === 'Tenants' || active === 'Manage Tenants' || active === 'Tenant Fleet' ? 'fleet' :
           active === 'Infrastructure Inventory' || active === 'Compute & Capacity' ? 'infrastructure' :
           active === 'Platform Configuration & Flags' ? 'diagnostics' :
           active === 'Licensing & Usage' ? 'subscriptions' :
