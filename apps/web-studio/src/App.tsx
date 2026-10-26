@@ -17,8 +17,9 @@ import AccessDirectoryStudio from './AccessDirectoryStudio'
 import TenantApplicationsStudio from './TenantApplicationsStudio'
 import TenantIntegrationsStudio from './TenantIntegrationsStudio'
 import EnvironmentTenantModal from './EnvironmentTenantModal'
+import ArtifactsRegistryStudio from './ArtifactsRegistryStudio'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, FolderTree, GitBranch, HelpCircle, LayoutDashboard, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeftClose, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
+import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, FolderTree, GitBranch, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeftClose, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
 
@@ -113,39 +114,35 @@ interface NavGroup {
 
 const groups: NavGroup[] = [
   {
-    title: 'WORKSPACE',
+    title: 'STUDIOS & ORCHESTRATION',
     links: [
-      { name: 'Dashboard', icon: LayoutDashboard },
-      { name: 'Explorer', icon: FolderKanban },
-      { name: 'Projects', icon: Layers3 },
-      { name: 'Environments', icon: GitBranch },
-    ],
-  },
-  {
-    title: 'AUTOMATION HUB',
-    links: [
+      { name: 'Folders & Hierarchy', icon: FolderTree },
+      { name: 'Artifacts Registry', icon: Boxes },
       { name: 'Flow Studio', icon: Workflow },
       { name: 'Agent Builder', icon: Bot },
       { name: 'App Studio', icon: AppWindow },
       { name: 'Document Studio', icon: FileText },
-      { name: 'Queues & Transactions', icon: ListTodo },
-      { name: 'Runners & Workers', icon: Boxes },
-      { name: 'Schedules', icon: CalendarClock },
-      { name: 'Jobs & Executions', icon: Play },
-      { name: 'Monitoring', icon: Activity },
     ],
   },
   {
-    title: 'TENANT',
+    title: 'OPERATIONS',
+    links: [
+      { name: 'Jobs & Executions', icon: Play },
+      { name: 'Schedules & Triggers', icon: CalendarClock },
+      { name: 'Queues & Approvals', icon: ListTodo },
+      { name: 'Runners & Workers', icon: Boxes },
+      { name: 'Observability Console', icon: Activity },
+    ],
+  },
+  {
+    title: 'TENANT CONFIGURATION',
     subSections: [
       {
-        id: '1-workspace',
-        title: '1. Workspace',
-        icon: FolderTree,
+        id: 'tenant-envs',
+        title: '1. Tenant Environments',
+        icon: GitBranch,
         links: [
-          { name: 'Workspaces & Folders', icon: FolderTree },
-          { name: 'Applications', icon: AppWindow },
-          { name: 'General Settings', icon: Settings2 },
+          { name: 'Environment Settings', icon: GitBranch },
         ],
       },
       {
@@ -178,7 +175,7 @@ const groups: NavGroup[] = [
       },
       {
         id: '5-users',
-        title: '5. Users',
+        title: '5. Users & Approvals',
         icon: UserPlus,
         links: [
           { name: 'User Directory', icon: UserPlus },
@@ -187,11 +184,11 @@ const groups: NavGroup[] = [
       },
       {
         id: '6-integrations',
-        title: '6. Integrations',
+        title: '6. Integrations & MCP',
         icon: Boxes,
         links: [
-          { name: 'Bot Agents', icon: Bot },
           { name: 'Connected Systems & MCP', icon: Database },
+          { name: 'Bot Agents', icon: Bot },
           { name: 'Code Repositories', icon: Boxes },
           { name: 'API & Webhooks', icon: Zap },
         ],
@@ -199,20 +196,11 @@ const groups: NavGroup[] = [
     ],
   },
   {
-    title: 'CONTROL PLANE',
+    title: 'GOVERNANCE & PLATFORM',
     links: [
-      { name: 'Governance', icon: ClipboardCheck },
-      { name: 'Approvals', icon: Check },
-      { name: 'Audit Logs', icon: FileText },
-      { name: 'Administration', icon: Settings2 },
-    ],
-  },
-  {
-    title: 'ACCOUNT',
-    links: [
-      { name: 'Theme / Icons', icon: Palette },
-      { name: 'Profile', icon: Sparkles },
-      { name: 'Downloads', icon: Boxes },
+      { name: 'Governance Console', icon: ShieldCheck },
+      { name: 'Activity Audit Logs', icon: FileText },
+      { name: 'Platform Administration', icon: Settings2 },
     ],
   },
 ]
@@ -257,12 +245,12 @@ function App(){
  const [savedSession]=useState(readSession);const [token,setToken]=useState(savedSession?.token||'');const [tenant,setTenant]=useState(savedSession?.tenant||'');const [tenants,setTenants]=useState<TenantOption[]>([]);const [restoring,setRestoring]=useState(!!savedSession);const [liveNodes,setLiveNodes]=useState<TreeNode[]>([]);const [workspaceError,setWorkspaceError]=useState('');const nodes=liveNodes;
  const [summaryData,setSummaryData]=useState<{organizations:number;folders:number;projects:number;active_projects:number;archived_projects:number}|null>(null);
  const [overviewData,setOverviewData]=useState<{throughput_24h?:number;open_incidents?:Record<string,number>;sla_health_pct?:number;service_health?:string}|null>(null);
- const [active,setActive]=useState('Dashboard');const [currentEnv,setCurrentEnv]=useState<'DEV'|'TEST'|'UAT'|'PROD'>('DEV');const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
+ const [active,setActive]=useState('Folders & Hierarchy');const [currentEnv,setCurrentEnv]=useState<'DEV'|'TEST'|'UAT'|'CANARY'|'PROD'>('DEV');const [search,setSearch]=useState(false);const [query,setQuery]=useState('');const [collapsed,setCollapsed]=useState(false);const [mobile,setMobile]=useState(false);const [treeOpen,setTreeOpen]=useState<Set<string>>(new Set());const [selected,setSelected]=useState<TreeNode|null>(null);const [notification,setNotification]=useState(false);
  const [newTenantModal,setNewTenantModal]=useState(false);const [newTenantName,setNewTenantName]=useState('');const [tenantCreating,setTenantCreating]=useState(false);const [tenantCreateError,setTenantCreateError]=useState('');
- const [currentUserRole, setCurrentUserRole] = useState('Platform Administrator');
+ const [currentUserRole, setCurrentUserRole] = useState('Org Admin');
  const [envModalOpen, setEnvModalOpen] = useState(false);
  const [expandedSubSections, setExpandedSubSections] = useState<Set<string>>(
-   new Set(['1-workspace', '2-roles', '3-groups', '4-sso', '5-users', '6-integrations'])
+   new Set(['tenant-envs', '2-roles', '3-groups', '4-sso', '5-users', '6-integrations'])
  );
  const toggleSubSection = (id: string) => {
    setExpandedSubSections(prev => {
@@ -417,14 +405,16 @@ function App(){
  const toggle = (id: string) => setTreeOpen(old => { const n = new Set(old); if (n.has(id)) n.delete(id); else n.add(id); return n })
  const select = (n: TreeNode) => { setSelected(n); setActive('Explorer') }
 
- const isFoldersStudio = active === 'Explorer' || active === 'Workspaces & Folders' || active === 'Workspace Management'
+ const isFoldersStudio = active === 'Folders & Hierarchy' || active === 'Explorer' || active === 'Workspaces & Folders' || active === 'Workspace Management' || active === 'Dashboard'
+ const isArtifactsStudio = active === 'Artifacts Registry'
+ const isTenantEnvs = active === 'Environment Settings' || active === 'Tenant Environments'
  const isExplorer = active === 'Projects' || active === 'Environments'
- const isTenantAppsStudio = active === 'Applications' || active === 'General Settings'
+ const isTenantAppsStudio = active === 'Applications' || active === 'General Settings' || active === 'App Studio'
  const isIamStudio = active === 'Role Catalog' || active === 'Build Custom Role' || active === 'Permission Matrix' || active === 'Segregation of Duties' || active === 'Roles & Permissions'
- const isAccessDirectoryStudio = active === 'Access Groups' || active === 'Identity Providers' || active === 'Map IdP Groups' || active === 'User Directory' || active === 'Pending Approvals' || active === 'Groups & Teams' || active === 'SSO & Mapping' || active === 'Users & Access'
- const isTenantIntegrationsStudio = active === 'Bot Agents' || active === 'Connected Systems & MCP' || active === 'Connected Systems' || active === 'Code Repositories' || active === 'API & Webhooks' || active === 'Assets & Credentials' || active === '6. Integrations'
+ const isAccessDirectoryStudio = active === 'Access Groups' || active === 'Identity Providers' || active === 'Map IdP Groups' || active === 'User Directory' || active === 'Pending Approvals' || active === 'Groups & Teams' || active === 'SSO & Mapping' || active === 'Users & Access' || active === 'Users & Approvals'
+ const isTenantIntegrationsStudio = active === 'Bot Agents' || active === 'Connected Systems & MCP' || active === 'Connected Systems' || active === 'Code Repositories' || active === 'API & Webhooks' || active === 'Assets & Credentials' || active === '6. Integrations' || active === 'Integrations & MCP'
  const studio = (groups[1].links || []).some(x => x.name === active)
- const isTenantMgmt = !isFoldersStudio && !isTenantAppsStudio && !isIamStudio && !isAccessDirectoryStudio && !isTenantIntegrationsStudio && active === 'Administration'
+ const isTenantMgmt = !isFoldersStudio && !isArtifactsStudio && !isTenantAppsStudio && !isIamStudio && !isAccessDirectoryStudio && !isTenantIntegrationsStudio && active === 'Administration'
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
 
@@ -444,54 +434,13 @@ function App(){
    <div className="shell-container">
     {mobile && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobile(false)} />}
     <aside className={`nextgen-sidebar ${collapsed ? 'collapsed' : ''} ${mobile ? 'mobile-open' : ''}`}>
-     <button className="sidebar-brand-btn" onClick={() => navigate('Dashboard')} title="ArchitectIQ Home">
+     <button className="sidebar-brand-btn" onClick={() => navigate('Folders & Hierarchy')} title="ArchitectIQ Home">
       {collapsed ? (
        <img key={brandShield} src={brandShield} alt="ArchitectIQ" style={{ width: 30, height: 34, objectFit: 'contain' }} />
       ) : (
        <img key={brandLogo} src={brandLogo} alt="ArchitectIQ" style={{ height: 38, maxWidth: 195, objectFit: 'contain', display: 'block' }} />
       )}
      </button>
-
-     <div className="sidebar-selector-box">
-      <div className="selector-tag">WORKSPACE</div>
-      <div className="selector-pill">
-       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent, #BA9731)' }} />
-        {tenants.find(t => t.id === tenant)?.name || 'Citibank'}
-       </span>
-       <ChevronDown size={14} style={{ opacity: 0.6 }} />
-      </div>
-
-      <div className="selector-tenant-row">
-       <span className="selector-tag" style={{ margin: 0 }}>TENANT</span>
-       <span className="env-tag-badge">{currentEnv}</span>
-      </div>
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-       <select
-        aria-label="Active tenant"
-        value={tenant}
-        onChange={e => {
-         setTenant(e.target.value)
-         setLiveNodes([])
-         sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: e.target.value }))
-        }}
-        style={{ flex: 1, padding: '5px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--card)', color: 'inherit', fontSize: '0.76rem' }}
-       >
-        {tenants.map(t => (
-         <option key={t.id} value={t.id}>{t.name}</option>
-        ))}
-       </select>
-       <button
-        className="topbar-icon-action"
-        style={{ width: 26, height: 26, fontSize: 13, fontWeight: 'bold' }}
-        title="Create new tenant"
-        aria-label="Create new tenant"
-        onClick={() => setNewTenantModal(true)}
-       >
-        +
-       </button>
-      </div>
-     </div>
 
      <nav aria-label="Main navigation" className="sidebar-nav-scroll">
       {groups.map(group => (
@@ -595,29 +544,121 @@ function App(){
        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 12, borderRight: '1px solid var(--border)' }}>
         <img key={`topbar-${brandLogo}`} src={brandLogo} alt="ArchitectIQ" style={{ height: 26, maxWidth: 145, objectFit: 'contain', display: 'block' }} />
        </div>
+
+       {/* 1. Global Customer Organization Switcher / Badge */}
+       <div style={{
+         display: 'flex',
+         alignItems: 'center',
+         gap: 6,
+         padding: '4px 10px',
+         borderRadius: 6,
+         background: 'var(--card)',
+         border: '1px solid var(--border)',
+         fontSize: '0.74rem',
+         fontWeight: 800,
+         color: 'var(--foreground)'
+       }}>
+        <Building2 size={13} style={{ color: 'var(--accent, #BA9731)' }} />
+        <span>Citibank Global Enterprise</span>
+        <span style={{
+          fontSize: '0.58rem',
+          fontWeight: 900,
+          padding: '1px 5px',
+          borderRadius: 3,
+          background: 'rgba(186,151,49,0.15)',
+          color: 'var(--accent, #BA9731)',
+          letterSpacing: '0.08em'
+        }}>
+          ORG
+        </span>
+       </div>
+
+       {/* 2. Tenant Dropdown Selector on Top */}
+       <div style={{
+         display: 'flex',
+         alignItems: 'center',
+         gap: 4,
+         padding: '2px 4px 2px 8px',
+         borderRadius: 6,
+         background: 'var(--card)',
+         border: '1px solid var(--border)'
+       }}>
+        <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'var(--muted-foreground)', letterSpacing: '0.08em' }}>
+          TENANT:
+        </span>
+        <select
+          aria-label="Active tenant selector"
+          value={tenant}
+          onChange={e => {
+            setTenant(e.target.value)
+            setLiveNodes([])
+            sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: e.target.value }))
+          }}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--foreground)',
+            fontSize: '0.76rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            outline: 'none',
+            paddingRight: 4
+          }}
+        >
+          {tenants.map(t => (
+            <option key={t.id} value={t.id} style={{ background: 'var(--card)', color: 'var(--foreground)' }}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        <button
+          className="topbar-icon-action"
+          style={{ width: 22, height: 22, fontSize: 12, fontWeight: 'bold', padding: 0 }}
+          title="Create New Tenant for Organization"
+          onClick={() => setNewTenantModal(true)}
+        >
+          +
+        </button>
+       </div>
+
+       {/* 3. Environment Switcher Pill / Dropdown on Top */}
        <button
         className="topbar-tenant-pill"
         onClick={() => setEnvModalOpen(true)}
-        title="Switch Environment / Tenant (Permissions Enforced)"
+        title="Configure & Switch Tenant Environment (DEV, UAT, CANARY, PROD)"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 10px',
+          borderRadius: 6,
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          cursor: 'pointer'
+        }}
        >
         <span
           style={{
-            width: 7,
-            height: 7,
+            width: 8,
+            height: 8,
             borderRadius: '50%',
             background:
               currentEnv === 'PROD'
                 ? '#EF4444'
+                : currentEnv === 'CANARY'
+                ? '#A855F7'
                 : currentEnv === 'UAT'
                 ? '#F59E0B'
-                : currentEnv === 'TEST'
-                ? '#3B82F6'
                 : '#10B981',
+            boxShadow: `0 0 8px ${currentEnv === 'PROD' ? '#EF4444' : currentEnv === 'CANARY' ? '#A855F7' : currentEnv === 'UAT' ? '#F59E0B' : '#10B981'}80`
           }}
         />
-        <strong>{tenants.find(t => t.id === tenant)?.name || 'Citibank'}</strong>
-        <span style={{ color: 'var(--muted-foreground)' }}>/</span>
-        <span>{currentEnv === 'DEV' ? 'Development' : currentEnv === 'TEST' ? 'Testing' : currentEnv === 'UAT' ? 'UAT' : 'Production'}</span>
+        <strong style={{ fontSize: '0.74rem', letterSpacing: '0.04em' }}>
+          {currentEnv}
+        </strong>
+        <span style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+          ({currentEnv === 'DEV' ? 'Development' : currentEnv === 'CANARY' ? 'Canary' : currentEnv === 'UAT' ? 'UAT' : 'Production'})
+        </span>
         <ChevronDown size={12} style={{ opacity: 0.6, marginLeft: 2 }} />
        </button>
       </div>
@@ -625,48 +666,43 @@ function App(){
       <div style={{ flex: 1, maxWidth: 360, margin: '0 12px' }}>
        <button className="topbar-search-btn" onClick={() => setSearch(true)}>
         <Search size={14} style={{ opacity: 0.6 }} />
-        <span>Search jobs, logs...</span>
+        <span>Search folders, jobs, artifacts...</span>
         <kbd>Ctrl K</kbd>
        </button>
       </div>
 
       <div className="topbar-right-cluster">
+       {/* 4. Active Access Hierarchy Role Selector */}
        <div className="topbar-identity-box">
-        <span className="id-label">IDENTITY</span>
+        <span className="id-label">ACCESS TIER</span>
         <select
-          aria-label="Active Identity and Role"
+          aria-label="Active Identity and Role Tier"
           value={currentUserRole}
           onChange={e => setCurrentUserRole(e.target.value)}
           style={{
             background: 'transparent',
             border: 'none',
             color: 'inherit',
-            fontWeight: 700,
+            fontWeight: 800,
             fontSize: '0.78rem',
             cursor: 'pointer',
             outline: 'none',
             padding: 0,
           }}
         >
-          <option value="Platform Administrator" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>Platform Administrator</option>
-          <option value="Tenant Administrator" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>Tenant Administrator</option>
-          <option value="AI Agent & Flow Architect" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>AI Agent & Flow Architect</option>
-          <option value="Automation Developer" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>Automation Developer</option>
-          <option value="Security & Compliance Auditor" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>Security & Compliance Auditor</option>
+          <option value="Org Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Org Admin (Global Org)</option>
+          <option value="Tenant Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Tenant Specific Admin (Tenant)</option>
+          <option value="Environment Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🟢 Environment Specific Admin ({currentEnv})</option>
+          <option value="AI Agent &amp; Flow Architect" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🤖 AI Agent &amp; Flow Architect</option>
+          <option value="Compliance Auditor" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🛡 Security &amp; Compliance Auditor</option>
         </select>
        </div>
        <button className="nextgen-nav-item" style={{ width: 'auto', padding: '6px 10px', fontSize: '0.75rem', gap: 5 }} onClick={() => navigate('Theme / Icons')}>
         <Palette size={14} /> Appearance
        </button>
-       <button className="topbar-icon-action" title="Guide" onClick={() => navigate('Explorer')}>
-        <HelpCircle size={16} />
-       </button>
        <button className="topbar-icon-action" aria-label="Notifications" onClick={() => setNotification(v => !v)}>
         <Bell size={16} />
        </button>
-       <div className="tenant-badge-pill">
-        {tenants.find(t => t.id === tenant)?.name ? tenants.find(t => t.id === tenant)!.name.toUpperCase().slice(0, 8) : 'CITIBANK'}
-       </div>
        <button className="signout-btn" onClick={logout}>
         Sign out
        </button>
@@ -838,6 +874,32 @@ function App(){
          ))}
         </div>
        </>
+      )}
+
+      {active === 'Artifacts Registry' && (
+       <ArtifactsRegistryStudio
+        token={token}
+        tenant={tenant}
+        tenantName={tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        currentEnv={currentEnv}
+       />
+      )}
+
+      {isTenantEnvs && (
+       <EnvironmentTenantModal
+        isOpen={true}
+        onClose={() => navigate('Folders & Hierarchy')}
+        currentEnv={currentEnv}
+        onSelectEnv={setCurrentEnv}
+        currentTenantId={tenant}
+        tenants={tenants}
+        onSelectTenant={(id) => {
+          setTenant(id);
+          setLiveNodes([]);
+          sessionStorage.setItem(authStorage, JSON.stringify({ token, tenant: id }));
+        }}
+        userRole={currentUserRole}
+       />
       )}
 
       {isFoldersStudio && (

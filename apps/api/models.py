@@ -98,6 +98,7 @@ class Tenant(Base):
     __tablename__ = "tenants"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
     slug: Mapped[str] = mapped_column(String(100), unique=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -160,11 +161,16 @@ class Folder(Base):
         ForeignKey("organizations.id"),
     )
 
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
+
     parent_folder_id: Mapped[uuid.UUID | None] = mapped_column(
         nullable=True,
     )
 
     name: Mapped[str] = mapped_column(String(200))
+    environment_name: Mapped[str] = mapped_column(String(20), default="DEV", server_default="DEV", nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text('\'{"inheritance": true, "auto_scaling": true, "retention_days": 90, "audit_enabled": true}\'::jsonb'), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -971,3 +977,56 @@ class HumanTask(Base):
     resolved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+# ---------------------------------------------------------
+# Milestone M14: Hierarchy De-duplication & Unified Tree
+# ---------------------------------------------------------
+
+class TenantEnvironment(Base):
+    __tablename__ = "tenant_environments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_tenant_environments_tenant_name"),
+        CheckConstraint("name IN ('DEV', 'UAT', 'CANARY', 'PROD')", name="ck_tenant_environment_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(20), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class FolderDependency(Base):
+    __tablename__ = "folder_dependencies"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    folder_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("folders.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    dependency_type: Mapped[str] = mapped_column(String(50), default="PACKAGE", server_default="PACKAGE", nullable=False)
+    version: Mapped[str] = mapped_column(String(50), default="1.0.0", server_default="1.0.0", nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class Artifact(Base):
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        CheckConstraint("scope_level IN ('ORGANIZATION', 'TENANT', 'ENVIRONMENT', 'FOLDER')", name="ck_artifacts_scope_level"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    scope_level: Mapped[str] = mapped_column(String(30), nullable=False)
+    scope_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(50), default="DOCUMENT", server_default="DOCUMENT", nullable=False)
+    version: Mapped[str] = mapped_column(String(50), default="1.0.0", server_default="1.0.0", nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

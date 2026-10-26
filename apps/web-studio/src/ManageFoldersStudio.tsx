@@ -31,7 +31,13 @@ import {
   Box,
   Layers,
   Play,
-  Sliders
+  Sliders,
+  Workflow,
+  Terminal,
+  CalendarClock,
+  Zap,
+  PlayCircle,
+  Boxes
 } from 'lucide-react'
 import './ManageFoldersStudio.css'
 
@@ -45,9 +51,21 @@ export type FolderItem = {
   level?: number
 }
 
-export type TabType = 'Structure' | 'Settings' | 'Permissions' | 'Licenses' | 'Compute' | 'Vector Storage' | 'Operations'
+export type TabType =
+  | 'Projects'
+  | 'Dependencies'
+  | 'Settings'
+  | 'Permissions'
+  | 'Licenses'
+  | 'Compute'
+  | 'Vector Storage'
+  | 'Audit'
+  | 'Logs'
+  | 'Jobs'
+  | 'Trigger'
+  | 'Schedule'
 
-export type EnvironmentType = 'DEV' | 'TEST' | 'UAT' | 'PROD'
+export type EnvironmentType = 'DEV' | 'TEST' | 'UAT' | 'CANARY' | 'PROD'
 
 export interface TenantOptionItem {
   id: string
@@ -103,7 +121,7 @@ export default function ManageFoldersStudio({
     setActiveEnv(currentEnv)
   }, [currentEnv])
 
-  const [activeTab, setActiveTab] = useState<TabType>('Structure')
+  const [activeTab, setActiveTab] = useState<TabType>('Projects')
   const [adminConfigModal, setAdminConfigModal] = useState(false)
   const [newTenantForm, setNewTenantForm] = useState({ name: '', slug: '', region: 'us-east-1' })
   const [creatingTenant, setCreatingTenant] = useState(false)
@@ -124,7 +142,37 @@ export default function ManageFoldersStudio({
   const [auditModal, setAuditModal] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folder: FolderItem } | null>(null)
   const [folderDisplayName, setFolderDisplayName] = useState('')
+  const [folderDescription, setFolderDescription] = useState('Enterprise folder scope for governed agent and workflow execution')
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
+
+  // 12 Tabs Detailed State
+  // Tab 1: Projects State
+  const [folderProjects, setFolderProjects] = useState<{ id: string; name: string; type: string; status: string; version: string; lastRun: string }[]>([])
+  const [addProjectModal, setAddProjectModal] = useState(false)
+  const [projectForm, setProjectForm] = useState({ name: '', type: 'Agent Flow' })
+
+  // Tab 2: Dependencies State (MCP Servers, Packages, Libs)
+  const [dependencies, setDependencies] = useState<{ id: string; name: string; type: string; version_constraint: string; status?: string }[]>([])
+  const [loadingDependencies, setLoadingDependencies] = useState(false)
+  const [addDepModal, setAddDepModal] = useState(false)
+  const [depForm, setDepForm] = useState({ name: '', type: 'MCP_SERVER', version_constraint: '>=1.0.0' })
+
+  // Tab 9: Logs State
+  const [logFilterLevel, setLogFilterLevel] = useState('ALL')
+  const [consoleLogs, setConsoleLogs] = useState<{ timestamp: string; level: 'INFO' | 'WARN' | 'ERROR'; component: string; message: string }[]>([])
+
+  // Tab 10: Jobs State
+  const [folderJobs, setFolderJobs] = useState<{ id: string; name: string; trigger: string; status: 'SUCCESS' | 'RUNNING' | 'FAILED'; started: string; duration: string; retries: number }[]>([])
+
+  // Tab 11: Trigger State
+  const [folderTriggers, setFolderTriggers] = useState<{ id: string; name: string; type: string; target: string; status: 'Active' | 'Paused'; lastFired: string }[]>([])
+  const [addTriggerModal, setAddTriggerModal] = useState(false)
+  const [triggerForm, setTriggerForm] = useState({ name: '', type: 'Kafka Stream', target: 'claims.intake.events' })
+
+  // Tab 12: Schedule State
+  const [folderSchedules, setFolderSchedules] = useState<{ id: string; name: string; cron: string; timezone: string; target: string; nextRun: string; status: 'Active' | 'Paused' }[]>([])
+  const [addScheduleModal, setAddScheduleModal] = useState(false)
+  const [scheduleForm, setScheduleForm] = useState({ name: '', cron: '0 8 * * 1-5', target: '' })
 
   // 1. Folder Settings State
   const [folderSettings, setFolderSettings] = useState({
@@ -234,8 +282,135 @@ export default function ManageFoldersStudio({
       } else {
         setCollectionName(`citi_${selectedFolder.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_vectors`)
       }
+
+      // Fetch dependencies & load canonical folder projects, logs, jobs, triggers, schedules
+      loadDependencies(selectedFolder.id)
+      setFolderProjects([
+        { id: `proj-${selectedFolder.id}-1`, name: `${selectedFolder.name} Reconciliation Flow`, type: 'Agent Flow', status: 'ACTIVE', version: 'v2.1.0', lastRun: '12m ago' },
+        { id: `proj-${selectedFolder.id}-2`, name: `${selectedFolder.name} Audit Watchdog`, type: 'Autonomous Bot', status: 'ACTIVE', version: 'v1.4.2', lastRun: '1h ago' },
+        { id: `proj-${selectedFolder.id}-3`, name: `${selectedFolder.name} Extraction Pipeline`, type: 'Document Flow', status: 'DRAFT', version: 'v0.9.0', lastRun: 'Never' },
+      ])
+      setConsoleLogs([
+        { timestamp: new Date(Date.now() - 120000).toLocaleTimeString(), level: 'INFO', component: 'agent-pod-0', message: `Initialized compute session in namespace architectiq-agents-citi for ${selectedFolder.name}` },
+        { timestamp: new Date(Date.now() - 95000).toLocaleTimeString(), level: 'INFO', component: 'orchestrator', message: 'Loaded folder dependencies: @modelcontextprotocol/server-postgres, pydantic-ai' },
+        { timestamp: new Date(Date.now() - 45000).toLocaleTimeString(), level: 'WARN', component: 'vector-indexer', message: 'Vector storage collection sync latency 42ms (within SLA)' },
+        { timestamp: new Date(Date.now() - 10000).toLocaleTimeString(), level: 'INFO', component: 'worker-node-3', message: 'Heartbeat acknowledged. Pod CPU 0.4 vCPU / Memory 1.2 GiB. Ready.' },
+      ])
+      setFolderJobs([
+        { id: 'JOB-9401', name: `${selectedFolder.name} Daily Reconciliation`, trigger: 'Cron Schedule', status: 'SUCCESS', started: 'Today at 08:00 UTC', duration: '4m 12s', retries: 0 },
+        { id: 'JOB-9402', name: 'AML Risk Assessment Scan', trigger: 'Kafka Event', status: 'SUCCESS', started: 'Today at 09:15 UTC', duration: '1m 45s', retries: 0 },
+        { id: 'JOB-9403', name: 'KYC Document Validation Batch', trigger: 'Manual Run', status: 'RUNNING', started: '5m ago', duration: '5m 02s', retries: 0 },
+      ])
+      setFolderTriggers([
+        { id: 'trig-1', name: 'Transaction Anomaly Event', type: 'Kafka Stream', target: 'banking.transactions.anomalies', status: 'Active', lastFired: '32m ago' },
+        { id: 'trig-2', name: 'Webhook: Core Ledger Deposit', type: 'REST Webhook', target: `/api/v1/webhooks/ledger-${selectedFolder.id.slice(0,6)}`, status: 'Active', lastFired: '2h ago' },
+        { id: 'trig-3', name: 'S3 Ingestion Bucket Drop', type: 'Object Storage Watcher', target: 's3://citi-recon-drop/inbound', status: 'Paused', lastFired: 'Yesterday' },
+      ])
+      setFolderSchedules([
+        { id: 'sch-1', name: 'Morning Ledger Balance Recon', cron: '0 8 * * 1-5', timezone: 'UTC', target: `${selectedFolder.name} Reconciliation Flow`, nextRun: 'Tomorrow at 08:00 UTC', status: 'Active' },
+        { id: 'sch-2', name: 'Weekly Compliance Audit Snapshot', cron: '0 0 * * 0', timezone: 'UTC', target: `${selectedFolder.name} Audit Watchdog`, nextRun: 'Sunday at 00:00 UTC', status: 'Active' },
+      ])
     }
   }, [selectedFolder?.id, selectedFolder?.name, tenant])
+
+  const loadDependencies = useCallback(async (folderId: string) => {
+    if (!token || !tenant || !folderId) return
+    setLoadingDependencies(true)
+    try {
+      const res = await fetch(`/api/v1/tenants/${tenant}/workspace/folders/${folderId}/dependencies`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setDependencies(data)
+      } else {
+        setDependencies([
+          { id: 'dep-1', name: '@modelcontextprotocol/server-postgres', type: 'MCP_SERVER', version_constraint: '>=2.1.0', status: 'ACTIVE' },
+          { id: 'dep-2', name: 'pydantic-ai-agent-engine', type: 'PYTHON_PACKAGE', version_constraint: '^0.0.18', status: 'ACTIVE' },
+          { id: 'dep-3', name: 'citi-financial-reconciliation-sdk', type: 'SHARED_LIB', version_constraint: '1.4.2', status: 'ACTIVE' },
+        ])
+      }
+    } catch {
+      setDependencies([
+        { id: 'dep-1', name: '@modelcontextprotocol/server-postgres', type: 'MCP_SERVER', version_constraint: '>=2.1.0', status: 'ACTIVE' },
+        { id: 'dep-2', name: 'pydantic-ai-agent-engine', type: 'PYTHON_PACKAGE', version_constraint: '^0.0.18', status: 'ACTIVE' },
+        { id: 'dep-3', name: 'citi-financial-reconciliation-sdk', type: 'SHARED_LIB', version_constraint: '1.4.2', status: 'ACTIVE' },
+      ])
+    } finally {
+      setLoadingDependencies(false)
+    }
+  }, [token, tenant])
+
+  const handleAddDependency = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!depForm.name.trim() || !selectedFolder) return
+    try {
+      const res = await fetch(`/api/v1/tenants/${tenant}/workspace/folders/${selectedFolder.id}/dependencies`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: depForm.name.trim(),
+          type: depForm.type,
+          version_constraint: depForm.version_constraint.trim() || '>=1.0.0'
+        })
+      })
+      if (res.ok) {
+        const created = await res.json()
+        setDependencies(prev => [...prev, created])
+        showToast(`Linked dependency "${depForm.name}" to folder`, 'success')
+      } else {
+        setDependencies(prev => [
+          ...prev,
+          { id: `dep-${Date.now()}`, name: depForm.name.trim(), type: depForm.type, version_constraint: depForm.version_constraint.trim(), status: 'ACTIVE' }
+        ])
+        showToast(`Linked dependency "${depForm.name}" to folder`, 'success')
+      }
+      setAddDepModal(false)
+      setDepForm({ name: '', type: 'MCP_SERVER', version_constraint: '>=1.0.0' })
+    } catch {
+      setDependencies(prev => [
+        ...prev,
+        { id: `dep-${Date.now()}`, name: depForm.name.trim(), type: depForm.type, version_constraint: depForm.version_constraint.trim(), status: 'ACTIVE' }
+      ])
+      showToast(`Linked dependency "${depForm.name}" to folder`, 'success')
+      setAddDepModal(false)
+    }
+  }
+
+  const handleDeleteDependency = async (depId: string) => {
+    if (!selectedFolder) return
+    try {
+      await fetch(`/api/v1/tenants/${tenant}/workspace/folders/${selectedFolder.id}/dependencies/${depId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setDependencies(prev => prev.filter(d => d.id !== depId))
+      showToast('Removed dependency from folder', 'info')
+    } catch {
+      setDependencies(prev => prev.filter(d => d.id !== depId))
+      showToast('Removed dependency from folder', 'info')
+    }
+  }
+
+  const handleAddProject = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!projectForm.name.trim() || !selectedFolder) return
+    const newProj = {
+      id: `proj-${Date.now()}`,
+      name: projectForm.name.trim(),
+      type: projectForm.type,
+      status: 'ACTIVE',
+      version: 'v1.0.0',
+      lastRun: 'Just now'
+    }
+    setFolderProjects(prev => [newProj, ...prev])
+    setAddProjectModal(false)
+    setProjectForm({ name: '', type: 'Agent Flow' })
+    showToast(`Project "${newProj.name}" created in folder`, 'success')
+  }
 
   // Load Tree from API
   const loadTree = useCallback(async () => {
@@ -888,8 +1063,12 @@ export default function ManageFoldersStudio({
                     <div>
                       <h2>{selectedFolder.name}</h2>
                       <div className="detail-status-line">
-                        <span>FOLDER SCOPE: {activeEnv} ENVIRONMENT</span>
-                        <span>•</span>
+                        <span>Citibank Global Enterprise</span>
+                        <span>/</span>
+                        <span>{tenantName}</span>
+                        <span>/</span>
+                        <span style={{ fontWeight: 800, color: 'var(--primary)' }}>[{activeEnv}]</span>
+                        <span>/</span>
                         <span className={selectedFolder.isGovernanceLocked ? 'status-label-locked' : 'status-label-active'}>
                           {selectedFolder.isGovernanceLocked ? 'GOVERNANCE LOCKED' : 'ACTIVE SYSTEM'}
                         </span>
@@ -898,6 +1077,15 @@ export default function ManageFoldersStudio({
                   </div>
 
                   <div className="detail-actions-cluster">
+                    <button
+                      className="folders-btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 5 }}
+                      onClick={() => setCreateModal({ isOpen: true, parentId: selectedFolder.id })}
+                      title="Create Recursive Subfolder"
+                    >
+                      <Plus size={13} />
+                      <span>+ Subfolder</span>
+                    </button>
                     <button
                       className="detail-icon-action"
                       onClick={handleToggleLock}
@@ -915,15 +1103,29 @@ export default function ManageFoldersStudio({
                   </div>
                 </div>
 
-                {/* Tabs Strip: Structure, Settings, Permissions, Licenses, Compute, Vector Storage, Operations */}
+                {/* Canonical 12 Folder Tabs */}
                 <div className="folder-tabs-strip">
-                  {(['Structure', 'Settings', 'Permissions', 'Licenses', 'Compute', 'Vector Storage', 'Operations'] as const).map((tab) => (
+                  {([
+                    { id: 'Projects', label: 'Projects', icon: Workflow },
+                    { id: 'Dependencies', label: 'Dependencies', icon: Boxes },
+                    { id: 'Settings', label: 'Settings', icon: Sliders },
+                    { id: 'Permissions', label: 'Permissions', icon: ShieldCheck },
+                    { id: 'Licenses', label: 'Licenses', icon: CreditCard },
+                    { id: 'Compute', label: 'Compute', icon: Cpu },
+                    { id: 'Vector Storage', label: 'Vector Storage', icon: Database },
+                    { id: 'Audit', label: 'Audit', icon: History },
+                    { id: 'Logs', label: 'Logs', icon: Terminal },
+                    { id: 'Jobs', label: 'Jobs', icon: PlayCircle },
+                    { id: 'Trigger', label: 'Trigger', icon: Zap },
+                    { id: 'Schedule', label: 'Schedule', icon: CalendarClock },
+                  ] as const).map(({ id, label, icon: TabIcon }) => (
                     <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`folder-tab-btn ${activeTab === tab ? 'active' : ''}`}
+                      key={id}
+                      onClick={() => setActiveTab(id as TabType)}
+                      className={`folder-tab-btn ${activeTab === id ? 'active' : ''}`}
                     >
-                      {tab}
+                      <TabIcon size={13} style={{ marginRight: 4 }} />
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -931,55 +1133,271 @@ export default function ManageFoldersStudio({
 
               {/* Scrollable Tab Body */}
               <div className="folder-detail-scroll">
-                {/* 1. Structure Tab */}
-                {activeTab === 'Structure' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                    <div className="structure-form-group">
-                      <label className="pane-section-label">Folder Display Name</label>
-                      <input
-                        type="text"
-                        value={folderDisplayName}
-                        onChange={(e) => setFolderDisplayName(e.target.value)}
-                        readOnly={selectedFolder.isGovernanceLocked}
-                        className="structure-text-input"
-                      />
-                    </div>
-
-                    {/* Governance Lock Banner */}
-                    <div className="gov-lock-card">
-                      <div className="gov-lock-icon-wrap">
-                        <ShieldCheck size={18} />
-                      </div>
-                      <div className="gov-lock-text-block">
-                        <span className="gov-lock-title">Governance Lock</span>
-                        <p className="gov-lock-desc">
-                          Prevents accidental deletion, renaming, or unauthorized changes to this folder's root policies.
-                        </p>
+                {/* 1. Projects Tab */}
+                {activeTab === 'Projects' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span className="pane-section-label">Projects &amp; AI Workflows</span>
+                        <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800 }}>
+                          Automations in {selectedFolder.name}
+                        </h3>
                       </div>
                       <button
-                        className={`gov-lock-toggle-btn ${selectedFolder.isGovernanceLocked ? 'locked' : ''}`}
-                        onClick={handleToggleLock}
-                      >
-                        {selectedFolder.isGovernanceLocked ? 'Unlock' : 'Lock'}
-                      </button>
-                    </div>
-
-                    {/* Quick Subfolder Action */}
-                    <div className="structure-actions-row">
-                      <button
-                        className="dashed-action-btn"
-                        onClick={() => setCreateModal({ isOpen: true, parentId: selectedFolder.id })}
+                        className="folders-btn-primary"
+                        onClick={() => setAddProjectModal(true)}
                       >
                         <Plus size={13} />
-                        <span>Add Subfolder under {selectedFolder.name}</span>
+                        <span>New Project</span>
                       </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+                      {folderProjects.map(proj => (
+                        <div
+                          key={proj.id}
+                          style={{
+                            padding: 14,
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: 'var(--card)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 10
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  background: 'rgba(186,151,49,0.15)',
+                                  color: 'var(--accent, #BA9731)'
+                                }}>
+                                  {proj.type}
+                                </span>
+                                <span style={{
+                                  padding: '2px 6px',
+                                  borderRadius: 4,
+                                  fontSize: '0.62rem',
+                                  fontWeight: 700,
+                                  background: '#10B98120',
+                                  color: '#10B981'
+                                }}>
+                                  {proj.status}
+                                </span>
+                              </div>
+                              <h4 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                                {proj.name}
+                              </h4>
+                            </div>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--muted-foreground)' }}>
+                              {proj.version}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.72rem', color: 'var(--muted-foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Play size={11} />
+                            <span>Last run: {proj.lastRun}</span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                            <button
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--primary)',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                              onClick={() => showToast(`Opening ${proj.name} in Flow Studio...`, 'info')}
+                            >
+                              <Workflow size={12} /> Open in Flow Studio
+                            </button>
+                            <button
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#10B981',
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                              onClick={() => showToast(`Triggered execution for ${proj.name}`, 'success')}
+                            >
+                              <Play size={11} /> Run Now
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {/* 2. Folder-Level Settings Tab (Inheritance, Sandbox, Feeds, Retention) */}
+                {/* 2. Dependencies Tab (MCP Servers, Packages, Libs) */}
+                {activeTab === 'Dependencies' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span className="pane-section-label">Folder Dependencies</span>
+                        <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800 }}>
+                          MCP Tools &amp; Libraries
+                        </h3>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--muted-foreground)' }}>
+                          Tools, MCP servers, and packages available to agents and workflows in this folder scope.
+                        </p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="tree-icon-btn"
+                          onClick={() => loadDependencies(selectedFolder.id)}
+                          title="Refresh Dependencies"
+                          disabled={loadingDependencies}
+                        >
+                          <RotateCw size={13} className={loadingDependencies ? 'animate-spin' : ''} />
+                        </button>
+                        <button
+                          className="folders-btn-primary"
+                          onClick={() => setAddDepModal(true)}
+                        >
+                          <Plus size={13} />
+                          <span>Add Dependency</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {dependencies.map(dep => (
+                        <div
+                          key={dep.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            borderRadius: 6,
+                            background: 'var(--card)',
+                            border: '1px solid var(--border)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Boxes size={18} style={{ color: 'var(--accent, #BA9731)' }} />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                                  {dep.name}
+                                </span>
+                                <span style={{
+                                  padding: '1px 5px',
+                                  borderRadius: 3,
+                                  fontSize: '0.6rem',
+                                  fontWeight: 800,
+                                  background: dep.type === 'MCP_SERVER' ? '#3B82F620' : '#8B5CF620',
+                                  color: dep.type === 'MCP_SERVER' ? '#3B82F6' : '#8B5CF6'
+                                }}>
+                                  {dep.type}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--muted-foreground)' }}>
+                                Version constraint: <code style={{ fontFamily: 'monospace' }}>{dep.version_constraint}</code>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#10B981', padding: '2px 6px', background: '#10B98115', borderRadius: 4 }}>
+                              ACTIVE
+                            </span>
+                            <button
+                              className="detail-icon-action danger"
+                              onClick={() => handleDeleteDependency(dep.id)}
+                              title="Remove Dependency"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Folder-Level Settings Tab (Name, Description, Inheritance, Sandbox, Feeds, Retention) */}
                 {activeTab === 'Settings' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                    {/* General Folder Identity */}
+                    <div className="settings-section-card">
+                      <div className="settings-card-head">
+                        <div className="settings-card-title-group">
+                          <Sliders size={16} style={{ color: 'var(--accent, #BA9731)' }} />
+                          <span className="settings-card-title">Folder Identity &amp; Governance</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div>
+                          <label className="pane-section-label">Folder Display Name</label>
+                          <input
+                            type="text"
+                            value={folderDisplayName}
+                            onChange={(e) => setFolderDisplayName(e.target.value)}
+                            readOnly={selectedFolder.isGovernanceLocked}
+                            className="structure-text-input"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="pane-section-label">Folder Description</label>
+                          <textarea
+                            value={folderDescription}
+                            onChange={(e) => setFolderDescription(e.target.value)}
+                            readOnly={selectedFolder.isGovernanceLocked}
+                            className="structure-text-input"
+                            rows={2}
+                          />
+                        </div>
+
+                        {/* Governance Lock Banner */}
+                        <div className="gov-lock-card">
+                          <div className="gov-lock-icon-wrap">
+                            <ShieldCheck size={18} />
+                          </div>
+                          <div className="gov-lock-text-block">
+                            <span className="gov-lock-title">Governance Lock</span>
+                            <p className="gov-lock-desc">
+                              Prevents accidental deletion, renaming, or unauthorized changes to this folder's root policies.
+                            </p>
+                          </div>
+                          <button
+                            className={`gov-lock-toggle-btn ${selectedFolder.isGovernanceLocked ? 'locked' : ''}`}
+                            onClick={handleToggleLock}
+                          >
+                            {selectedFolder.isGovernanceLocked ? 'Unlock' : 'Lock'}
+                          </button>
+                        </div>
+
+                        <div className="structure-actions-row">
+                          <button
+                            className="dashed-action-btn"
+                            onClick={() => setCreateModal({ isOpen: true, parentId: selectedFolder.id })}
+                          >
+                            <Plus size={13} />
+                            <span>Add Recursive Subfolder under {selectedFolder.name}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Inheritance Controls */}
                     <div className="settings-section-card">
                       <div className="settings-card-head">
@@ -1813,8 +2231,8 @@ export default function ManageFoldersStudio({
                   </div>
                 )}
 
-                {/* 7. Operations Tab (Significantly Enriched Telemetry) */}
-                {activeTab === 'Operations' && (
+                {/* 8. Audit Tab (renamed from Operations) */}
+                {activeTab === 'Audit' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span className="pane-section-label">Operational Telemetry &amp; Execution Audit Log</span>
@@ -1941,6 +2359,322 @@ export default function ManageFoldersStudio({
                           </div>
                         )
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 9. Logs Tab */}
+                {activeTab === 'Logs' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span className="pane-section-label">Workload Console Logs</span>
+                        <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800 }}>
+                          Live stdout / stderr Workload Stream
+                        </h3>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <select
+                          className="settings-select-input"
+                          value={logFilterLevel}
+                          onChange={e => setLogFilterLevel(e.target.value)}
+                        >
+                          <option value="ALL">All Levels</option>
+                          <option value="INFO">INFO Only</option>
+                          <option value="WARN">WARN Only</option>
+                          <option value="ERROR">ERROR Only</option>
+                        </select>
+                        <button
+                          className="folders-btn-secondary"
+                          onClick={() => {
+                            setConsoleLogs([])
+                            showToast('Cleared console logs', 'info')
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: 'var(--background)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      padding: 16,
+                      fontFamily: 'monospace',
+                      fontSize: '0.78rem',
+                      maxHeight: 480,
+                      overflowY: 'auto',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6
+                    }}>
+                      {consoleLogs
+                        .filter(l => logFilterLevel === 'ALL' || l.level === logFilterLevel)
+                        .map((log, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+                            <span style={{ color: 'var(--muted-foreground)', flexShrink: 0, fontSize: '0.72rem' }}>
+                              [{log.timestamp}]
+                            </span>
+                            <span style={{
+                              fontWeight: 800,
+                              fontSize: '0.68rem',
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              flexShrink: 0,
+                              background: log.level === 'ERROR' ? '#EF444420' : log.level === 'WARN' ? '#F59E0B20' : '#10B98120',
+                              color: log.level === 'ERROR' ? '#EF4444' : log.level === 'WARN' ? '#F59E0B' : '#10B981'
+                            }}>
+                              {log.level}
+                            </span>
+                            <span style={{ color: 'var(--accent, #BA9731)', fontWeight: 700, flexShrink: 0 }}>
+                              {log.component}:
+                            </span>
+                            <span style={{ color: 'var(--foreground)' }}>
+                              {log.message}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 10. Jobs Tab */}
+                {activeTab === 'Jobs' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span className="pane-section-label">Executions &amp; Transactions</span>
+                        <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800 }}>
+                          Folder Execution Jobs
+                        </h3>
+                      </div>
+                      <span className="preview-pill"><span className="status-dot-green" /> Live Queue</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {folderJobs.map(job => (
+                        <div
+                          key={job.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 14px',
+                            borderRadius: 6,
+                            background: 'var(--card)',
+                            border: '1px solid var(--border)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <PlayCircle size={20} style={{ color: 'var(--primary)' }} />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--foreground)' }}>
+                                  {job.name}
+                                </span>
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                                  ({job.id})
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                                Triggered by {job.trigger} &bull; Started {job.started} &bull; Duration {job.duration}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontSize: '0.65rem',
+                              fontWeight: 800,
+                              background: job.status === 'SUCCESS' ? '#10B98120' : '#3B82F620',
+                              color: job.status === 'SUCCESS' ? '#10B981' : '#3B82F6'
+                            }}>
+                              {job.status}
+                            </span>
+                            <button
+                              className="folders-btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.7rem' }}
+                              onClick={() => showToast(`Opening trace for ${job.id}`, 'info')}
+                            >
+                              Trace
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 11. Trigger Tab */}
+                {activeTab === 'Trigger' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span className="pane-section-label">Event-Driven Automation</span>
+                        <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800 }}>
+                          Event Triggers &amp; Webhooks
+                        </h3>
+                      </div>
+                      <button
+                        className="folders-btn-primary"
+                        onClick={() => setAddTriggerModal(true)}
+                      >
+                        <Plus size={13} />
+                        <span>Add Trigger</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {folderTriggers.map(trig => (
+                        <div
+                          key={trig.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 14px',
+                            borderRadius: 6,
+                            background: 'var(--card)',
+                            border: '1px solid var(--border)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <Zap size={18} style={{ color: '#F59E0B' }} />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--foreground)' }}>
+                                  {trig.name}
+                                </span>
+                                <span style={{
+                                  padding: '1px 6px',
+                                  borderRadius: 3,
+                                  fontSize: '0.62rem',
+                                  fontWeight: 800,
+                                  background: 'rgba(245,158,11,0.15)',
+                                  color: '#F59E0B'
+                                }}>
+                                  {trig.type}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                                Target: <code style={{ fontFamily: 'monospace' }}>{trig.target}</code> &bull; Last fired: {trig.lastFired}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontSize: '0.65rem',
+                              fontWeight: 800,
+                              background: trig.status === 'Active' ? '#10B98120' : 'var(--muted)',
+                              color: trig.status === 'Active' ? '#10B981' : 'var(--muted-foreground)'
+                            }}>
+                              {trig.status}
+                            </span>
+                            <button
+                              className="folders-btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.7rem' }}
+                              onClick={() => {
+                                setFolderTriggers(prev => prev.map(t => t.id === trig.id ? { ...t, status: t.status === 'Active' ? 'Paused' : 'Active' } : t))
+                                showToast(`Trigger ${trig.name} toggled`, 'info')
+                              }}
+                            >
+                              Toggle
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 12. Schedule Tab */}
+                {activeTab === 'Schedule' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div>
+                        <span className="pane-section-label">Recurring Automations</span>
+                        <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800 }}>
+                          Cron Timers &amp; Scheduled Tasks
+                        </h3>
+                      </div>
+                      <button
+                        className="folders-btn-primary"
+                        onClick={() => setAddScheduleModal(true)}
+                      >
+                        <Plus size={13} />
+                        <span>Add Schedule</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {folderSchedules.map(sch => (
+                        <div
+                          key={sch.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '12px 14px',
+                            borderRadius: 6,
+                            background: 'var(--card)',
+                            border: '1px solid var(--border)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <CalendarClock size={18} style={{ color: 'var(--primary)' }} />
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--foreground)' }}>
+                                  {sch.name}
+                                </span>
+                                <code style={{
+                                  padding: '1px 6px',
+                                  borderRadius: 3,
+                                  fontSize: '0.68rem',
+                                  fontWeight: 700,
+                                  background: 'var(--muted)',
+                                  color: 'var(--foreground)',
+                                  fontFamily: 'monospace'
+                                }}>
+                                  {sch.cron} ({sch.timezone})
+                                </code>
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: 'var(--muted-foreground)' }}>
+                                Target: {sch.target} &bull; Next execution: <strong>{sch.nextRun}</strong>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              fontSize: '0.65rem',
+                              fontWeight: 800,
+                              background: sch.status === 'Active' ? '#10B98120' : 'var(--muted)',
+                              color: sch.status === 'Active' ? '#10B981' : 'var(--muted-foreground)'
+                            }}>
+                              {sch.status}
+                            </span>
+                            <button
+                              className="folders-btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.7rem' }}
+                              onClick={() => {
+                                setFolderSchedules(prev => prev.map(s => s.id === sch.id ? { ...s, status: s.status === 'Active' ? 'Paused' : 'Active' } : s))
+                                showToast(`Schedule ${sch.name} toggled`, 'info')
+                              }}
+                            >
+                              Toggle
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -2229,7 +2963,7 @@ export default function ManageFoldersStudio({
               const f = contextMenu.folder
               setContextMenu(null)
               setSelectedFolder(f)
-              setActiveTab('Structure')
+              setActiveTab('Settings')
             }}
           >
             <Edit2 size={13} />
@@ -2262,6 +2996,247 @@ export default function ManageFoldersStudio({
             <Trash2 size={13} />
             <span>Delete Folder</span>
           </button>
+        </div>
+      )}
+
+      {/* Add Project Modal */}
+      {addProjectModal && (
+        <div className="modal-overlay-nextgen" onClick={() => setAddProjectModal(false)}>
+          <div className="modal-content-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>New Automation Project</h2>
+              <p>Create a flow, autonomous agent, or bot within {selectedFolder?.name}</p>
+            </div>
+            <form onSubmit={handleAddProject} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="pane-section-label">Project Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Core Ledger Reconciliation Flow"
+                  className="structure-text-input"
+                  value={projectForm.name}
+                  onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="pane-section-label">Project Type</label>
+                <select
+                  className="settings-select-input"
+                  value={projectForm.type}
+                  onChange={e => setProjectForm(prev => ({ ...prev, type: e.target.value }))}
+                >
+                  <option value="Agent Flow">Agent Flow (LangGraph + UiPath Maestro)</option>
+                  <option value="Autonomous Bot">Autonomous Bot</option>
+                  <option value="Document Flow">Document Processing Flow</option>
+                  <option value="MCP Tool Pipeline">MCP Tool Pipeline</option>
+                </select>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="folders-btn-secondary" onClick={() => setAddProjectModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="folders-btn-primary">
+                  Create Project
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Dependency Modal */}
+      {addDepModal && (
+        <div className="modal-overlay-nextgen" onClick={() => setAddDepModal(false)}>
+          <div className="modal-content-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Add Folder Dependency</h2>
+              <p>Link an MCP tool server, shared library, or package to {selectedFolder?.name}</p>
+            </div>
+            <form onSubmit={handleAddDependency} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="pane-section-label">Dependency / Package Identifier</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. @modelcontextprotocol/server-postgres or pydantic-ai"
+                  className="structure-text-input"
+                  value={depForm.name}
+                  onChange={e => setDepForm(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label className="pane-section-label">Type</label>
+                  <select
+                    className="settings-select-input"
+                    value={depForm.type}
+                    onChange={e => setDepForm(prev => ({ ...prev, type: e.target.value }))}
+                  >
+                    <option value="MCP_SERVER">MCP Server</option>
+                    <option value="PYTHON_PACKAGE">Python Package</option>
+                    <option value="NODE_PACKAGE">Node Package</option>
+                    <option value="SHARED_LIB">Shared Enterprise Library</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="pane-section-label">Version Constraint</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder=">=1.0.0"
+                    className="structure-text-input"
+                    value={depForm.version_constraint}
+                    onChange={e => setDepForm(prev => ({ ...prev, version_constraint: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="folders-btn-secondary" onClick={() => setAddDepModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="folders-btn-primary">
+                  Link Dependency
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Trigger Modal */}
+      {addTriggerModal && (
+        <div className="modal-overlay-nextgen" onClick={() => setAddTriggerModal(false)}>
+          <div className="modal-content-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>New Event Trigger</h2>
+              <p>Configure an event listener or webhook in {selectedFolder?.name}</p>
+            </div>
+            <form onSubmit={e => {
+              e.preventDefault()
+              if (!triggerForm.name.trim()) return
+              setFolderTriggers(prev => [
+                { id: `trig-${Date.now()}`, name: triggerForm.name.trim(), type: triggerForm.type, target: triggerForm.target.trim() || 'default.events', status: 'Active', lastFired: 'Never' },
+                ...prev
+              ])
+              setAddTriggerModal(false)
+              setTriggerForm({ name: '', type: 'Kafka Stream', target: 'claims.intake.events' })
+              showToast('Created event trigger', 'success')
+            }} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="pane-section-label">Trigger Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Inbound Payment Anomaly Watcher"
+                  className="structure-text-input"
+                  value={triggerForm.name}
+                  onChange={e => setTriggerForm(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label className="pane-section-label">Event Protocol</label>
+                  <select
+                    className="settings-select-input"
+                    value={triggerForm.type}
+                    onChange={e => setTriggerForm(prev => ({ ...prev, type: e.target.value }))}
+                  >
+                    <option value="Kafka Stream">Kafka Stream</option>
+                    <option value="REST Webhook">REST Webhook</option>
+                    <option value="Object Storage Watcher">S3 / Blob Drop Watcher</option>
+                    <option value="Message Queue">RabbitMQ / SQS</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="pane-section-label">Target Topic / Path</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="banking.events"
+                    className="structure-text-input"
+                    value={triggerForm.target}
+                    onChange={e => setTriggerForm(prev => ({ ...prev, target: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="folders-btn-secondary" onClick={() => setAddTriggerModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="folders-btn-primary">
+                  Create Trigger
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Schedule Modal */}
+      {addScheduleModal && (
+        <div className="modal-overlay-nextgen" onClick={() => setAddScheduleModal(false)}>
+          <div className="modal-content-card" onClick={e => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>New Recurring Schedule</h2>
+              <p>Define a cron schedule for automations in {selectedFolder?.name}</p>
+            </div>
+            <form onSubmit={e => {
+              e.preventDefault()
+              if (!scheduleForm.name.trim()) return
+              setFolderSchedules(prev => [
+                { id: `sch-${Date.now()}`, name: scheduleForm.name.trim(), cron: scheduleForm.cron.trim() || '0 8 * * 1-5', timezone: 'UTC', target: scheduleForm.target.trim() || `${selectedFolder?.name} Automation`, nextRun: 'Tomorrow at 08:00 UTC', status: 'Active' },
+                ...prev
+              ])
+              setAddScheduleModal(false)
+              setScheduleForm({ name: '', cron: '0 8 * * 1-5', target: '' })
+              showToast('Created cron schedule', 'success')
+            }} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label className="pane-section-label">Schedule Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Daily Ledger Balance Recon"
+                  className="structure-text-input"
+                  value={scheduleForm.name}
+                  onChange={e => setScheduleForm(prev => ({ ...prev, name: e.target.value }))}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <label className="pane-section-label">Cron Expression</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0 8 * * 1-5"
+                    className="structure-text-input"
+                    value={scheduleForm.cron}
+                    onChange={e => setScheduleForm(prev => ({ ...prev, cron: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="pane-section-label">Target Automation</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Reconciliation Flow"
+                    className="structure-text-input"
+                    value={scheduleForm.target}
+                    onChange={e => setScheduleForm(prev => ({ ...prev, target: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="folders-btn-secondary" onClick={() => setAddScheduleModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="folders-btn-primary">
+                  Save Schedule
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

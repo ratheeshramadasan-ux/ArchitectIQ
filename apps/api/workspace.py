@@ -1,5 +1,5 @@
 """Tenant-isolated workspace API. Authentication is mandatory on every route."""
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Any
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from authentication import get_authorized_tenant_db
-from models import Folder, Organization, Project, ProjectEnvironment, ProjectMembership
+from models import Folder, Organization, Project, ProjectEnvironment, ProjectMembership, TenantEnvironment, FolderDependency, Artifact
 from project_promotions import router as project_promotions_router
 from project_rbac import require_project_capability, router as project_rbac_router
 from workflow_designer import router as workflow_designer_router
@@ -426,3 +426,221 @@ def workspace_activity(tenant_id: UUID, db: Db, resource_kind: str | None = None
              "happened_at": r["happened_at"].isoformat(),
              "old_values": r["old_values"], "new_values": r["new_values"]}
             for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Milestone M14: Tenant Environments, Dependencies & Polymorphic Artifacts
+# ---------------------------------------------------------------------------
+
+class EnvironmentToggleIn(BaseModel):
+    is_enabled: bool
+
+
+class FolderDependencyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    dependency_type: Literal["PACKAGE", "MCP_TOOL", "SHARED_LIB", "MODEL"] = "PACKAGE"
+    version: str = Field(default="1.0.0", max_length=50)
+    source_url: str | None = Field(default=None, max_length=500)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ArtifactIn(BaseModel):
+    scope_level: Literal["ORGANIZATION", "TENANT", "ENVIRONMENT", "FOLDER"]
+    scope_id: UUID
+    name: str = Field(min_length=1, max_length=200)
+    artifact_type: Literal["DOCUMENT", "POLICY", "PROMPT", "SCHEMA", "PACKAGE", "CERTIFICATE"] = "DOCUMENT"
+    version: str = Field(default="1.0.0", max_length=50)
+    content: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/tenant-environments")
+def list_tenant_environments(tenant_id: UUID, db: Db):
+    """List configurable environments (DEV, UAT, CANARY, PROD) for the tenant."""
+    envs = db.scalars(
+        select(TenantEnvironment)
+        .where(TenantEnvironment.tenant_id == tenant_id)
+        .order_by(TenantEnvironment.name)
+    ).all()
+
+    if not envs:
+        # Seed default 4 environments
+        defaults = [
+            TenantEnvironment(tenant_id=tenant_id, name="DEV", display_name="Development", is_enabled=True, is_default=True),
+            TenantEnvironment(tenant_id=tenant_id, name="UAT", display_name="User Acceptance Testing", is_enabled=True, is_default=False),
+            TenantEnvironment(tenant_id=tenant_id, name="CANARY", display_name="Canary Stage", is_enabled=True, is_default=False),
+            TenantEnvironment(tenant_id=tenant_id, name="PROD", display_name="Production", is_enabled=True, is_default=False),
+        ]
+        for d in defaults:
+            db.add(d)
+        safe_flush(db)
+        envs = defaults
+
+    return [
+        {
+            "id": str(e.id),
+            "tenant_id": str(e.tenant_id),
+            "name": e.name,
+            "display_name": e.display_name,
+            "is_enabled": e.is_enabled,
+            "is_default": e.is_default,
+        }
+        for e in envs
+    ]
+
+
+@router.put("/tenant-environments/{env_name}")
+def update_tenant_environment(tenant_id: UUID, env_name: str, body: EnvironmentToggleIn, db: Db):
+    """Enable or disable an environment for the tenant (Tenant Admin)."""
+    env = db.scalar(
+        select(TenantEnvironment).where(
+            TenantEnvironment.tenant_id == tenant_id,
+            TenantEnvironment.name == env_name.upper(),
+        )
+    )
+    if not env:
+        raise HTTPException(404, f"Environment '{env_name}' not found for tenant")
+
+    env.is_enabled = body.is_enabled
+    safe_flush(db)
+    return {
+        "id": str(env.id),
+        "name": env.name,
+        "display_name": env.display_name,
+        "is_enabled": env.is_enabled,
+        "is_default": env.is_default,
+    }
+
+
+@router.get("/folders/{folder_id}/dependencies")
+def list_folder_dependencies(tenant_id: UUID, folder_id: UUID, db: Db):
+    """List dependencies, packages, and MCP tools bound to a folder."""
+    require(db, Folder, folder_id)
+    deps = db.scalars(
+        select(FolderDependency)
+        .where(
+            FolderDependency.tenant_id == tenant_id,
+            FolderDependency.folder_id == folder_id,
+        )
+        .order_by(FolderDependency.name)
+    ).all()
+
+    return [
+        {
+            "id": str(d.id),
+            "folder_id": str(d.folder_id),
+            "name": d.name,
+            "dependency_type": d.dependency_type,
+            "version": d.version,
+            "source_url": d.source_url,
+            "metadata": d.metadata_json,
+            "created_at": d.created_at.isoformat(),
+        }
+        for d in deps
+    ]
+
+
+@router.post("/folders/{folder_id}/dependencies", status_code=201)
+def create_folder_dependency(tenant_id: UUID, folder_id: UUID, body: FolderDependencyIn, db: Db):
+    """Register a new dependency or MCP tool in a folder."""
+    require(db, Folder, folder_id)
+    dep = FolderDependency(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        folder_id=folder_id,
+        name=body.name,
+        dependency_type=body.dependency_type,
+        version=body.version,
+        source_url=body.source_url,
+        metadata_json=body.metadata,
+    )
+    db.add(dep)
+    safe_flush(db)
+    return {
+        "id": str(dep.id),
+        "folder_id": str(dep.folder_id),
+        "name": dep.name,
+        "dependency_type": dep.dependency_type,
+        "version": dep.version,
+        "source_url": dep.source_url,
+        "metadata": dep.metadata_json,
+        "created_at": dep.created_at.isoformat(),
+    }
+
+
+@router.delete("/folders/{folder_id}/dependencies/{dep_id}", status_code=204)
+def delete_folder_dependency(tenant_id: UUID, folder_id: UUID, dep_id: UUID, db: Db):
+    """Delete a dependency from a folder."""
+    dep = db.scalar(
+        select(FolderDependency).where(
+            FolderDependency.id == dep_id,
+            FolderDependency.folder_id == folder_id,
+            FolderDependency.tenant_id == tenant_id,
+        )
+    )
+    if not dep:
+        raise HTTPException(404, "Dependency not found")
+    db.delete(dep)
+    safe_flush(db)
+
+
+@router.get("/artifacts")
+def list_artifacts(
+    tenant_id: UUID,
+    db: Db,
+    scope_level: str | None = None,
+    scope_id: UUID | None = None,
+):
+    """List polymorphic artifacts across Organization, Tenant, Environment, or Folder levels."""
+    stmt = select(Artifact).where(Artifact.tenant_id == tenant_id).order_by(Artifact.created_at.desc())
+    if scope_level:
+        stmt = stmt.where(Artifact.scope_level == scope_level.upper())
+    if scope_id:
+        stmt = stmt.where(Artifact.scope_id == scope_id)
+
+    items = db.scalars(stmt).all()
+    return [
+        {
+            "id": str(a.id),
+            "tenant_id": str(a.tenant_id),
+            "scope_level": a.scope_level,
+            "scope_id": str(a.scope_id),
+            "name": a.name,
+            "artifact_type": a.artifact_type,
+            "version": a.version,
+            "content": a.content,
+            "metadata": a.metadata_json,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in items
+    ]
+
+
+@router.post("/artifacts", status_code=201)
+def create_artifact(tenant_id: UUID, body: ArtifactIn, db: Db, request: Request):
+    """Create an artifact at Organization, Tenant, Environment, or Folder level."""
+    actor_id: UUID | None = getattr(request.state, "verified_actor_id", None)
+    art = Artifact(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        scope_level=body.scope_level,
+        scope_id=body.scope_id,
+        name=body.name,
+        artifact_type=body.artifact_type,
+        version=body.version,
+        content=body.content,
+        metadata_json=body.metadata,
+        created_by=actor_id,
+    )
+    db.add(art)
+    safe_flush(db)
+    return {
+        "id": str(art.id),
+        "tenant_id": str(art.tenant_id),
+        "scope_level": art.scope_level,
+        "scope_id": str(art.scope_id),
+        "name": art.name,
+        "artifact_type": art.artifact_type,
+        "version": art.version,
+        "created_at": art.created_at.isoformat(),
+    }

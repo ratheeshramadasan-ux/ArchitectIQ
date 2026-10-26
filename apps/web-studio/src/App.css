@@ -1078,34 +1078,45 @@ button.topbar-tenant-pill:hover {
 }
 
 .app-root:not(.dark) .glass-card {
-  background: var(--card-custom, rgba(255, 255, 255, var(--panel-opacity, 0.55))) !important;
+  background: var(--card-custom, var(--card)) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border: 1px solid var(--border) !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
 }
 
 .app-root.dark .dashboard-page-shell {
-  background: rgba(10, 14, 24, calc(var(--panel-opacity, 0.85) * 0.75)) !important;
+  background: var(--background) !important;
   backdrop-filter: blur(24px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 14px !important;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45) !important;
 }
 
 .app-root.dark .nextgen-topbar {
-  background: rgba(10, 14, 24, var(--panel-opacity, 0.65)) !important;
+  background: var(--sidebar, var(--card)) !important;
   backdrop-filter: blur(24px) saturate(1.6) !important;
   -webkit-backdrop-filter: blur(24px) saturate(1.6) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid var(--border) !important;
 }
 
 .app-root.dark .glass-card {
-  background: var(--card-custom, rgba(20, 24, 38, var(--panel-opacity, 0.6))) !important;
+  background: var(--card-custom, var(--card)) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.glass-mode .glass-card,
+.glass-mode .folders-left-pane,
+.glass-mode .folders-right-pane,
+.glass-mode .nextgen-topbar,
+.glass-mode .nextgen-sidebar {
+  background: color-mix(in srgb, var(--card) calc(var(--panel-opacity, 0.85) * 100%), transparent) !important;
+  backdrop-filter: blur(24px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(1.8) !important;
+  border: 1px solid var(--border) !important;
 }
 
 /* Topbar Branding & Contrast */

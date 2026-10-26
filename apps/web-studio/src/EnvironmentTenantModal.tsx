@@ -7,7 +7,7 @@ import {
   ChevronRight
 } from 'lucide-react'
 
-export type EnvironmentCode = 'DEV' | 'TEST' | 'UAT' | 'PROD'
+export type EnvironmentCode = 'DEV' | 'UAT' | 'CANARY' | 'PROD' | 'TEST'
 
 export interface EnvironmentInfo {
   code: EnvironmentCode
@@ -56,7 +56,7 @@ export default function EnvironmentTenantModal({
       subtitle: 'Isolated developer sandbox for authoring flows, prompt engineering & MCP testing.',
       statusColor: '#10B981',
       minRoleRequired: 'Automation Developer',
-      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Automation Developer', 'AI Agent & Flow Architect'],
+      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Automation Developer', 'AI Agent & Flow Architect', 'Org Admin', 'Tenant Specific Admin'],
       isLockedForUser: false
     },
     {
@@ -74,17 +74,25 @@ export default function EnvironmentTenantModal({
       subtitle: 'Pre-production staging mirror with sanitized corporate data & end-user sign-offs.',
       statusColor: '#F59E0B',
       minRoleRequired: 'UAT Reviewer / Approver',
-      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Production Operations & Bot Lead'],
-      isLockedForUser: !isPlatformOrTenantAdmin && !userRole.includes('Lead'),
-      lockReason: 'Requires UAT Approver or Administrator role'
+      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Production Operations & Bot Lead', 'Org Admin', 'Tenant Specific Admin'],
+      isLockedForUser: false
+    },
+    {
+      code: 'CANARY',
+      label: 'Canary / Dark Launch',
+      subtitle: 'Progressive rollouts and dark canary traffic routing before widespread promotion.',
+      statusColor: '#A855F7',
+      minRoleRequired: 'Tenant Administrator',
+      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Org Admin', 'Tenant Specific Admin'],
+      isLockedForUser: false
     },
     {
       code: 'PROD',
       label: 'Production',
       subtitle: 'Mission-critical enterprise runtime. Enforces immutable governance and audit trails.',
-      statusColor: '#8B5CF6',
+      statusColor: '#EF4444',
       minRoleRequired: 'Production Operator',
-      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Production Operations & Bot Lead'],
+      allowedRoles: ['Platform Administrator', 'Tenant Administrator', 'Production Operations & Bot Lead', 'Org Admin'],
       isLockedForUser: !isPlatformOrTenantAdmin && !userRole.includes('Production'),
       lockReason: 'Requires Production Operations or Platform Admin role'
     }

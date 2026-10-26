@@ -158,17 +158,22 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
       expect(screen.getByText('ACTIVE SYSTEM')).toBeDefined()
     })
 
-    // Verify all 7 tabs are available
-    expect(screen.getByRole('button', { name: 'Structure' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Settings' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Permissions' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Licenses' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Compute' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Vector Storage' })).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Operations' })).toBeDefined()
+    // Verify all 12 canonical tabs are available
+    expect(screen.getByRole('button', { name: /Projects/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Dependencies/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Settings/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Permissions/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Licenses/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Compute/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Vector Storage/i })).toBeDefined()
+    expect(screen.getAllByRole('button', { name: /Audit/i }).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('button', { name: /Logs/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Jobs/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Trigger/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /Schedule/i })).toBeDefined()
 
     // Test Folder Settings tab
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Settings$/i }))
     await waitFor(() => {
       expect(screen.getByText('Folder Inheritance Controls')).toBeDefined()
       expect(screen.getByText('Inherit Permissions from Parent Folder')).toBeDefined()
@@ -179,7 +184,7 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
     })
 
     // Test Compute tab (Pods, Containers, VMs)
-    fireEvent.click(screen.getByRole('button', { name: 'Compute' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Compute$/i }))
     await waitFor(() => {
       expect(screen.getByText(/Kubernetes Pods & Agent Workers/i)).toBeDefined()
       expect(screen.getByText(/Docker Containers/i)).toBeDefined()
@@ -190,7 +195,7 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
     })
 
     // Test Vector Storage tab (Dedicated vs Shared)
-    fireEvent.click(screen.getByRole('button', { name: 'Vector Storage' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Vector Storage$/i }))
     await waitFor(() => {
       expect(screen.getByText('Specific to Folder (Dedicated)')).toBeDefined()
       expect(screen.getByText('Shared with Tenant / Parent')).toBeDefined()
@@ -199,8 +204,9 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
       expect(screen.getByText('Test Vector Search Similarity Query')).toBeDefined()
     })
 
-    // Test Operations tab (Enriched Telemetry)
-    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+    // Test Audit tab (formerly Operations - Enriched Telemetry)
+    const auditTabBtn = screen.getAllByRole('button', { name: /Audit/i }).find(b => b.className.includes('folder-tab-btn'))
+    if (auditTabBtn) fireEvent.click(auditTabBtn)
     await waitFor(() => {
       expect(screen.getByText(/Operational Telemetry & Execution Audit Log/i)).toBeDefined()
       expect(screen.getByPlaceholderText(/Search operations, actors, targets/i)).toBeDefined()
