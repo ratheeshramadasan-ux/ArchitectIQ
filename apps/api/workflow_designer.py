@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from authentication import get_authorized_tenant_db
 from project_rbac import require_project_capability
-from models import WorkflowDefinition, WorkflowVersion, Project
+from models import WorkflowDefinition, WorkflowVersion, Project, AiModelRoute
 
 router = APIRouter(tags=["Workflow Designer"])
 Db = Annotated[Session, Depends(get_authorized_tenant_db)]
@@ -38,6 +38,11 @@ NODE_TYPES = {
     "RULE",
     "NOTIFICATION",
     "TERMINAL",
+    "MCP_TOOL",
+    "PARALLEL_SPLIT",
+    "TRY_CATCH",
+    "FOR_EACH",
+    "DELAY",
 }
 
 
@@ -633,3 +638,202 @@ def get_workflow_diff(
         raise HTTPException(status_code=404, detail="One or both requested versions not found")
 
     return compute_workflow_diff(ver1.definition, ver2.definition)
+
+
+# ==============================================================================
+# Milestone M13 / FS-04 & FS-05: AI Model Routes Catalog
+# ==============================================================================
+
+class AiModelRouteIn(BaseModel):
+    route_key: str = Field(..., min_length=2, max_length=100)
+    display_name: str = Field(..., min_length=2, max_length=150)
+    primary_provider: str = Field(default="google")
+    primary_model: str = Field(default="gemini-1.5-pro")
+    fallback_provider: str | None = None
+    fallback_model: str | None = None
+    timeout_ms: int = Field(default=30000, ge=1000, le=120000)
+    max_retries: int = Field(default=3, ge=0, le=10)
+    cost_limit_daily: float | None = None
+    is_active: bool = True
+
+
+class AiModelRouteOut(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    route_key: str
+    display_name: str
+    primary_provider: str
+    primary_model: str
+    fallback_provider: str | None
+    fallback_model: str | None
+    timeout_ms: int
+    max_retries: int
+    cost_limit_daily: float | None
+    is_active: bool
+    created_at: datetime
+
+
+@router.get("/ai-model-routes", response_model=list[AiModelRouteOut])
+def list_ai_model_routes(
+    tenant_id: UUID,
+    db: Db,
+    request: Request,
+):
+    """List configured AI model gateway routes for the tenant. Auto-seeds defaults if empty."""
+    routes = db.scalars(
+        select(AiModelRoute)
+        .where(AiModelRoute.tenant_id == tenant_id)
+        .order_by(AiModelRoute.route_key)
+    ).all()
+
+    if not routes:
+        defaults = [
+            AiModelRoute(
+                tenant_id=tenant_id,
+                route_key="claims-classifier-prod",
+                display_name="Claims Classifier (Prod)",
+                primary_provider="google",
+                primary_model="gemini-1.5-pro",
+                fallback_provider="anthropic",
+                fallback_model="claude-3-5-sonnet",
+                timeout_ms=15000,
+                max_retries=3,
+                cost_limit_daily=50.0,
+                is_active=True,
+            ),
+            AiModelRoute(
+                tenant_id=tenant_id,
+                route_key="fast-cheap",
+                display_name="Fast & Low Latency (Flash)",
+                primary_provider="google",
+                primary_model="gemini-1.5-flash",
+                fallback_provider="anthropic",
+                fallback_model="claude-3-5-haiku",
+                timeout_ms=5000,
+                max_retries=2,
+                cost_limit_daily=20.0,
+                is_active=True,
+            ),
+            AiModelRoute(
+                tenant_id=tenant_id,
+                route_key="complex-reasoning",
+                display_name="Complex Multi-Agent Reasoning",
+                primary_provider="google",
+                primary_model="gemini-1.5-pro",
+                fallback_provider="openai",
+                fallback_model="gpt-4o",
+                timeout_ms=45000,
+                max_retries=3,
+                cost_limit_daily=100.0,
+                is_active=True,
+            ),
+            AiModelRoute(
+                tenant_id=tenant_id,
+                route_key="document-extractor",
+                display_name="Document Parsing & OCR Vision",
+                primary_provider="google",
+                primary_model="gemini-1.5-pro",
+                fallback_provider="google",
+                fallback_model="gemini-1.5-flash",
+                timeout_ms=30000,
+                max_retries=2,
+                cost_limit_daily=50.0,
+                is_active=True,
+            ),
+        ]
+        for d in defaults:
+            db.add(d)
+        db.flush()
+        routes = defaults
+
+    return [
+        AiModelRouteOut(
+            id=r.id,
+            tenant_id=r.tenant_id,
+            route_key=r.route_key,
+            display_name=r.display_name,
+            primary_provider=r.primary_provider,
+            primary_model=r.primary_model,
+            fallback_provider=r.fallback_provider,
+            fallback_model=r.fallback_model,
+            timeout_ms=r.timeout_ms,
+            max_retries=r.max_retries,
+            cost_limit_daily=float(r.cost_limit_daily) if r.cost_limit_daily is not None else None,
+            is_active=r.is_active,
+            created_at=r.created_at,
+        )
+        for r in routes
+    ]
+
+
+@router.post("/ai-model-routes", response_model=AiModelRouteOut, status_code=status.HTTP_201_CREATED)
+def create_or_update_ai_model_route(
+    tenant_id: UUID,
+    payload: AiModelRouteIn,
+    db: Db,
+    request: Request,
+):
+    """Register or update an AI model routing rule."""
+    existing = db.scalar(
+        select(AiModelRoute).where(
+            AiModelRoute.tenant_id == tenant_id,
+            AiModelRoute.route_key == payload.route_key,
+        )
+    )
+    if existing:
+        existing.display_name = payload.display_name
+        existing.primary_provider = payload.primary_provider
+        existing.primary_model = payload.primary_model
+        existing.fallback_provider = payload.fallback_provider
+        existing.fallback_model = payload.fallback_model
+        existing.timeout_ms = payload.timeout_ms
+        existing.max_retries = payload.max_retries
+        existing.cost_limit_daily = payload.cost_limit_daily
+        existing.is_active = payload.is_active
+        db.flush()
+        return AiModelRouteOut(
+            id=existing.id,
+            tenant_id=existing.tenant_id,
+            route_key=existing.route_key,
+            display_name=existing.display_name,
+            primary_provider=existing.primary_provider,
+            primary_model=existing.primary_model,
+            fallback_provider=existing.fallback_provider,
+            fallback_model=existing.fallback_model,
+            timeout_ms=existing.timeout_ms,
+            max_retries=existing.max_retries,
+            cost_limit_daily=float(existing.cost_limit_daily) if existing.cost_limit_daily is not None else None,
+            is_active=existing.is_active,
+            created_at=existing.created_at,
+        )
+
+    new_route = AiModelRoute(
+        tenant_id=tenant_id,
+        route_key=payload.route_key,
+        display_name=payload.display_name,
+        primary_provider=payload.primary_provider,
+        primary_model=payload.primary_model,
+        fallback_provider=payload.fallback_provider,
+        fallback_model=payload.fallback_model,
+        timeout_ms=payload.timeout_ms,
+        max_retries=payload.max_retries,
+        cost_limit_daily=payload.cost_limit_daily,
+        is_active=payload.is_active,
+    )
+    db.add(new_route)
+    db.flush()
+    return AiModelRouteOut(
+        id=new_route.id,
+        tenant_id=new_route.tenant_id,
+        route_key=new_route.route_key,
+        display_name=new_route.display_name,
+        primary_provider=new_route.primary_provider,
+        primary_model=new_route.primary_model,
+        fallback_provider=new_route.fallback_provider,
+        fallback_model=new_route.fallback_model,
+        timeout_ms=new_route.timeout_ms,
+        max_retries=new_route.max_retries,
+        cost_limit_daily=float(new_route.cost_limit_daily) if new_route.cost_limit_daily is not None else None,
+        is_active=new_route.is_active,
+        created_at=new_route.created_at,
+    )

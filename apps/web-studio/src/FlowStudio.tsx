@@ -14,10 +14,15 @@ import type { Node, Edge, Connection, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import {
+  Activity,
   AlertCircle,
   Bot,
   Check,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
+  Clock,
+  Cpu,
   FileText,
   GitBranch,
   Layers3,
@@ -26,10 +31,13 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Search,
   ShieldCheck,
   Sparkles,
+  Terminal,
   Trash2,
   UploadCloud,
+  X,
   Zap,
 } from 'lucide-react'
 
@@ -37,8 +45,24 @@ const elk = new ELK()
 
 export type WorkflowNodeData = {
   label: string
-  nodeType: 'TRIGGER' | 'ACTION' | 'DECISION' | 'AI_AGENT' | 'APPROVAL' | 'INTEGRATION' | 'DOCUMENT_AI' | 'RULE' | 'NOTIFICATION' | 'TERMINAL'
+  nodeType:
+    | 'TRIGGER'
+    | 'ACTION'
+    | 'DECISION'
+    | 'AI_AGENT'
+    | 'APPROVAL'
+    | 'INTEGRATION'
+    | 'DOCUMENT_AI'
+    | 'RULE'
+    | 'NOTIFICATION'
+    | 'TERMINAL'
+    | 'MCP_TOOL'
+    | 'PARALLEL_SPLIT'
+    | 'TRY_CATCH'
+    | 'FOR_EACH'
+    | 'DELAY'
   config: Record<string, unknown>
+  executionStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'SUSPENDED' | 'SKIPPED'
 }
 
 export type VariableDef = {
@@ -53,7 +77,7 @@ export type ValidationReport = {
   is_valid: boolean
   errors: string[]
   warnings: string[]
-  stats: {
+  stats?: {
     node_count: number
     edge_count: number
     variable_count: number
@@ -61,10 +85,64 @@ export type ValidationReport = {
   }
 }
 
+export type AiModelRoute = {
+  id: string
+  route_key: string
+  display_name: string
+  primary_provider: string
+  primary_model: string
+  fallback_model?: string
+  timeout_ms: number
+  max_retries: number
+  cost_limit_daily?: number
+  is_active: boolean
+}
+
+export type TelemetrySpan = {
+  span_id: string
+  parent_span_id?: string
+  node_id: string
+  node_type: string
+  status: string
+  duration_ms: number
+  started_at?: string
+  completed_at?: string
+  metrics?: { tokens?: number; cost_usd?: number }
+  logs?: { timestamp: string; level: string; message: string }[]
+  input_payload?: Record<string, unknown>
+  output_payload?: Record<string, unknown>
+  error_message?: string
+}
+
+export type ExecutionTelemetry = {
+  run_id: string
+  otel_trace_id?: string
+  status: string
+  started_at?: string
+  completed_at?: string
+  duration_ms: number
+  metrics?: { total_tokens?: number; estimated_cost_usd?: number; latency_ms?: number }
+  spans: TelemetrySpan[]
+}
+
+export type HumanTask = {
+  id: string
+  run_id: string
+  step_run_id?: string
+  node_id: string
+  title: string
+  description?: string
+  required_role: string
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED'
+  task_payload?: Record<string, unknown>
+  created_at: string
+}
+
 // Custom Node Component for React Flow
 function ArchitectNode({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as WorkflowNodeData
   const nodeType = nodeData.nodeType || 'ACTION'
+  const execStatus = nodeData.executionStatus
 
   const { icon: Icon, color, borderColor, badge } = useMemo(() => {
     switch (nodeType) {
@@ -80,25 +158,49 @@ function ArchitectNode({ id, data, selected }: NodeProps) {
         return { icon: FileText, color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.6)', badge: 'DOCUMENT AI' }
       case 'INTEGRATION':
         return { icon: Network, color: '#6366f1', borderColor: 'rgba(99, 102, 241, 0.6)', badge: 'INTEGRATION' }
+      case 'MCP_TOOL':
+        return { icon: Cpu, color: '#06b6d4', borderColor: 'rgba(6, 182, 212, 0.6)', badge: 'MCP TOOL' }
       case 'RULE':
         return { icon: ClipboardCheck, color: '#eab308', borderColor: 'rgba(234, 179, 8, 0.6)', badge: 'RULE' }
+      case 'TERMINAL':
+        return { icon: Terminal, color: '#64748b', borderColor: 'rgba(100, 116, 139, 0.6)', badge: 'END' }
       default:
         return { icon: Play, color: '#60a5fa', borderColor: 'rgba(96, 165, 250, 0.6)', badge: 'ACTION' }
     }
   }, [nodeType])
+
+  const statusColor = useMemo(() => {
+    switch (execStatus) {
+      case 'COMPLETED':
+        return '#22c55e'
+      case 'RUNNING':
+        return '#3b82f6'
+      case 'SUSPENDED':
+        return '#f59e0b'
+      case 'FAILED':
+        return '#ef4444'
+      default:
+        return null
+    }
+  }, [execStatus])
 
   return (
     <div
       style={{
         padding: '10px 14px',
         borderRadius: 12,
-        background: 'rgba(15, 23, 42, 0.90)',
-        border: `1.5px solid ${selected ? '#a18aff' : borderColor}`,
-        boxShadow: selected ? '0 0 16px rgba(161, 138, 255, 0.4)' : '0 4px 18px rgba(0,0,0,0.3)',
-        minWidth: 165,
+        background: 'rgba(15, 23, 42, 0.92)',
+        border: `1.5px solid ${selected ? '#a18aff' : statusColor || borderColor}`,
+        boxShadow: selected
+          ? '0 0 18px rgba(161, 138, 255, 0.45)'
+          : statusColor
+          ? `0 0 16px ${statusColor}44`
+          : '0 4px 18px rgba(0,0,0,0.3)',
+        minWidth: 175,
         color: '#f8fafc',
         backdropFilter: 'blur(12px)',
         fontSize: 12,
+        position: 'relative',
       }}
     >
       {nodeType !== 'TRIGGER' && (
@@ -108,30 +210,47 @@ function ArchitectNode({ id, data, selected }: NodeProps) {
           style={{ background: color, width: 8, height: 8 }}
         />
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span
-          style={{
-            display: 'grid',
-            placeItems: 'center',
-            width: 24,
-            height: 24,
-            borderRadius: 6,
-            background: `color-mix(in srgb, ${color} 20%, transparent)`,
-            color,
-          }}
-        >
-          <Icon size={14} />
-        </span>
-        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, color }}>
-          {badge}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span
+            style={{
+              display: 'grid',
+              placeItems: 'center',
+              width: 24,
+              height: 24,
+              borderRadius: 6,
+              background: `color-mix(in srgb, ${color} 20%, transparent)`,
+              color,
+            }}
+          >
+            <Icon size={14} />
+          </span>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.8, color }}>
+            {badge}
+          </span>
+        </div>
+        {execStatus && (
+          <span
+            style={{
+              fontSize: 8,
+              fontWeight: 700,
+              padding: '1px 5px',
+              borderRadius: 4,
+              background: `${statusColor}22`,
+              color: statusColor || '#cbd5e1',
+              border: `1px solid ${statusColor}55`,
+            }}
+          >
+            {execStatus}
+          </span>
+        )}
       </div>
       <div style={{ fontWeight: 600, fontSize: 13, wordBreak: 'break-word' }}>
         {nodeData.label || id}
       </div>
       {Boolean(nodeData.config && Object.keys(nodeData.config).length) && (
-        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
-          {Object.entries(nodeData.config)[0][0]}: {String(Object.entries(nodeData.config)[0][1])}
+        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {String(nodeData.config.route_key || nodeData.config.model || nodeData.config.tool_name || Object.entries(nodeData.config)[0]?.[1] || '')}
         </div>
       )}
       <Handle
@@ -173,11 +292,22 @@ export default function FlowStudio({
   const [variables, setVariables] = useState<VariableDef[]>([])
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
 
-  const [inspectorTab, setInspectorTab] = useState<'Properties' | 'Variables' | 'Validation' | 'Versions'>('Properties')
+  const [inspectorTab, setInspectorTab] = useState<'Properties' | 'Governance' | 'Reliability' | 'Variables' | 'Validation' | 'Versions'>('Properties')
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null)
   const [statusMessage, setStatusMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // AI Model Routes Catalog
+  const [modelRoutes, setModelRoutes] = useState<AiModelRoute[]>([])
+
+  // Live Telemetry & Execution State
+  const [traceDrawerOpen, setTraceDrawerOpen] = useState(false)
+  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [executionTelemetry, setExecutionTelemetry] = useState<ExecutionTelemetry | null>(null)
+  const [humanTasks, setHumanTasks] = useState<HumanTask[]>([])
+  const [approvalNotes, setApprovalNotes] = useState('')
+  const [telemetryTab, setTelemetryTab] = useState<'Waterfall' | 'Logs'>('Waterfall')
 
   // Versioning state
   const [versions, setVersions] = useState<{ id: string; version: number; status: string; change_summary: string }[]>([])
@@ -188,6 +318,17 @@ export default function FlowStudio({
   const [createModal, setCreateModal] = useState(false)
   const [newWorkflowName, setNewWorkflowName] = useState('')
   const [newWorkflowDesc, setNewWorkflowDesc] = useState('')
+
+  // Node Palette search & accordion state
+  const [paletteSearch, setPaletteSearch] = useState('')
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    triggers: true,
+    control: true,
+    ai: true,
+    integrations: true,
+    human: true,
+    reliability: true,
+  })
 
   const base = `/api/v1/tenants/${tenant}/workspace`
 
@@ -212,6 +353,7 @@ export default function FlowStudio({
 
   const nodeCounterRef = useRef(1)
 
+  // Load Projects
   useEffect(() => {
     let cancelled = false
     if (projectId || !token) return
@@ -240,6 +382,7 @@ export default function FlowStudio({
     }
   }, [callApi, projectId, token, selectedProjectId])
 
+  // Load Workflows
   useEffect(() => {
     let cancelled = false
     if (!effectiveProjectId || !token) return
@@ -258,6 +401,15 @@ export default function FlowStudio({
     }
   }, [callApi, effectiveProjectId, token, activeWorkflowId])
 
+  // Load Model Routes
+  useEffect(() => {
+    if (!token) return
+    callApi('/ai-model-routes')
+      .then((routes) => setModelRoutes(routes))
+      .catch(() => {})
+  }, [callApi, token])
+
+  // Load Active Workflow
   useEffect(() => {
     let cancelled = false
     if (!activeWorkflowId || !token) return
@@ -322,16 +474,16 @@ export default function FlowStudio({
   )
 
   // Add node from palette
-  const addNodeFromPalette = (type: WorkflowNodeData['nodeType'], label: string) => {
+  const addNodeFromPalette = (type: WorkflowNodeData['nodeType'], label: string, initialConfig: Record<string, unknown> = {}) => {
     const id = `${type.toLowerCase()}-${nodeCounterRef.current++}`
     const newNode: Node = {
       id,
       type: 'architectNode',
-      position: { x: 120 + nodes.length * 30, y: 120 + nodes.length * 30 },
+      position: { x: 140 + (nodes.length % 5) * 40, y: 120 + (nodes.length % 5) * 35 },
       data: {
         label,
         nodeType: type,
-        config: {},
+        config: initialConfig,
       },
     }
     setNodes((nds) => [...nds, newNode])
@@ -349,12 +501,12 @@ export default function FlowStudio({
           'elk.algorithm': 'layered',
           'elk.direction': 'RIGHT',
           'elk.spacing.nodeNode': '45',
-          'elk.layered.spacing.nodeNodeBetweenLayers': '60',
+          'elk.layered.spacing.nodeNodeBetweenLayers': '65',
         },
         children: nodes.map((n) => ({
           id: n.id,
-          width: 175,
-          height: 75,
+          width: 185,
+          height: 80,
         })),
         edges: edges.map((e) => ({
           id: e.id,
@@ -464,14 +616,12 @@ export default function FlowStudio({
     setBusy(true)
     setErrorMessage('')
     try {
-      // First save current state as draft
       const def = getSerializedDefinition()
       await callApi(`/workflows/${activeWorkflowId}/draft`, {
         method: 'PUT',
         body: JSON.stringify({ definition: def }),
       })
 
-      // Publish
       const res = await callApi(`/workflows/${activeWorkflowId}/publish`, {
         method: 'POST',
         body: JSON.stringify({ change_summary: publishSummary.trim() }),
@@ -489,7 +639,7 @@ export default function FlowStudio({
     }
   }
 
-  // Trigger Run
+  // Trigger Run & Stream Telemetry
   const triggerTestRun = async () => {
     if (!effectiveProjectId || !activeWorkflowId) return
     setBusy(true)
@@ -497,12 +647,67 @@ export default function FlowStudio({
     try {
       const res = await callApi(`/projects/${effectiveProjectId}/workflows/${activeWorkflowId}/runs`, {
         method: 'POST',
-        body: JSON.stringify({ trigger_type: 'MANUAL', trigger_payload: {} }),
+        body: JSON.stringify({ trigger_type: 'MANUAL', trigger_payload: { initiated_by: 'flow_studio_designer' } }),
       })
-      setStatusMessage(`Execution ${res.status}: ${res.id.slice(0, 8)} (${res.steps?.length || 0} steps)`)
+      setActiveRunId(res.id)
+      setTraceDrawerOpen(true)
+      setStatusMessage(`Execution ${res.status}: ${res.id.slice(0, 8)}`)
+
+      // Fetch telemetry and tasks
+      await refreshExecutionState(res.id)
       setTimeout(() => setStatusMessage(''), 5000)
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : 'Execution failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Refresh Execution State
+  const refreshExecutionState = async (runId: string) => {
+    if (!effectiveProjectId || !activeWorkflowId || !runId) return
+    try {
+      const [telem, tasks] = await Promise.all([
+        callApi(`/projects/${effectiveProjectId}/workflows/${activeWorkflowId}/runs/${runId}/telemetry`),
+        callApi(`/projects/${effectiveProjectId}/workflows/${activeWorkflowId}/runs/${runId}/tasks`).catch(() => []),
+      ])
+      setExecutionTelemetry(telem)
+      setHumanTasks(tasks)
+
+      // Annotate nodes on canvas with live status
+      if (telem?.spans) {
+        const statusMap = new Map<string, WorkflowNodeData['executionStatus']>()
+        for (const s of telem.spans) {
+          statusMap.set(s.node_id, s.status as WorkflowNodeData['executionStatus'])
+        }
+        setNodes((nds) =>
+          nds.map((n) => ({
+            ...n,
+            data: {
+              ...(n.data as unknown as WorkflowNodeData),
+              executionStatus: statusMap.get(n.id),
+            },
+          }))
+        )
+      }
+    } catch {}
+  }
+
+  // Resolve Human Task
+  const resolveTask = async (taskId: string, decision: 'APPROVED' | 'REJECTED') => {
+    if (!activeRunId) return
+    setBusy(true)
+    try {
+      await callApi(`/runs/${activeRunId}/tasks/${taskId}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, notes: approvalNotes || `Decided ${decision} in Flow Studio` }),
+      })
+      setStatusMessage(`Human task marked ${decision}`)
+      setApprovalNotes('')
+      await refreshExecutionState(activeRunId)
+      setTimeout(() => setStatusMessage(''), 4000)
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : 'Task resolution failed')
     } finally {
       setBusy(false)
     }
@@ -546,8 +751,69 @@ export default function FlowStudio({
     }
   }
 
+  // Palette Categories definition
+  type PaletteItem = {
+    type: WorkflowNodeData['nodeType']
+    label: string
+    icon: typeof Zap
+    color: string
+    desc: string
+    initialConfig?: Record<string, unknown>
+  }
+
+  type PaletteCategory = {
+    id: string
+    title: string
+    items: PaletteItem[]
+  }
+
+  const paletteCategories: PaletteCategory[] = [
+    {
+      id: 'triggers',
+      title: '⚡ Triggers',
+      items: [
+        { type: 'TRIGGER' as const, label: 'Trigger', icon: Zap, color: '#f59e0b', desc: 'Webhook, cron, or manual trigger' },
+      ],
+    },
+    {
+      id: 'control',
+      title: '🔀 Control Flow',
+      items: [
+        { type: 'DECISION' as const, label: 'Decision', icon: GitBranch, color: '#38bdf8', desc: 'Branch condition evaluation' },
+        { type: 'TERMINAL' as const, label: 'End / Terminal', icon: Terminal, color: '#64748b', desc: 'Final process exit' },
+      ],
+    },
+    {
+      id: 'ai',
+      title: '🤖 AI & Agents',
+      items: [
+        { type: 'AI_AGENT' as const, label: 'AI Agent', icon: Bot, color: '#a855f7', desc: 'Reasoning agent via model gateway', initialConfig: { route_key: 'claims-classifier-prod', model: 'gemini-1.5-pro' } },
+        { type: 'DOCUMENT_AI' as const, label: 'Document AI', icon: FileText, color: '#10b981', desc: 'OCR & Schema Extraction' },
+        { type: 'RULE' as const, label: 'Business Rule', icon: ClipboardCheck, color: '#eab308', desc: 'Decision table rules' },
+      ],
+    },
+    {
+      id: 'integrations',
+      title: '🔌 Integrations & Tools',
+      items: [
+        { type: 'MCP_TOOL' as const, label: 'MCP Tool', icon: Cpu, color: '#06b6d4', desc: 'Invoke governed MCP tool' },
+        { type: 'INTEGRATION' as const, label: 'Integration', icon: Network, color: '#6366f1', desc: 'External REST / Database' },
+        { type: 'ACTION' as const, label: 'Action', icon: Play, color: '#60a5fa', desc: 'Deterministic system action' },
+      ],
+    },
+    {
+      id: 'human',
+      title: '👤 Human Tasks',
+      items: [
+        { type: 'APPROVAL' as const, label: 'Approval Gate', icon: ShieldCheck, color: '#ec4899', desc: 'Suspends run for human sign-off', initialConfig: { required_role: 'ADMIN', timeout_hours: 24 } },
+      ],
+    },
+  ]
+
+  const selectedNodeData = selectedNode ? (selectedNode.data as unknown as WorkflowNodeData) : null
+
   return (
-    <div className="flow-studio-container" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', minHeight: 600 }}>
+    <div className="flow-studio-container" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', minHeight: 650 }}>
       {/* Top Studio Control Bar */}
       <header
         className="glass"
@@ -557,7 +823,7 @@ export default function FlowStudio({
           justifyContent: 'space-between',
           padding: '10px 18px',
           borderRadius: 14,
-          marginBottom: 12,
+          marginBottom: 10,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -703,51 +969,126 @@ export default function FlowStudio({
           >
             <Play size={14} /> Run
           </button>
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setTraceDrawerOpen(!traceDrawerOpen)}
+            style={{
+              fontSize: 12,
+              padding: '6px 12px',
+              border: traceDrawerOpen ? '1px solid #a18aff' : undefined,
+              color: traceDrawerOpen ? '#a18aff' : undefined,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <Activity size={14} /> Live Trace
+          </button>
         </div>
       </header>
 
       {/* Main Studio Area: Palette -> Canvas -> Inspector */}
-      <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr 310px', gap: 12, flex: 1, minHeight: 0 }}>
-        {/* Left Palette */}
-        <aside className="glass" style={{ padding: 14, borderRadius: 14, overflowY: 'auto' }}>
-          <h3 style={{ fontSize: 12, margin: '0 0 10px 0', textTransform: 'uppercase', letterSpacing: 1, color: '#94a3b8' }}>
-            Node Palette
-          </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-            {[
-              { type: 'TRIGGER', label: 'Trigger', icon: Zap, color: '#f59e0b' },
-              { type: 'ACTION', label: 'Action', icon: Play, color: '#60a5fa' },
-              { type: 'DECISION', label: 'Decision', icon: GitBranch, color: '#38bdf8' },
-              { type: 'AI_AGENT', label: 'AI Agent', icon: Bot, color: '#a855f7' },
-              { type: 'APPROVAL', label: 'Approval Gate', icon: ShieldCheck, color: '#ec4899' },
-              { type: 'DOCUMENT_AI', label: 'Document AI', icon: FileText, color: '#10b981' },
-              { type: 'INTEGRATION', label: 'Integration', icon: Network, color: '#6366f1' },
-              { type: 'RULE', label: 'Business Rule', icon: ClipboardCheck, color: '#eab308' },
-            ].map(({ type, label, icon: Icon, color }) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => addNodeFromPalette(type as WorkflowNodeData['nodeType'], label)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 9,
-                  padding: '8px 10px',
-                  borderRadius: 9,
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  background: 'rgba(255,255,255,0.02)',
-                  color: '#e2e8f0',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.15s',
-                }}
-              >
-                <Icon size={14} color={color} />
-                <span>{label}</span>
-                <Plus size={12} style={{ marginLeft: 'auto', opacity: 0.5 }} />
-              </button>
-            ))}
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr 320px', gap: 10, flex: 1, minHeight: 0 }}>
+        {/* Left Palette: Categorized Accordion */}
+        <aside className="glass" style={{ padding: 12, borderRadius: 14, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ fontSize: 11, margin: 0, textTransform: 'uppercase', letterSpacing: 1, color: '#94a3b8' }}>
+              Node Palette
+            </h3>
+            <span style={{ fontSize: 10, color: '#64748b' }}>Maestro v1.0</span>
+          </div>
+
+          {/* Palette Search */}
+          <div style={{ position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 8, top: 8, color: '#64748b' }} />
+            <input
+              type="text"
+              placeholder="Search nodes..."
+              value={paletteSearch}
+              onChange={(e) => setPaletteSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 8px 6px 26px',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: '#f8fafc',
+                fontSize: 11,
+              }}
+            />
+          </div>
+
+          {/* Categorized Node Palette */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {paletteCategories.map((cat) => {
+              const filteredItems = cat.items.filter((item) =>
+                item.label.toLowerCase().includes(paletteSearch.toLowerCase()) ||
+                item.desc.toLowerCase().includes(paletteSearch.toLowerCase())
+              )
+              if (!filteredItems.length) return null
+
+              const isExpanded = expandedCategories[cat.id] ?? true
+              return (
+                <div key={cat.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedCategories((prev) => ({ ...prev, [cat.id]: !isExpanded }))}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#94a3b8',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '4px 2px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <span>{cat.title}</span>
+                    {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                  </button>
+
+                  {isExpanded && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingLeft: 4 }}>
+                      {filteredItems.map(({ type, label, icon: Icon, color, desc, initialConfig }) => (
+                        <button
+                          key={type + label}
+                          type="button"
+                          onClick={() => addNodeFromPalette(type, label, initialConfig)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 8,
+                            padding: '7px 8px',
+                            borderRadius: 8,
+                            border: '1px solid rgba(255,255,255,0.06)',
+                            background: 'rgba(255,255,255,0.02)',
+                            color: '#e2e8f0',
+                            fontSize: 11,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span style={{ display: 'grid', placeItems: 'center', width: 22, height: 22, borderRadius: 5, background: `${color}22`, color, flexShrink: 0, marginTop: 1 }}>
+                            <Icon size={13} />
+                          </span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, color: '#f8fafc' }}>{label}</div>
+                            <div style={{ fontSize: 9, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{desc}</div>
+                          </div>
+                          <Plus size={11} style={{ opacity: 0.5, marginTop: 4 }} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </aside>
 
@@ -777,11 +1118,11 @@ export default function FlowStudio({
           </ReactFlow>
         </main>
 
-        {/* Right Inspector & Drawer */}
-        <aside className="glass" style={{ padding: 14, borderRadius: 14, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        {/* Right Inspector & Governance Drawer */}
+        <aside className="glass" style={{ padding: 12, borderRadius: 14, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           {/* Inspector Tabs */}
-          <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 8, marginBottom: 12 }}>
-            {(['Properties', 'Variables', 'Validation', 'Versions'] as const).map((tab) => (
+          <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+            {(['Properties', 'Governance', 'Reliability', 'Variables', 'Validation', 'Versions'] as const).map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -790,7 +1131,7 @@ export default function FlowStudio({
                   border: 'none',
                   background: inspectorTab === tab ? 'rgba(161, 138, 255, 0.2)' : 'transparent',
                   color: inspectorTab === tab ? '#a18aff' : '#94a3b8',
-                  padding: '4px 8px',
+                  padding: '3px 7px',
                   borderRadius: 6,
                   fontSize: 11,
                   fontWeight: 600,
@@ -805,10 +1146,15 @@ export default function FlowStudio({
           {/* Properties Tab */}
           {inspectorTab === 'Properties' && (
             <div>
-              {selectedNode ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {selectedNode && selectedNodeData ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <h4 style={{ margin: 0, fontSize: 13 }}>Node Inspector</h4>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'rgba(161, 138, 255, 0.2)', color: '#a18aff' }}>
+                        {selectedNodeData.nodeType}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>{selectedNode.id}</span>
+                    </div>
                     <button
                       type="button"
                       className="icon-button"
@@ -820,14 +1166,14 @@ export default function FlowStudio({
                       }}
                       style={{ color: '#f87171' }}
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
 
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#94a3b8' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: '#94a3b8' }}>
                     Node Label
                     <input
-                      value={(selectedNode.data as unknown as WorkflowNodeData).label || ''}
+                      value={selectedNodeData.label || ''}
                       onChange={(e) => {
                         const val = e.target.value
                         setNodes((nds) =>
@@ -839,16 +1185,175 @@ export default function FlowStudio({
                         )
                         setSelectedNode((prev) => (prev ? { ...prev, data: { ...(prev.data as unknown as WorkflowNodeData), label: val } } : null))
                       }}
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '6px 8px', borderRadius: 6, color: '#f8fafc' }}
+                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '5px 8px', borderRadius: 6, color: '#f8fafc', fontSize: 11 }}
                     />
                   </label>
 
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                    Node ID: <code style={{ color: '#a18aff' }}>{selectedNode.id}</code>
-                  </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                    Node Type: <strong style={{ color: '#f8fafc' }}>{(selectedNode.data as unknown as WorkflowNodeData).nodeType}</strong>
-                  </div>
+                  {/* AI Agent Node Properties */}
+                  {selectedNodeData.nodeType === 'AI_AGENT' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 8, background: 'rgba(168, 85, 247, 0.08)', border: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#c084fc' }}>Agent Configuration</div>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                        Logical AI Model Route
+                        <select
+                          value={String(selectedNodeData.config.route_key || 'claims-classifier-prod')}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            const updatedConfig = { ...selectedNodeData.config, route_key: val }
+                            setNodes((nds) =>
+                              nds.map((n) =>
+                                n.id === selectedNode.id
+                                  ? { ...n, data: { ...selectedNodeData, config: updatedConfig } }
+                                  : n
+                              )
+                            )
+                            setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                          }}
+                          style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc', padding: '4px 6px', borderRadius: 6, fontSize: 11 }}
+                        >
+                          {modelRoutes.map((r) => (
+                            <option key={r.route_key} value={r.route_key}>
+                              {r.display_name} ({r.primary_model})
+                            </option>
+                          ))}
+                          <option value="custom">Custom Logical Alias...</option>
+                        </select>
+                      </label>
+
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                        System Instructions / Prompt
+                        <textarea
+                          rows={3}
+                          value={String(selectedNodeData.config.system_prompt || '')}
+                          placeholder="You are an autonomous decision agent..."
+                          onChange={(e) => {
+                            const val = e.target.value
+                            const updatedConfig = { ...selectedNodeData.config, system_prompt: val }
+                            setNodes((nds) =>
+                              nds.map((n) =>
+                                n.id === selectedNode.id
+                                  ? { ...n, data: { ...selectedNodeData, config: updatedConfig } }
+                                  : n
+                              )
+                            )
+                            setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                          }}
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '5px 8px', borderRadius: 6, color: '#f8fafc', fontSize: 10 }}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Decision Node Properties */}
+                  {selectedNodeData.nodeType === 'DECISION' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 8, background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8' }}>Branch Logic</div>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                        Condition Field
+                        <input
+                          placeholder="e.g. amount, risk_score"
+                          value={String(selectedNodeData.config.field || 'status')}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            const updatedConfig = { ...selectedNodeData.config, field: val }
+                            setNodes((nds) =>
+                              nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...selectedNodeData, config: updatedConfig } } : n))
+                            )
+                            setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                          }}
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 6px', borderRadius: 6, color: '#f8fafc', fontSize: 11 }}
+                        />
+                      </label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                          Operator
+                          <select
+                            value={String(selectedNodeData.config.operator || '==')}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              const updatedConfig = { ...selectedNodeData.config, operator: val }
+                              setNodes((nds) =>
+                                nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...selectedNodeData, config: updatedConfig } } : n))
+                              )
+                              setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                            }}
+                            style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc', padding: '4px 6px', borderRadius: 6, fontSize: 11 }}
+                          >
+                            <option value="==">== (Equals)</option>
+                            <option value="!=">!= (Not Equal)</option>
+                            <option value=">">&gt; (Greater)</option>
+                            <option value="<">&lt; (Less)</option>
+                          </select>
+                        </label>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                          Compare Value
+                          <input
+                            placeholder="true, 5000"
+                            value={String(selectedNodeData.config.value ?? 'true')}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              const updatedConfig = { ...selectedNodeData.config, value: val }
+                              setNodes((nds) =>
+                                nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...selectedNodeData, config: updatedConfig } } : n))
+                              )
+                              setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                            }}
+                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 6px', borderRadius: 6, color: '#f8fafc', fontSize: 11 }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Approval Node Properties */}
+                  {selectedNodeData.nodeType === 'APPROVAL' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 8, background: 'rgba(236, 72, 153, 0.08)', border: '1px solid rgba(236, 72, 153, 0.2)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#f472b6' }}>Human Gate Settings</div>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                        Required Approver Role
+                        <select
+                          value={String(selectedNodeData.config.required_role || 'ADMIN')}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            const updatedConfig = { ...selectedNodeData.config, required_role: val }
+                            setNodes((nds) =>
+                              nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...selectedNodeData, config: updatedConfig } } : n))
+                            )
+                            setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                          }}
+                          style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc', padding: '4px 6px', borderRadius: 6, fontSize: 11 }}
+                        >
+                          <option value="ADMIN">ADMIN (Workspace Admin)</option>
+                          <option value="FINANCE_APPROVER">FINANCE_APPROVER</option>
+                          <option value="SECURITY_LEAD">SECURITY_LEAD</option>
+                          <option value="OPERATIONS_MANAGER">OPERATIONS_MANAGER</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* MCP Tool Node Properties */}
+                  {selectedNodeData.nodeType === 'MCP_TOOL' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 8, background: 'rgba(6, 182, 212, 0.08)', border: '1px solid rgba(6, 182, 212, 0.2)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#06b6d4' }}>MCP Tool Connector</div>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: '#cbd5e1' }}>
+                        Tool Name
+                        <input
+                          placeholder="e.g. fetch_policy_balance"
+                          value={String(selectedNodeData.config.tool_name || '')}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            const updatedConfig = { ...selectedNodeData.config, tool_name: val }
+                            setNodes((nds) =>
+                              nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...selectedNodeData, config: updatedConfig } } : n))
+                            )
+                            setSelectedNode((prev) => (prev ? { ...prev, data: { ...selectedNodeData, config: updatedConfig } } : null))
+                          }}
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 6px', borderRadius: 6, color: '#f8fafc', fontSize: 11 }}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <p style={{ fontSize: 12, color: '#94a3b8' }}>Select any node on the canvas to configure its properties.</p>
@@ -856,11 +1361,62 @@ export default function FlowStudio({
             </div>
           )}
 
+          {/* Governance Tab */}
+          {inspectorTab === 'Governance' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h4 style={{ margin: 0, fontSize: 12 }}>RBAC & Environment Locks</h4>
+              <div style={{ padding: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: '#f8fafc' }}>Execution Permission Baseline</div>
+                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                  Inherits from parent Project & Folder security perimeter.
+                </div>
+              </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#94a3b8' }}>
+                Environment Promotion Gate
+                <select
+                  style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc', padding: '5px 8px', borderRadius: 6, fontSize: 11 }}
+                  defaultValue="DEV"
+                >
+                  <option value="DEV">DEV Only (Testing & Prototyping)</option>
+                  <option value="UAT">UAT Certified (Pre-Production)</option>
+                  <option value="PROD">PROD Ready (Strict Change Approval)</option>
+                </select>
+              </label>
+            </div>
+          )}
+
+          {/* Reliability Tab */}
+          {inspectorTab === 'Reliability' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <h4 style={{ margin: 0, fontSize: 12 }}>Fault Tolerance & Retry</h4>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#94a3b8' }}>
+                Max Automatic Retries
+                <select
+                  style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.15)', color: '#f8fafc', padding: '5px 8px', borderRadius: 6, fontSize: 11 }}
+                  defaultValue="3"
+                >
+                  <option value="0">0 (Fail Immediately)</option>
+                  <option value="1">1 Retry</option>
+                  <option value="3">3 Retries (Exponential Backoff)</option>
+                  <option value="5">5 Retries (Durable Queue)</option>
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11, color: '#94a3b8' }}>
+                Execution Timeout (Seconds)
+                <input
+                  type="number"
+                  defaultValue="60"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '5px 8px', borderRadius: 6, color: '#f8fafc', fontSize: 11 }}
+                />
+              </label>
+            </div>
+          )}
+
           {/* Variables Tab */}
           {inspectorTab === 'Variables' && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <h4 style={{ margin: 0, fontSize: 13 }}>Workflow Variables</h4>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <h4 style={{ margin: 0, fontSize: 12 }}>Workflow Variables</h4>
                 <button
                   type="button"
                   className="icon-button"
@@ -871,14 +1427,14 @@ export default function FlowStudio({
                     ])
                   }
                 >
-                  <Plus size={14} />
+                  <Plus size={13} />
                 </button>
               </div>
 
               {variables.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {variables.map((v, i) => (
-                    <div key={v.name + i} style={{ padding: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div key={v.name + i} style={{ padding: 6, borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <code style={{ fontSize: 11, color: '#38bdf8' }}>{v.name}</code>
                         <button
@@ -887,17 +1443,17 @@ export default function FlowStudio({
                           onClick={() => setVariables((prev) => prev.filter((_, idx) => idx !== i))}
                           style={{ color: '#f87171' }}
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={11} />
                         </button>
                       </div>
-                      <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2 }}>
+                      <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 2 }}>
                         Type: {v.type} · Secret: {v.is_secret ? 'Yes' : 'No'}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: '#94a3b8' }}>No variables declared. Click + to add typed workflow variables.</p>
+                <p style={{ fontSize: 11, color: '#94a3b8' }}>No variables declared. Click + to add typed variables.</p>
               )}
             </div>
           )}
@@ -905,29 +1461,29 @@ export default function FlowStudio({
           {/* Validation Tab */}
           {inspectorTab === 'Validation' && (
             <div>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: 13 }}>Structural Integrity</h4>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: 12 }}>Structural Integrity</h4>
               {validationReport ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, borderRadius: 8, background: validationReport.is_valid ? 'rgba(34, 197, 94, 0.1)' : 'rgba(248, 113, 113, 0.1)' }}>
-                    {validationReport.is_valid ? <Check size={16} color="#4ade80" /> : <AlertCircle size={16} color="#f87171" />}
-                    <span style={{ fontSize: 12, fontWeight: 600, color: validationReport.is_valid ? '#4ade80' : '#f87171' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 6, borderRadius: 6, background: validationReport.is_valid ? 'rgba(34, 197, 94, 0.1)' : 'rgba(248, 113, 113, 0.1)' }}>
+                    {validationReport.is_valid ? <Check size={14} color="#4ade80" /> : <AlertCircle size={14} color="#f87171" />}
+                    <span style={{ fontSize: 11, fontWeight: 600, color: validationReport.is_valid ? '#4ade80' : '#f87171' }}>
                       {validationReport.is_valid ? 'Graph is Valid for Publishing' : `${validationReport.errors.length} Issue(s) Detected`}
                     </span>
                   </div>
 
                   {validationReport.errors.map((err, i) => (
-                    <div key={i} style={{ fontSize: 11, color: '#f87171', background: 'rgba(248,113,113,0.06)', padding: 6, borderRadius: 6 }}>
+                    <div key={i} style={{ fontSize: 10, color: '#f87171', background: 'rgba(248,113,113,0.06)', padding: 5, borderRadius: 5 }}>
                       • {err}
                     </div>
                   ))}
                   {validationReport.warnings.map((warn, i) => (
-                    <div key={i} style={{ fontSize: 11, color: '#fbbf24', background: 'rgba(251,191,36,0.06)', padding: 6, borderRadius: 6 }}>
+                    <div key={i} style={{ fontSize: 10, color: '#fbbf24', background: 'rgba(251,191,36,0.06)', padding: 5, borderRadius: 5 }}>
                       ⚠ {warn}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: '#94a3b8' }}>Click Validate on the toolbar to check graph integrity.</p>
+                <p style={{ fontSize: 11, color: '#94a3b8' }}>Click Validate on the toolbar to check graph integrity.</p>
               )}
             </div>
           )}
@@ -935,30 +1491,276 @@ export default function FlowStudio({
           {/* Versions Tab */}
           {inspectorTab === 'Versions' && (
             <div>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: 13 }}>Version History</h4>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: 12 }}>Version History</h4>
               {versions.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {versions.map((ver) => (
-                    <div key={ver.id} style={{ padding: 8, borderRadius: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div key={ver.id} style={{ padding: 6, borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontWeight: 600, fontSize: 12 }}>v{ver.version}</span>
+                        <span style={{ fontWeight: 600, fontSize: 11 }}>v{ver.version}</span>
                         <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: ver.status === 'PUBLISHED' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(234, 179, 8, 0.2)', color: ver.status === 'PUBLISHED' ? '#4ade80' : '#fde047' }}>
                           {ver.status}
                         </span>
                       </div>
-                      <small style={{ fontSize: 11, color: '#94a3b8', display: 'block', marginTop: 4 }}>
+                      <small style={{ fontSize: 10, color: '#94a3b8', display: 'block', marginTop: 3 }}>
                         {ver.change_summary || 'No summary'}
                       </small>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: 12, color: '#94a3b8' }}>No historical versions loaded.</p>
+                <p style={{ fontSize: 11, color: '#94a3b8' }}>No historical versions loaded.</p>
               )}
             </div>
           )}
         </aside>
       </div>
+
+      {/* Bottom Live Execution Trace Drawer */}
+      {traceDrawerOpen && (
+        <div
+          className="glass"
+          style={{
+            marginTop: 10,
+            borderRadius: 14,
+            padding: 12,
+            border: '1px solid rgba(161, 138, 255, 0.3)',
+            background: 'rgba(15, 23, 42, 0.95)',
+            boxShadow: '0 -8px 24px rgba(0,0,0,0.4)',
+            maxHeight: 250,
+            overflowY: 'auto',
+          }}
+        >
+          {/* Drawer Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 8, marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Activity size={15} color="#a18aff" />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc' }}>
+                Execution Telemetry Drawer
+              </span>
+              {executionTelemetry && (
+                <>
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: 4,
+                      background:
+                        executionTelemetry.status === 'COMPLETED'
+                          ? 'rgba(34, 197, 94, 0.2)'
+                          : executionTelemetry.status === 'SUSPENDED'
+                          ? 'rgba(245, 158, 11, 0.2)'
+                          : 'rgba(59, 130, 246, 0.2)',
+                      color:
+                        executionTelemetry.status === 'COMPLETED'
+                          ? '#4ade80'
+                          : executionTelemetry.status === 'SUSPENDED'
+                          ? '#fbbf24'
+                          : '#60a5fa',
+                    }}
+                  >
+                    {executionTelemetry.status}
+                  </span>
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                    Run: <code>{executionTelemetry.run_id.slice(0, 8)}</code>
+                  </span>
+                  <span style={{ fontSize: 10, color: '#94a3b8' }}>
+                    Latency: {executionTelemetry.duration_ms}ms
+                  </span>
+                  {Boolean(executionTelemetry.metrics?.total_tokens) && (
+                    <span style={{ fontSize: 10, color: '#c084fc' }}>
+                      Tokens: {executionTelemetry.metrics?.total_tokens}
+                    </span>
+                  )}
+                  {Boolean(executionTelemetry.otel_trace_id) && (
+                    <span style={{ fontSize: 9, color: '#64748b' }}>
+                      OTel: {executionTelemetry.otel_trace_id?.slice(0, 12)}...
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setTelemetryTab('Waterfall')}
+                style={{
+                  border: 'none',
+                  background: telemetryTab === 'Waterfall' ? 'rgba(161, 138, 255, 0.2)' : 'transparent',
+                  color: telemetryTab === 'Waterfall' ? '#a18aff' : '#94a3b8',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontSize: 10,
+                  cursor: 'pointer',
+                }}
+              >
+                Waterfall
+              </button>
+              <button
+                type="button"
+                onClick={() => setTelemetryTab('Logs')}
+                style={{
+                  border: 'none',
+                  background: telemetryTab === 'Logs' ? 'rgba(161, 138, 255, 0.2)' : 'transparent',
+                  color: telemetryTab === 'Logs' ? '#a18aff' : '#94a3b8',
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  fontSize: 10,
+                  cursor: 'pointer',
+                }}
+              >
+                Logs
+              </button>
+              {activeRunId && (
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="Refresh Telemetry"
+                  onClick={() => refreshExecutionState(activeRunId)}
+                >
+                  <RefreshCw size={12} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="icon-button"
+                title="Close Drawer"
+                onClick={() => setTraceDrawerOpen(false)}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Human Task Suspension Resolution Banner */}
+          {humanTasks.length > 0 && humanTasks.some((t) => t.status === 'PENDING') && (
+            <div
+              style={{
+                marginBottom: 10,
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: 'rgba(245, 158, 11, 0.12)',
+                border: '1px solid rgba(245, 158, 11, 0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={14} color="#f59e0b" />
+                  <strong style={{ fontSize: 11, color: '#fde047' }}>
+                    Human Sign-off Gate Suspended: {humanTasks.find((t) => t.status === 'PENDING')?.title}
+                  </strong>
+                </div>
+                <div style={{ fontSize: 10, color: '#cbd5e1', marginTop: 2 }}>
+                  Role: <code style={{ color: '#fbbf24' }}>{humanTasks.find((t) => t.status === 'PENDING')?.required_role}</code> · {humanTasks.find((t) => t.status === 'PENDING')?.description}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  placeholder="Decision notes..."
+                  value={approvalNotes}
+                  onChange={(e) => setApprovalNotes(e.target.value)}
+                  style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', padding: '3px 8px', borderRadius: 4, color: '#f8fafc', fontSize: 10 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const task = humanTasks.find((t) => t.status === 'PENDING')
+                    if (task) resolveTask(task.id, 'APPROVED')
+                  }}
+                  style={{ background: '#16a34a', border: 'none', color: '#fff', borderRadius: 5, padding: '4px 10px', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ✓ Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const task = humanTasks.find((t) => t.status === 'PENDING')
+                    if (task) resolveTask(task.id, 'REJECTED')
+                  }}
+                  style={{ background: '#dc2626', border: 'none', color: '#fff', borderRadius: 5, padding: '4px 10px', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ✕ Reject
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Telemetry Waterfall Content */}
+          {telemetryTab === 'Waterfall' && executionTelemetry?.spans && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {executionTelemetry.spans.map((span, idx) => (
+                <div
+                  key={span.span_id + idx}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 10px',
+                    borderRadius: 6,
+                    background: 'rgba(255,255,255,0.02)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 10, color: '#64748b' }}>#{idx + 1}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#f8fafc' }}>{span.node_id}</span>
+                    <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 4, background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>
+                      {span.node_type}
+                    </span>
+                    {span.metrics?.tokens ? (
+                      <span style={{ fontSize: 9, color: '#c084fc' }}>{span.metrics.tokens} tok</span>
+                    ) : null}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <Clock size={11} /> {span.duration_ms}ms
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        padding: '1px 6px',
+                        borderRadius: 4,
+                        background:
+                          span.status === 'COMPLETED'
+                            ? 'rgba(34,197,94,0.15)'
+                            : span.status === 'SUSPENDED'
+                            ? 'rgba(245,158,11,0.15)'
+                            : 'rgba(239,68,68,0.15)',
+                        color:
+                          span.status === 'COMPLETED'
+                            ? '#4ade80'
+                            : span.status === 'SUSPENDED'
+                            ? '#fbbf24'
+                            : '#f87171',
+                      }}
+                    >
+                      {span.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Telemetry Logs Content */}
+          {telemetryTab === 'Logs' && executionTelemetry?.spans && (
+            <div style={{ fontFamily: 'monospace', fontSize: 10, background: 'rgba(0,0,0,0.4)', padding: 8, borderRadius: 6, maxHeight: 150, overflowY: 'auto', color: '#cbd5e1' }}>
+              {executionTelemetry.spans.flatMap((s) => s.logs || []).map((log, i) => (
+                <div key={i} style={{ marginBottom: 2 }}>
+                  <span style={{ color: '#64748b' }}>[{log.timestamp.slice(11, 19)}]</span>{' '}
+                  <span style={{ color: log.level === 'WARN' ? '#f59e0b' : '#38bdf8' }}>{log.level}:</span> {log.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Publish Modal */}
       {publishModal && (

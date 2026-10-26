@@ -445,6 +445,8 @@ class WorkflowRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
     max_retries: Mapped[int] = mapped_column(Integer, default=3, server_default=text("3"), nullable=False)
+    otel_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{\"total_tokens\": 0, \"estimated_cost_usd\": 0.0, \"latency_ms\": 0}'::jsonb"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
@@ -471,6 +473,10 @@ class WorkflowStepRun(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    otel_span_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    parent_span_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    telemetry_logs: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    step_metrics: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{\"tokens\": 0, \"cost_usd\": 0.0}'::jsonb"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
@@ -915,4 +921,53 @@ class ComplianceAuditReport(Base):
     verdict: Mapped[str] = mapped_column(String(30), default="COMPLIANT", server_default="COMPLIANT", nullable=False)
     findings: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
     score_pct: Mapped[float] = mapped_column(Float, default=100.0, server_default=text("100.0"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+# ---------------------------------------------------------
+# Milestone M13: Flow Studio Enterprise & AI Gateway
+# ---------------------------------------------------------
+
+class AiModelRoute(Base):
+    __tablename__ = "ai_model_routes"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "route_key", name="uq_ai_model_routes_tenant_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    route_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    primary_provider: Mapped[str] = mapped_column(String(50), default="google", server_default="google", nullable=False)
+    primary_model: Mapped[str] = mapped_column(String(100), default="gemini-1.5-pro", server_default="gemini-1.5-pro", nullable=False)
+    fallback_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    fallback_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    timeout_ms: Mapped[int] = mapped_column(Integer, default=30000, server_default="30000", nullable=False)
+    max_retries: Mapped[int] = mapped_column(Integer, default=3, server_default="3", nullable=False)
+    cost_limit_daily: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, server_default=func.now(), nullable=False)
+
+
+class HumanTask(Base):
+    __tablename__ = "human_tasks"
+    __table_args__ = (
+        CheckConstraint("status IN ('PENDING', 'APPROVED', 'REJECTED', 'EXPIRED')", name="ck_human_tasks_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("workflow_runs.id", ondelete="CASCADE"), nullable=False)
+    step_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workflow_step_runs.id", ondelete="CASCADE"), nullable=True)
+    node_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    required_role: Mapped[str] = mapped_column(String(50), default="ADMIN", server_default="ADMIN", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="PENDING", server_default="PENDING", nullable=False)
+    task_payload: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    resolution_payload: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    resolved_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)

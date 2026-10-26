@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     app_database_url: str
     iam_database_url: str
     audit_database_url: str
-    redis_url: str
+    redis_url: str = "redis://127.0.0.1:6380/0"
 
     native_jwt_secret: str | None = None
     oidc_issuer: str | None = None

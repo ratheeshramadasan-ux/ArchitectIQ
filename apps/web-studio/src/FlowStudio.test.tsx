@@ -276,4 +276,47 @@ describe('FlowStudio — M5 Workflow Designer & Canonical Schema Verification', 
       expect(screen.getByText(/Successfully published v2!/i)).toBeDefined()
     })
   })
+
+  it('toggles Live Trace telemetry drawer and displays execution telemetry', async () => {
+    render(
+      <FlowStudio
+        token="test-token"
+        tenant="tenant-uuid-1"
+        projectId="proj-1"
+        workflowId="wf-1"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Invoice Processing Pipeline')).toBeDefined()
+    })
+
+    const liveTraceBtn = screen.getByText('Live Trace')
+    fireEvent.click(liveTraceBtn)
+
+    expect(screen.getByText('Execution Telemetry Drawer')).toBeDefined()
+    expect(screen.getByText('Waterfall')).toBeDefined()
+    expect(screen.getByText('Logs')).toBeDefined()
+  })
+
+  it('allows filtering the node palette with search input', async () => {
+    render(
+      <FlowStudio
+        token="test-token"
+        tenant="tenant-uuid-1"
+        projectId="proj-1"
+        workflowId="wf-1"
+      />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Invoice Processing Pipeline')).toBeDefined()
+    })
+
+    const searchInput = screen.getByPlaceholderText('Search nodes...')
+    fireEvent.change(searchInput, { target: { value: 'Agent' } })
+
+    expect(screen.getByText('AI Agent')).toBeDefined()
+    expect(screen.queryByText('Approval Gate')).toBeNull()
+  })
 })
