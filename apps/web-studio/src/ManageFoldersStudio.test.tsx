@@ -158,19 +158,27 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
       expect(screen.getByText('ACTIVE SYSTEM')).toBeDefined()
     })
 
-    // Verify all 12 canonical tabs are available
-    expect(screen.getByRole('button', { name: /Projects/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Dependencies/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Settings/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Permissions/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Licenses/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Compute/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Vector Storage/i })).toBeDefined()
+    // Verify 7 Primary Tabs and Canonical Views are available
+    expect(screen.getByRole('button', { name: /^Overview$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Assets & Projects$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Execution$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Resources$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Access & Security$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Logs & Audit$/i })).toBeDefined()
+    expect(screen.getAllByRole('button', { name: /^Dependencies$/i }).length).toBeGreaterThanOrEqual(1)
+
+    // Verify canonical views in secondary strip
+    expect(screen.getByRole('button', { name: /^Projects$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Settings$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Permissions$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Licenses$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Compute$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Vector Storage$/i })).toBeDefined()
     expect(screen.getAllByRole('button', { name: /Audit/i }).length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByRole('button', { name: /Logs/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Jobs/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Trigger/i })).toBeDefined()
-    expect(screen.getByRole('button', { name: /Schedule/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Logs$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Jobs$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Trigger$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^Schedule$/i })).toBeDefined()
 
     // Test Folder Settings tab
     fireEvent.click(screen.getByRole('button', { name: /^Settings$/i }))
@@ -205,8 +213,8 @@ describe('ManageFoldersStudio — Next Gen Workspace Folders Integration', () =>
     })
 
     // Test Audit tab (formerly Operations - Enriched Telemetry)
-    const auditTabBtn = screen.getAllByRole('button', { name: /Audit/i }).find(b => b.className.includes('folder-tab-btn'))
-    if (auditTabBtn) fireEvent.click(auditTabBtn)
+    const auditTabBtn = screen.getByRole('button', { name: /^Audit$/i })
+    fireEvent.click(auditTabBtn)
     await waitFor(() => {
       expect(screen.getByText(/Operational Telemetry & Execution Audit Log/i)).toBeDefined()
       expect(screen.getByPlaceholderText(/Search operations, actors, targets/i)).toBeDefined()

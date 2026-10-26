@@ -18,8 +18,68 @@ import TenantApplicationsStudio from './TenantApplicationsStudio'
 import TenantIntegrationsStudio from './TenantIntegrationsStudio'
 import EnvironmentTenantModal from './EnvironmentTenantModal'
 import ArtifactsRegistryStudio from './ArtifactsRegistryStudio'
+import KnowledgeStudio from './KnowledgeStudio'
+import TestStudio from './TestStudio'
+import DeploymentReleasesStudio from './DeploymentReleasesStudio'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, AppWindow, ArrowRight, Bell, Bot, Boxes, Building2, CalendarClock, Check, ChevronDown, ChevronRight, ClipboardCheck, Command, Database, FileText, Folder, FolderClosed, FolderKanban, FolderTree, GitBranch, Layers3, ListTodo, LockKeyhole, Menu, MoreHorizontal, Network, Palette, PanelLeft, PanelLeftClose, PanelLeftOpen, Play, Search, Settings2, ShieldCheck, Sparkles, UserPlus, Users, Workflow, Zap } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  AppWindow,
+  ArrowRight,
+  BarChart3,
+  Bell,
+  BookOpen,
+  Bot,
+  Boxes,
+  Building2,
+  CalendarClock,
+  CheckSquare,
+  ChevronDown,
+  ChevronRight,
+  ClipboardCheck,
+  Command,
+  Cpu,
+  CreditCard,
+  Database,
+  FileText,
+  FlaskConical,
+  Folder,
+  FolderClosed,
+  FolderKanban,
+  FolderTree,
+  Gauge,
+  GitBranch,
+  GitMerge,
+  HardDrive,
+  HeartPulse,
+  KeyRound,
+  Layers3,
+  LayoutDashboard,
+  ListTodo,
+  LockKeyhole,
+  Menu,
+  MoreHorizontal,
+  Network,
+  PackageCheck,
+  Palette,
+  PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Play,
+  RefreshCw,
+  Rocket,
+  Search,
+  Server,
+  Settings2,
+  ShieldAlert,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Users,
+  Workflow,
+  Zap
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
 
@@ -114,93 +174,85 @@ interface NavGroup {
 
 const groups: NavGroup[] = [
   {
-    title: 'STUDIOS & ORCHESTRATION',
+    title: 'HOME & WORKSPACE',
     links: [
-      { name: 'Folders & Hierarchy', icon: FolderTree },
+      { name: 'Dashboard', icon: LayoutDashboard },
+      { name: 'Workspaces & Folders', icon: FolderTree },
       { name: 'Artifacts Registry', icon: Boxes },
+      { name: 'My Tasks', icon: ListTodo },
+    ],
+  },
+  {
+    title: 'DESIGN STUDIOS',
+    links: [
       { name: 'Flow Studio', icon: Workflow },
-      { name: 'Agent Builder', icon: Bot },
+      { name: 'Agent Studio', icon: Bot },
       { name: 'App Studio', icon: AppWindow },
       { name: 'Document Studio', icon: FileText },
+      { name: 'Knowledge Studio', icon: Database },
+      { name: 'Test Studio', icon: FlaskConical },
     ],
   },
   {
-    title: 'OPERATIONS',
+    title: 'DEPLOYMENT & RELEASES',
     links: [
-      { name: 'Jobs & Executions', icon: Play },
+      { name: 'Release Manager', icon: Rocket },
+      { name: 'Deployment Pipelines', icon: GitBranch },
+      { name: 'Packages & Versions', icon: PackageCheck },
+    ],
+  },
+  {
+    title: 'OPERATIONS & ORCHESTRATION',
+    links: [
+      { name: 'Execution Center', icon: Play },
+      { name: 'Queues & Transactions', icon: Layers3 },
       { name: 'Schedules & Triggers', icon: CalendarClock },
-      { name: 'Queues & Approvals', icon: ListTodo },
-      { name: 'Runners & Workers', icon: Boxes },
-      { name: 'Observability Console', icon: Activity },
+      { name: 'Human Tasks & Approvals', icon: CheckSquare },
+      { name: 'Runners & Workers', icon: Cpu },
     ],
   },
   {
-    title: 'TENANT CONFIGURATION',
-    subSections: [
-      {
-        id: 'tenant-envs',
-        title: '1. Tenant Environments',
-        icon: GitBranch,
-        links: [
-          { name: 'Environment Settings', icon: GitBranch },
-        ],
-      },
-      {
-        id: '2-roles',
-        title: '2. Roles & Permissions',
-        icon: LockKeyhole,
-        links: [
-          { name: 'Role Catalog', icon: ShieldCheck },
-          { name: 'Build Custom Role', icon: LockKeyhole },
-          { name: 'Permission Matrix', icon: Layers3 },
-          { name: 'Segregation of Duties', icon: ClipboardCheck },
-        ],
-      },
-      {
-        id: '3-groups',
-        title: '3. Groups & Teams',
-        icon: Users,
-        links: [
-          { name: 'Access Groups', icon: Users },
-        ],
-      },
-      {
-        id: '4-sso',
-        title: '4. SSO & Group Mapping',
-        icon: Network,
-        links: [
-          { name: 'Identity Providers', icon: Network },
-          { name: 'Map IdP Groups', icon: GitBranch },
-        ],
-      },
-      {
-        id: '5-users',
-        title: '5. Users & Approvals',
-        icon: UserPlus,
-        links: [
-          { name: 'User Directory', icon: UserPlus },
-          { name: 'Pending Approvals', icon: Check },
-        ],
-      },
-      {
-        id: '6-integrations',
-        title: '6. Integrations & MCP',
-        icon: Boxes,
-        links: [
-          { name: 'Connected Systems & MCP', icon: Database },
-          { name: 'Bot Agents', icon: Bot },
-          { name: 'Code Repositories', icon: Boxes },
-          { name: 'API & Webhooks', icon: Zap },
-        ],
-      },
+    title: 'MONITORING & SUPPORT',
+    links: [
+      { name: 'Observability Dashboard', icon: Activity },
+      { name: 'SLA & Performance', icon: Gauge },
+      { name: 'Incidents & Alerts', icon: AlertTriangle },
+      { name: 'Support & Runbooks', icon: BookOpen },
+      { name: 'Analytics & Reports', icon: BarChart3 },
     ],
   },
   {
-    title: 'GOVERNANCE & PLATFORM',
+    title: 'ADMINISTRATION',
+    links: [
+      { name: 'Organization & Tenants', icon: Building2 },
+      { name: 'Environments', icon: GitMerge },
+      { name: 'Users, Groups & Teams', icon: Users },
+      { name: 'Roles & Permissions', icon: LockKeyhole },
+      { name: 'Identity & SSO', icon: Network },
+      { name: 'Integrations & MCP', icon: Database },
+      { name: 'Repositories & APIs', icon: Terminal },
+      { name: 'Compute & Capacity', icon: Server },
+      { name: 'Licensing & Usage', icon: CreditCard },
+    ],
+  },
+  {
+    title: 'SECURITY & GOVERNANCE',
     links: [
       { name: 'Governance Console', icon: ShieldCheck },
       { name: 'Activity Audit Logs', icon: FileText },
-      { name: 'Platform Administration', icon: Settings2 },
+      { name: 'Security Policies & MFA', icon: KeyRound },
+      { name: 'Data Protection & PII', icon: ShieldAlert },
+      { name: 'AI Model Governance', icon: Sparkles },
+      { name: 'Compliance & Attestation', icon: ClipboardCheck },
+    ],
+  },
+  {
+    title: 'PLATFORM MANAGEMENT',
+    links: [
+      { name: 'Platform Overview & Health', icon: HeartPulse },
+      { name: 'Infrastructure Inventory', icon: HardDrive },
+      { name: 'Background Jobs & Maintenance', icon: RefreshCw },
+      { name: 'Platform Configuration & Flags', icon: Settings2 },
     ],
   },
 ]
@@ -414,16 +466,26 @@ function App(){
  const toggle = (id: string) => setTreeOpen(old => { const n = new Set(old); if (n.has(id)) n.delete(id); else n.add(id); return n })
  const select = (n: TreeNode) => { setSelected(n); setActive('Explorer') }
 
- const isFoldersStudio = active === 'Folders & Hierarchy' || active === 'Explorer' || active === 'Workspaces & Folders' || active === 'Workspace Management' || active === 'Dashboard'
+ const isDashboard = active === 'Dashboard'
+ const isFoldersStudio = (active === 'Folders & Hierarchy' || active === 'Explorer' || active === 'Workspaces & Folders' || active === 'Workspace Management') && !isDashboard
  const isArtifactsStudio = active === 'Artifacts Registry'
- const isTenantEnvs = active === 'Environment Settings' || active === 'Tenant Environments'
- const isExplorer = active === 'Projects' || active === 'Environments'
+ const isKnowledgeStudio = active === 'Knowledge Studio'
+ const isTestStudio = active === 'Test Studio'
+ const isDeploymentReleasesStudio = active === 'Release Manager' || active === 'Deployment Pipelines' || active === 'Packages & Versions'
+ const isTenantEnvs = active === 'Environments' || active === 'Environment Settings' || active === 'Tenant Environments'
+ const isExplorer = active === 'Projects'
  const isTenantAppsStudio = active === 'Applications' || active === 'General Settings' || active === 'App Studio'
  const isIamStudio = active === 'Role Catalog' || active === 'Build Custom Role' || active === 'Permission Matrix' || active === 'Segregation of Duties' || active === 'Roles & Permissions'
- const isAccessDirectoryStudio = active === 'Access Groups' || active === 'Identity Providers' || active === 'Map IdP Groups' || active === 'User Directory' || active === 'Pending Approvals' || active === 'Groups & Teams' || active === 'SSO & Mapping' || active === 'Users & Access' || active === 'Users & Approvals'
- const isTenantIntegrationsStudio = active === 'Bot Agents' || active === 'Connected Systems & MCP' || active === 'Connected Systems' || active === 'Code Repositories' || active === 'API & Webhooks' || active === 'Assets & Credentials' || active === '6. Integrations' || active === 'Integrations & MCP'
- const studio = (groups[1].links || []).some(x => x.name === active)
- const isTenantMgmt = !isFoldersStudio && !isArtifactsStudio && !isTenantAppsStudio && !isIamStudio && !isAccessDirectoryStudio && !isTenantIntegrationsStudio && active === 'Administration'
+ const isAccessDirectoryStudio = active === 'Access Groups' || active === 'Identity Providers' || active === 'Map IdP Groups' || active === 'User Directory' || active === 'Pending Approvals' || active === 'Groups & Teams' || active === 'SSO & Mapping' || active === 'Users & Access' || active === 'Users & Approvals' || active === 'Users, Groups & Teams' || active === 'Identity & SSO'
+ const isTenantIntegrationsStudio = active === 'Bot Agents' || active === 'Connected Systems & MCP' || active === 'Connected Systems' || active === 'Code Repositories' || active === 'API & Webhooks' || active === 'Assets & Credentials' || active === '6. Integrations' || active === 'Integrations & MCP' || active === 'Repositories & APIs'
+ const isJobsOperations = active === 'Execution Center' || active === 'Queues & Transactions' || active === 'Schedules & Triggers' || active === 'Runners & Workers' || active === 'Jobs & Executions' || active === 'Run & Operate' || active === 'Schedules' || active === 'Queues & Approvals'
+ const isApprovalsInbox = active === 'My Tasks' || active === 'Human Tasks & Approvals' || active === 'Approvals'
+ const isObservability = active === 'Observability Dashboard' || active === 'SLA & Performance' || active === 'Incidents & Alerts' || active === 'Support & Runbooks' || active === 'Analytics & Reports' || active === 'Monitoring' || active === 'Monitor & Analyse' || active === 'Observability Console'
+ const isGovernance = active === 'Governance Console' || active === 'Security Policies & MFA' || active === 'Data Protection & PII' || active === 'AI Model Governance' || active === 'Compliance & Attestation' || active === 'Governance'
+ const isAuditViewer = active === 'Activity Audit Logs' || active === 'Audit Logs'
+ const isPlatformMgmt = active === 'Platform Overview & Health' || active === 'Infrastructure Inventory' || active === 'Background Jobs & Maintenance' || active === 'Platform Configuration & Flags' || active === 'Compute & Capacity' || active === 'Licensing & Usage' || active === 'Platform Administration' || active === 'Administration'
+ const isTenantMgmt = active === 'Tenants' || active === 'Manage Tenants' || active === 'Organization & Tenants'
+ const studio = flatLinks.some(l => l.name === active)
  const liveThroughput = overviewData?.throughput_24h ?? 0
  const hasRuns = liveThroughput > 0
 
@@ -717,6 +779,32 @@ function App(){
         </span>
         <ChevronDown size={12} style={{ opacity: 0.6, marginLeft: 2 }} />
        </button>
+
+       {/* 3.5. Folder Breadcrumb Hierarchy */}
+       <div
+        className="topbar-breadcrumb-box"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 10px',
+          borderRadius: 6,
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          fontSize: '0.74rem',
+          color: 'var(--foreground)'
+        }}
+        title="Active Workspace Folder Scope"
+       >
+        <FolderTree size={13} style={{ color: 'var(--accent, #BA9731)' }} />
+        <span style={{ color: 'var(--muted-foreground)' }}>Workspace</span>
+        <span style={{ opacity: 0.4 }}>/</span>
+        <span style={{ color: 'var(--muted-foreground)' }}>Claims Automation</span>
+        <span style={{ opacity: 0.4 }}>/</span>
+        <strong style={{ color: 'var(--foreground)' }}>
+          {selected?.name || 'Dental Claims'}
+        </strong>
+       </div>
       </div>
 
       <div style={{ flex: 1, maxWidth: 360, margin: '0 12px' }}>
@@ -730,7 +818,7 @@ function App(){
       <div className="topbar-right-cluster">
        {/* 4. Active Access Hierarchy Role Selector */}
        <div className="topbar-identity-box">
-        <span className="id-label">ACCESS TIER</span>
+        <span className="id-label">ROLE & ACCESS</span>
         <select
           aria-label="Active Identity and Role Tier"
           value={currentUserRole}
@@ -746,6 +834,7 @@ function App(){
             padding: 0,
           }}
         >
+          <option value="Tenant Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>👑 Role: Tenant Admin</option>
           <option value="Org Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Org Admin (Global Org)</option>
           <option value="Tenant Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🏢 Tenant Specific Admin (Tenant)</option>
           <option value="Environment Specific Admin" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>🟢 Environment Specific Admin ({currentEnv})</option>
@@ -941,10 +1030,34 @@ function App(){
        />
       )}
 
+      {isKnowledgeStudio && (
+       <KnowledgeStudio
+        token={token}
+        tenant={tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        currentEnv={currentEnv}
+       />
+      )}
+
+      {isTestStudio && (
+       <TestStudio
+        token={token}
+        tenant={tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        currentEnv={currentEnv}
+       />
+      )}
+
+      {isDeploymentReleasesStudio && (
+       <DeploymentReleasesStudio
+        token={token}
+        tenant={tenants.find(t => t.id === tenant)?.name || 'Citibank'}
+        currentEnv={currentEnv}
+       />
+      )}
+
       {isTenantEnvs && (
        <EnvironmentTenantModal
         isOpen={true}
-        onClose={() => navigate('Folders & Hierarchy')}
+        onClose={() => navigate('Workspaces & Folders')}
         currentEnv={currentEnv}
         onSelectEnv={setCurrentEnv}
         currentTenantId={tenant}
@@ -1000,7 +1113,7 @@ function App(){
       {isAccessDirectoryStudio && (
        <AccessDirectoryStudio
         initialTab={
-          active === 'Identity Providers' ? 'security' :
+          active === 'Identity Providers' || active === 'Identity & SSO' ? 'security' :
           active === 'Map IdP Groups' ? 'mappings' :
           active === 'User Directory' ? 'users' :
           active === 'Pending Approvals' ? 'approvals' : 'groups'
@@ -1014,7 +1127,7 @@ function App(){
        <TenantIntegrationsStudio
         initialTab={
           active === 'Bot Agents' ? 'bots' :
-          active === 'Code Repositories' ? 'repos' :
+          active === 'Code Repositories' || active === 'Repositories & APIs' ? 'repos' :
           active === 'API & Webhooks' ? 'webhooks' : 'systems'
         }
         currentEnv={currentEnv}
@@ -1024,24 +1137,44 @@ function App(){
 
       {isExplorer && <WorkspaceLive view={active} token={token} tenant={tenant} tenantName={tenants.find(t => t.id === tenant)?.name || 'Workspace'} onUnauthorized={unauthorized} onChanged={changed} />}
       {active === 'Flow Studio' && <FlowStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
-      {active === 'Agent Builder' && <AgentStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {(active === 'Agent Studio' || active === 'Agent Builder') && <AgentStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {active === 'Document Studio' && <DocumentStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
-      {(active === 'Jobs & Executions' || active === 'Run & Operate' || active === 'Queues & Transactions' || active === 'Runners & Workers' || active === 'Schedules') && (
+      {isJobsOperations && (
        <JobsMonitor token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />
       )}
-      {active === 'Approvals' && <ApprovalsInbox token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
-      {(active === 'Monitoring' || active === 'Monitor & Analyse') && (
+      {isApprovalsInbox && <ApprovalsInbox token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {isObservability && (
        <ObservabilityConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />
       )}
-      {active === 'Governance' && <GovernanceConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
-      {active === 'Audit Logs' && <ActivityAuditViewer token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
-      {(active === 'Administration' || isTenantMgmt) && (
+      {isGovernance && <GovernanceConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {isAuditViewer && <ActivityAuditViewer token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {(isPlatformMgmt || isTenantMgmt) && (
        <AdminConsole token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />
       )}
 
-      {((studio && active !== 'Flow Studio' && active !== 'Agent Builder' && active !== 'Document Studio' && active !== 'Theme / Icons') ||
-       (active === 'Plan' || active === 'Test' || active === 'Deploy' || active === 'Downloads' || active === 'Profile' || active === 'Licensing')) &&
-       !isFoldersStudio && !isTenantAppsStudio && !isIamStudio && !isAccessDirectoryStudio && !isTenantIntegrationsStudio && (
+      {studio &&
+       !isFoldersStudio &&
+       !isArtifactsStudio &&
+       !isKnowledgeStudio &&
+       !isTestStudio &&
+       !isDeploymentReleasesStudio &&
+       !isTenantAppsStudio &&
+       !isIamStudio &&
+       !isAccessDirectoryStudio &&
+       !isTenantIntegrationsStudio &&
+       !isJobsOperations &&
+       !isApprovalsInbox &&
+       !isObservability &&
+       !isGovernance &&
+       !isAuditViewer &&
+       !isPlatformMgmt &&
+       !isTenantMgmt &&
+       active !== 'Flow Studio' &&
+       active !== 'Agent Studio' &&
+       active !== 'Agent Builder' &&
+       active !== 'Document Studio' &&
+       active !== 'Theme / Icons' &&
+       active !== 'Dashboard' && (
        <>
         <div className="page-heading">
          <div>

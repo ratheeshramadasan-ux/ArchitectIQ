@@ -43,43 +43,48 @@ describe('App Sidebar Menu — Collapse/Expand Groups & Icon Rail', () => {
     const { container } = render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByTitle('Collapse STUDIOS & ORCHESTRATION')).toBeDefined()
+      expect(screen.getByTitle('Collapse HOME & WORKSPACE')).toBeDefined()
     })
 
     const navScroll = container.querySelector('.sidebar-nav-scroll')
     expect(navScroll).toBeDefined()
 
-    expect(screen.getByTitle('Collapse OPERATIONS')).toBeDefined()
-    expect(screen.getByTitle('Collapse TENANT CONFIGURATION')).toBeDefined()
+    expect(screen.getByTitle('Collapse DESIGN STUDIOS')).toBeDefined()
+    expect(screen.getByTitle('Collapse DEPLOYMENT & RELEASES')).toBeDefined()
+    expect(screen.getByTitle('Collapse OPERATIONS & ORCHESTRATION')).toBeDefined()
+    expect(screen.getByTitle('Collapse MONITORING & SUPPORT')).toBeDefined()
+    expect(screen.getByTitle('Collapse ADMINISTRATION')).toBeDefined()
+    expect(screen.getByTitle('Collapse SECURITY & GOVERNANCE')).toBeDefined()
+    expect(screen.getByTitle('Collapse PLATFORM MANAGEMENT')).toBeDefined()
   })
 
-  it('collapses and expands STUDIOS & ORCHESTRATION, OPERATIONS, and TENANT CONFIGURATION', async () => {
+  it('collapses and expands DESIGN STUDIOS, DEPLOYMENT & RELEASES, and OPERATIONS & ORCHESTRATION', async () => {
     render(<App />)
 
     await waitFor(() => {
-      expect(screen.getByTitle('Collapse STUDIOS & ORCHESTRATION')).toBeDefined()
+      expect(screen.getByTitle('Collapse DESIGN STUDIOS')).toBeDefined()
     })
 
     expect(screen.getByRole('button', { name: /^Flow Studio$/i })).toBeDefined()
 
-    const studioHeaderBtn = screen.getByTitle('Collapse STUDIOS & ORCHESTRATION')
+    const studioHeaderBtn = screen.getByTitle('Collapse DESIGN STUDIOS')
     fireEvent.click(studioHeaderBtn)
 
     expect(screen.queryByRole('button', { name: /^Flow Studio$/i })).toBeNull()
 
-    const expandStudioBtn = screen.getByTitle('Expand STUDIOS & ORCHESTRATION')
+    const expandStudioBtn = screen.getByTitle('Expand DESIGN STUDIOS')
     fireEvent.click(expandStudioBtn)
     expect(screen.getByRole('button', { name: /^Flow Studio$/i })).toBeDefined()
 
-    expect(screen.getByRole('button', { name: /^Jobs & Executions$/i })).toBeDefined()
-    const opsHeaderBtn = screen.getByTitle('Collapse OPERATIONS')
-    fireEvent.click(opsHeaderBtn)
-    expect(screen.queryByRole('button', { name: /^Jobs & Executions$/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Release Manager$/i })).toBeDefined()
+    const deployHeaderBtn = screen.getByTitle('Collapse DEPLOYMENT & RELEASES')
+    fireEvent.click(deployHeaderBtn)
+    expect(screen.queryByRole('button', { name: /^Release Manager$/i })).toBeNull()
 
-    expect(screen.getByRole('button', { name: /1\. Tenant Environments/i })).toBeDefined()
-    const tenantCfgHeaderBtn = screen.getByTitle('Collapse TENANT CONFIGURATION')
-    fireEvent.click(tenantCfgHeaderBtn)
-    expect(screen.queryByRole('button', { name: /1\. Tenant Environments/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Execution Center$/i })).toBeDefined()
+    const opsHeaderBtn = screen.getByTitle('Collapse OPERATIONS & ORCHESTRATION')
+    fireEvent.click(opsHeaderBtn)
+    expect(screen.queryByRole('button', { name: /^Execution Center$/i })).toBeNull()
   })
 
   it('collapses Menu Bar into icon rail and expands back', async () => {

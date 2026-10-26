@@ -1103,12 +1103,48 @@ export default function ManageFoldersStudio({
                   </div>
                 </div>
 
-                {/* Canonical 12 Folder Tabs */}
+                {/* Proposed Architecture v2.0: 7 Primary Tabs with Secondary Views */}
                 <div className="folder-tabs-strip">
+                  {[
+                    { id: 'overview', label: 'Overview', icon: Sliders, targetTab: 'Settings' as TabType },
+                    { id: 'assets', label: 'Assets & Projects', icon: Workflow, targetTab: 'Projects' as TabType },
+                    { id: 'execution', label: 'Execution', icon: PlayCircle, targetTab: 'Jobs' as TabType },
+                    { id: 'resources', label: 'Resources', icon: Cpu, targetTab: 'Compute' as TabType },
+                    { id: 'access', label: 'Access & Security', icon: ShieldCheck, targetTab: 'Permissions' as TabType },
+                    { id: 'logs', label: 'Logs & Audit', icon: Terminal, targetTab: 'Logs' as TabType },
+                    { id: 'dependencies', label: 'Dependencies', icon: Boxes, targetTab: 'Dependencies' as TabType },
+                  ].map(pt => {
+                    const isOverviewActive = pt.id === 'overview' && activeTab === 'Settings'
+                    const isAssetsActive = pt.id === 'assets' && activeTab === 'Projects'
+                    const isExecActive = pt.id === 'execution' && (activeTab === 'Jobs' || activeTab === 'Trigger' || activeTab === 'Schedule')
+                    const isResourcesActive = pt.id === 'resources' && (activeTab === 'Compute' || activeTab === 'Vector Storage' || activeTab === 'Licenses')
+                    const isAccessActive = pt.id === 'access' && (activeTab === 'Permissions')
+                    const isLogsActive = pt.id === 'logs' && (activeTab === 'Logs' || activeTab === 'Audit')
+                    const isDepsActive = pt.id === 'dependencies' && activeTab === 'Dependencies'
+                    const isCurrentActive = isOverviewActive || isAssetsActive || isExecActive || isResourcesActive || isAccessActive || isLogsActive || isDepsActive
+                    const TabIcon = pt.icon
+                    return (
+                      <button
+                        key={pt.id}
+                        onClick={() => setActiveTab(pt.targetTab)}
+                        className={`folder-tab-btn ${isCurrentActive ? 'active' : ''}`}
+                      >
+                        <TabIcon size={13} style={{ marginRight: 5 }} />
+                        {pt.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Secondary Views Sub-strip for 12 Granular Capabilities */}
+                <div className="folder-subviews-strip">
+                  <span style={{ fontSize: '0.62rem', fontWeight: 800, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.08em', marginRight: 4 }}>
+                    VIEWS:
+                  </span>
                   {([
+                    { id: 'Settings', label: 'Settings', icon: Sliders },
                     { id: 'Projects', label: 'Projects', icon: Workflow },
                     { id: 'Dependencies', label: 'Dependencies', icon: Boxes },
-                    { id: 'Settings', label: 'Settings', icon: Sliders },
                     { id: 'Permissions', label: 'Permissions', icon: ShieldCheck },
                     { id: 'Licenses', label: 'Licenses', icon: CreditCard },
                     { id: 'Compute', label: 'Compute', icon: Cpu },
@@ -1122,9 +1158,9 @@ export default function ManageFoldersStudio({
                     <button
                       key={id}
                       onClick={() => setActiveTab(id as TabType)}
-                      className={`folder-tab-btn ${activeTab === id ? 'active' : ''}`}
+                      className={`subview-pill-btn ${activeTab === id ? 'active' : ''}`}
                     >
-                      <TabIcon size={13} style={{ marginRight: 4 }} />
+                      <TabIcon size={11} />
                       {label}
                     </button>
                   ))}
