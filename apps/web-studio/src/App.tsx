@@ -22,6 +22,9 @@ import TestStudio from './TestStudio'
 import DeploymentReleasesStudio from './DeploymentReleasesStudio'
 import PlatformControlCenterStudio from './PlatformControlCenterStudio'
 import OrganizationTenantStudio from './OrganizationTenantStudio'
+import ProcessCaptureStudio from './ProcessCaptureStudio'
+import ProcessCaptureAdmin from './ProcessCaptureAdmin'
+import { Video as VideoIcon } from 'lucide-react'
 import GuideModal from './GuideModal'
 import FooterInfoModal, { type FooterModalTab } from './FooterInfoModal'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -188,6 +191,7 @@ const groups: NavGroup[] = [
     title: 'DESIGN STUDIOS',
     links: [
       { name: 'Flow Studio', icon: Workflow },
+      { name: 'Process Capture Studio', icon: VideoIcon },
       { name: 'Agent Studio', icon: Bot },
       { name: 'App Studio', icon: AppWindow },
       { name: 'Document Studio', icon: FileText },
@@ -227,6 +231,7 @@ const groups: NavGroup[] = [
     title: 'ADMINISTRATION',
     links: [
       { name: 'Organization & Tenants', icon: Building2 },
+      { name: 'Process Capture Administration', icon: ShieldCheck },
       { name: 'Environments', icon: GitMerge },
       { name: 'Users, Groups & Teams', icon: Users },
       { name: 'Roles & Permissions', icon: LockKeyhole },
@@ -1234,6 +1239,20 @@ function App(){
 
       {isExplorer && <WorkspaceLive view={active} token={token} tenant={tenant} tenantName={tenants.find(t => t.id === tenant)?.name || 'Workspace'} onUnauthorized={unauthorized} onChanged={changed} />}
       {active === 'Flow Studio' && <FlowStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
+      {active === 'Process Capture Studio' && (
+        <ProcessCaptureStudio
+          token={token}
+          tenant={tenants.find(t => t.id === tenant) || null}
+          folderId={selected?.kind === 'folder' ? selected.id : undefined}
+          onNavigateFlowStudio={(_wfId) => navigate('Flow Studio')}
+        />
+      )}
+      {active === 'Process Capture Administration' && (
+        <ProcessCaptureAdmin
+          token={token}
+          tenant={tenants.find(t => t.id === tenant) || null}
+        />
+      )}
       {(active === 'Agent Studio' || active === 'Agent Builder') && <AgentStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {active === 'Document Studio' && <DocumentStudio token={token} tenant={tenant} projectId={selected?.kind === 'project' ? selected.id : undefined} />}
       {isJobsOperations && (
@@ -1290,6 +1309,8 @@ function App(){
        !isPlatformMgmt &&
        !isTenantMgmt &&
        active !== 'Flow Studio' &&
+       active !== 'Process Capture Studio' &&
+       active !== 'Process Capture Administration' &&
        active !== 'Agent Studio' &&
        active !== 'Agent Builder' &&
        active !== 'Document Studio' &&

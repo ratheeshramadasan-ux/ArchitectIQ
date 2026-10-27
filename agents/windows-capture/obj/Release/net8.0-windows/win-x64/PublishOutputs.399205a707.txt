@@ -1,0 +1,6 @@
+C:\Users\rathe\Documents\Projects\ArchitectIQ\agents\windows-capture\bin\Release\publish\ArchitectIQ.Capture.Agent.exe
+C:\Users\rathe\Documents\Projects\ArchitectIQ\agents\windows-capture\bin\Release\publish\ArchitectIQ.Capture.Agent.dll
+C:\Users\rathe\Documents\Projects\ArchitectIQ\agents\windows-capture\bin\Release\publish\ArchitectIQ.Capture.Agent.deps.json
+C:\Users\rathe\Documents\Projects\ArchitectIQ\agents\windows-capture\bin\Release\publish\ArchitectIQ.Capture.Agent.runtimeconfig.json
+C:\Users\rathe\Documents\Projects\ArchitectIQ\agents\windows-capture\bin\Release\publish\ArchitectIQ.Capture.Agent.pdb
+C:\Users\rathe\Documents\Projects\ArchitectIQ\agents\windows-capture\bin\Release\publish\System.Management.dll

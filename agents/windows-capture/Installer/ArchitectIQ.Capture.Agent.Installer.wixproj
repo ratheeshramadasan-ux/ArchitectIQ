@@ -1,0 +1,11 @@
+<Project Sdk="WixToolset.Sdk/4.0.0">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <OutputName>ArchitectIQ-CaptureAgent-Setup</OutputName>
+    <TargetPlatform>x64</TargetPlatform>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ArchitectIQ.Capture.Agent.csproj" />
+  </ItemGroup>
+</Project>

@@ -1235,3 +1235,241 @@ class TenantResidencyMigration(Base):
     requested_by: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+# ============================================================================
+# MODULE 14: PROCESS CAPTURE STUDIO (PCS-01)
+# Governed Process Recording, Discovery & UI Automation Tracing
+# ============================================================================
+
+class CaptureAgent(Base):
+    __tablename__ = "capture_agents"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    agent_hostname: Mapped[str] = mapped_column(String(255), nullable=False)
+    os_version: Mapped[str] = mapped_column(String(100), default="Windows 11 Enterprise", nullable=False)
+    agent_version: Mapped[str] = mapped_column(String(50), default="1.0.0", nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="ONLINE", server_default="ONLINE", nullable=False)
+    hardware_fingerprint: Mapped[str] = mapped_column(String(255), nullable=False)
+    pairing_token_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    capabilities: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    last_heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureSession(Base):
+    __tablename__ = "capture_sessions"
+    __table_args__ = (
+        CheckConstraint("status IN ('DRAFT', 'RECORDING', 'PAUSED', 'COMPLETED', 'APPROVED', 'ARCHIVED')", name="ck_capture_session_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("capture_agents.id", ondelete="SET NULL"), nullable=True)
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    environment_name: Mapped[str] = mapped_column(String(50), default="DEV", server_default="DEV", nullable=False)
+    target_application: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="DRAFT", server_default="DRAFT", nullable=False)
+
+    # Security & governance controls
+    security_exclusions: Mapped[dict] = mapped_column(
+        JSON,
+        default=lambda: {
+            "excluded_processes": ["1password.exe", "bitwarden.exe", "keepass.exe", "mstsc.exe"],
+            "mask_passwords": True,
+            "redact_credit_cards": True,
+            "redact_ssn": True,
+        },
+        server_default=text('\'{"mask_passwords": true, "redact_credit_cards": true}\'::jsonb'),
+        nullable=False,
+    )
+    consent_given_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consent_operator_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+    total_steps: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"), nullable=False)
+
+    metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureEvidence(Base):
+    __tablename__ = "capture_evidence"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    evidence_type: Mapped[str] = mapped_column(String(50), default="KEYFRAME", nullable=False)  # KEYFRAME, SCREENSHOT, DOM_SNAPSHOT
+    content_type: Mapped[str] = mapped_column(String(100), default="image/png", nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    data_base64: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    timestamp_offset_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureEvent(Base):
+    __tablename__ = "capture_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    monotonic_offset_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)  # UI_CLICK, UI_DOUBLE_CLICK, UI_TYPE, UI_SELECT, WINDOW_FOCUS
+
+    process_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    window_title: Mapped[str] = mapped_column(String(300), nullable=False)
+    window_class: Mapped[str | None] = mapped_column(String(150), nullable=True)
+
+    ui_element_metadata: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+    interaction_data: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)
+
+    evidence_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("capture_evidence.id", ondelete="SET NULL"), nullable=True)
+
+    is_redacted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    redaction_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+
+    annotation_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    annotation_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    business_rule_tag: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+# ============================================================================
+# MODULE 14: PCS-02 CROSS-PLATFORM PRIVACY & ADMINISTRATION MODELS
+# ============================================================================
+
+class CaptureApplicationCatalog(Base):
+    __tablename__ = "capture_application_catalog"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    executable_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    bundle_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    publisher_signature: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    classification: Mapped[str] = mapped_column(String(50), default="STANDARD", server_default="STANDARD", nullable=False)
+    policy_action: Mapped[str] = mapped_column(String(50), default="ALLOW", server_default="ALLOW", nullable=False)  # ALLOW, CONDITIONAL, DENY
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CapturePolicyRule(Base):
+    __tablename__ = "capture_policy_rules"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tier_level: Mapped[str] = mapped_column(String(30), nullable=False)  # PLATFORM, TENANT, PROCESS_CAPTURE
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
+    rule_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    pattern_type: Mapped[str] = mapped_column(String(50), nullable=False)  # LUHN_CARD, US_SSN, CA_SIN, REGEX, UI_PASSWORD
+    pattern_expression: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    applies_to_metadata: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    applies_to_images: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureProfile(Base):
+    __tablename__ = "capture_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sampling_rate_hz: Mapped[float] = mapped_column(Float, default=1.0, server_default=text("1.0"), nullable=False)
+    max_resolution: Mapped[str] = mapped_column(String(20), default="1920x1080", server_default="1920x1080", nullable=False)
+    record_audio: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    capture_dom: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    capture_ui_automation: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureSessionApplication(Base):
+    __tablename__ = "capture_session_applications"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False)
+    application_id: Mapped[str] = mapped_column(String(150), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    process_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    publisher: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    selected_windows: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureRedactionRegion(Base):
+    __tablename__ = "capture_redaction_regions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    evidence_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("capture_evidence.id", ondelete="CASCADE"), nullable=False)
+    bounding_box: Mapped[dict] = mapped_column(JSON, default=dict, server_default=text("'{}'::jsonb"), nullable=False)  # x, y, width, height
+    redaction_type: Mapped[str] = mapped_column(String(50), default="SOLID_BLACK", server_default="SOLID_BLACK", nullable=False)
+    detected_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_reviewed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+# ============================================================================
+# PCA-01: ENTERPRISE PROCESS CAPTURE AGENT (ENROLLMENT, VIDEO & STEPS)
+# ============================================================================
+
+class CaptureAgentEnrollment(Base):
+    __tablename__ = "capture_agent_enrollments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    device_code: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    user_code: Mapped[str] = mapped_column(String(16), index=True, nullable=False)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
+    enrolled_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    agent_hostname: Mapped[str] = mapped_column(String(150), nullable=False)
+    hardware_fingerprint: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="PENDING", server_default="PENDING", nullable=False)  # PENDING, AUTHORIZED, EXPIRED, CONSUMED
+    client_ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureSessionVideo(Base):
+    __tablename__ = "capture_session_videos"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False)
+    chunk_sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_quarantined: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class CaptureProcessStep(Base):
+    __tablename__ = "capture_process_steps"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("capture_sessions.id", ondelete="CASCADE"), nullable=False)
+    step_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    application_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    window_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    screenshot_evidence_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("capture_evidence.id", ondelete="SET NULL"), nullable=True)
+    is_decision_point: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    decision_branches: Mapped[list] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)

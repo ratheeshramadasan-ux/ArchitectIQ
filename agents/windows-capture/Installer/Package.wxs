@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="ArchitectIQ Process Capture Agent"
+           Manufacturer="ArchitectIQ"
+           Version="1.0.0.0"
+           UpgradeCode="5B33A78E-1C42-4A73-A3B5-F27E9F9C3E14"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of ArchitectIQ Process Capture Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Public MSI Configuration Properties for Silent GPO/Intune Deployment -->
+    <Property Id="SERVER_URL" Value="http://localhost:8000" />
+    <Property Id="TENANT_ID" Secure="yes" />
+    <Property Id="ENROLL_TOKEN" Secure="yes" />
+
+    <!-- Standard Directories -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="CompanyFolder" Name="ArchitectIQ">
+        <Directory Id="INSTALLFOLDER" Name="ProcessCaptureAgent" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="ArchitectIQ" />
+    </StandardDirectory>
+
+    <!-- Component Definitions -->
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="3E4D1A72-9B45-47C8-AE89-915F79D3B821">
+        <File Id="AgentExe"
+              Source="$(var.TargetDir)ArchitectIQ.Capture.Agent.exe"
+              KeyPath="yes" />
+
+        <!-- Registry Run Key for Automatic User Login Launch -->
+        <RegistryValue Root="HKCU"
+                       Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="ArchitectIQProcessCapture"
+                       Value="&quot;[#AgentExe]&quot; --tray"
+                       Type="string" />
+
+        <!-- Start Menu Shortcut -->
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="ArchitectIQ Process Capture Agent"
+                  Description="Enterprise-governed process capture and desktop recording agent"
+                  Target="[#AgentExe]"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Directory="ApplicationProgramsFolder" />
+        <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall" />
+      </Component>
+
+      <Component Id="AgentDllComponent" Guid="A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D">
+        <File Id="AgentDll" Source="$(var.TargetDir)ArchitectIQ.Capture.Agent.dll" KeyPath="yes" />
+      </Component>
+
+      <Component Id="AgentRuntimeConfigComponent" Guid="B2C3D4E5-F6A7-4B8C-9D0E-1F2A3B4C5D6E">
+        <File Id="AgentRuntimeConfig" Source="$(var.TargetDir)ArchitectIQ.Capture.Agent.runtimeconfig.json" KeyPath="yes" />
+      </Component>
+
+      <Component Id="AgentDepsJsonComponent" Guid="C3D4E5F6-A7B8-4C9D-0E1F-2A3B4C5D6E7F">
+        <File Id="AgentDepsJson" Source="$(var.TargetDir)ArchitectIQ.Capture.Agent.deps.json" KeyPath="yes" />
+      </Component>
+
+      <Component Id="SystemManagementDllComponent" Guid="D4E5F6A7-B8C9-4D0E-1F2A-3B4C5D6E7F8A">
+        <File Id="SystemManagementDll" Source="$(var.TargetDir)System.Management.dll" KeyPath="yes" />
+      </Component>
+
+      <Component Id="AppManifestComponent" Guid="82C5D194-27BF-4C18-97F2-72E5D06A1C49">
+        <File Id="AppManifestFile" Source="$(var.ProjectDir)app.manifest" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Installation Feature Set -->
+    <Feature Id="MainFeature" Title="ArchitectIQ Capture Agent Runtime" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+  </Package>
+</Wix>
