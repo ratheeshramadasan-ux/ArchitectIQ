@@ -1149,3 +1149,89 @@ class PlatformFeatureFlag(Base):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
     target_tier: Mapped[str] = mapped_column(String(50), default="ALL", server_default="ALL", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+# ---------------------------------------------------------
+# Milestone M16: Organization & Tenant Governance Separation
+# ---------------------------------------------------------
+
+class SupportedRegion(Base):
+    __tablename__ = "supported_regions"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    country: Mapped[str] = mapped_column(String(100), nullable=False)
+    compliance_tags: Mapped[dict] = mapped_column(JSON, default=list, server_default=text("'[\"SOC2\", \"ISO27001\", \"PCI-DSS\"]'::jsonb"), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class OrganizationAdministrator(Base):
+    __tablename__ = "organization_administrators"
+    __table_args__ = (
+        CheckConstraint("role IN ('ORGANIZATION_OWNER', 'ORGANIZATION_ADMIN', 'ORGANIZATION_VIEWER')", name="ck_org_admin_role"),
+        CheckConstraint("status IN ('ACTIVE', 'PENDING', 'EXPIRED', 'REVOKED')", name="ck_org_admin_status"),
+        UniqueConstraint("organization_id", "email", name="uq_org_admin_email"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platform_organizations.id", ondelete="CASCADE"), nullable=False)
+    email: Mapped[str] = mapped_column(String(200), nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    role: Mapped[str] = mapped_column(String(50), default="ORGANIZATION_ADMIN", server_default="ORGANIZATION_ADMIN", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ACTIVE", server_default="ACTIVE", nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class OrganizationAsset(Base):
+    __tablename__ = "organization_assets"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("platform_organizations.id", ondelete="CASCADE"), nullable=False)
+    asset_type: Mapped[str] = mapped_column(String(50), default="LOGO", server_default="LOGO", nullable=False)
+    content_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    data_base64: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class TenantDeployment(Base):
+    __tablename__ = "tenant_deployments"
+    __table_args__ = (
+        CheckConstraint("deployment_model IN ('saas', 'client_cloud', 'on_premises')", name="ck_tenant_deployment_model"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), unique=True, nullable=False)
+    deployment_model: Mapped[str] = mapped_column(String(50), default="saas", server_default="saas", nullable=False)
+    hosting_region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    cloud_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    cloud_account_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    infrastructure_region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    site_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    jurisdiction: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    isolated_network: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    ai_inference_allowed: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    residency_enforced: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), nullable=False)
+    tenant_admins: Mapped[dict] = mapped_column(JSON, default=list, server_default=text("'[]'::jsonb"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+
+
+class TenantResidencyMigration(Base):
+    __tablename__ = "tenant_residency_migrations"
+    __table_args__ = (
+        CheckConstraint("status IN ('REQUESTED', 'APPROVED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED')", name="ck_residency_migration_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    source_region: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_region: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="REQUESTED", server_default="REQUESTED", nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, server_default=func.now(), nullable=False)

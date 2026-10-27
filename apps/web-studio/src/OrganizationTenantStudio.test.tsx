@@ -165,7 +165,7 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     const orgTab = screen.getByRole('button', { name: /^Organization$/i })
     fireEvent.click(orgTab)
     expect(screen.getByRole('button', { name: /Create Organization/i })).toBeDefined()
-    expect(screen.getByText(/Data Residency/i)).toBeDefined()
+    expect(screen.getByText(/Administrators/i)).toBeDefined()
 
     // Click Tenants
     const tenantsTab = screen.getByRole('button', { name: /^Tenants$/i })
@@ -183,4 +183,69 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     fireEvent.click(defaultSettingsTab)
     expect(screen.getByText(/Automatic 5 Canonical Environments/i)).toBeDefined()
   })
+
+  it('verifies Organization form contains only organization-level fields with Data Residency removed and immutable slug', () => {
+    render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+
+    const orgTab = screen.getByRole('button', { name: /^Organization$/i })
+    fireEvent.click(orgTab)
+
+    const createOrgBtn = screen.getByRole('button', { name: /Create Organization/i })
+    fireEvent.click(createOrgBtn)
+
+    expect(screen.getByRole('heading', { name: /Create New Organization/i })).toBeDefined()
+    expect(screen.getByPlaceholderText(/e\.g\. Citibank Wealth/i)).toBeDefined()
+    expect(screen.getByText(/Organization Slug \(Read Only\)/i)).toBeDefined()
+    expect(screen.getByText(/Upload Logo/i)).toBeDefined()
+    expect(screen.getByText(/Organization Administrators/i)).toBeDefined()
+
+    // Data Residency Region MUST NOT be in the Organization Form
+    expect(screen.queryByText(/Data Residency Region/i)).toBeNull()
+  })
+
+  it('walks through the 5-step guided tenant creation wizard', async () => {
+    render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+
+    const tenantsTab = screen.getByRole('button', { name: /^Tenants$/i })
+    fireEvent.click(tenantsTab)
+
+    const createTenantBtn = screen.getByRole('button', { name: /Create Tenant/i })
+    fireEvent.click(createTenantBtn)
+
+    // Step 1: Identity
+    expect(screen.getByText(/Step 1 of 5/i)).toBeDefined()
+    const nameInput = screen.getByPlaceholderText(/e\.g\., Wealth Management Solutions/i)
+    fireEvent.change(nameInput, { target: { value: 'Wealth Management Global' } })
+
+    const nextStep2Btn = screen.getByRole('button', { name: /Next: Deployment Model/i })
+    fireEvent.click(nextStep2Btn)
+
+    // Step 2: Deployment Model
+    expect(screen.getByText(/Step 2 of 5/i)).toBeDefined()
+    expect(screen.getByText(/ArchitectIQ SaaS/i)).toBeDefined()
+    expect(screen.getByText(/Client Cloud/i)).toBeDefined()
+    expect(screen.getByText(/Client On-Premises/i)).toBeDefined()
+
+    const nextStep3Btn = screen.getByRole('button', { name: /Next: Infrastructure & Residency/i })
+    fireEvent.click(nextStep3Btn)
+
+    // Step 3: Infrastructure & Residency (dynamic for SaaS)
+    expect(screen.getByText(/Step 3 of 5/i)).toBeDefined()
+    expect(screen.getByText(/SaaS Preferred Hosting Region/i)).toBeDefined()
+
+    const nextStep4Btn = screen.getByRole('button', { name: /Next: Administrators & Access/i })
+    fireEvent.click(nextStep4Btn)
+
+    // Step 4: Administrators & Access
+    expect(screen.getByText(/Step 4 of 5/i)).toBeDefined()
+    expect(screen.getByText(/Canonical Environments Provisioning/i)).toBeDefined()
+
+    const nextStep5Btn = screen.getByRole('button', { name: /Next: Review & Provision/i })
+    fireEvent.click(nextStep5Btn)
+
+    // Step 5: Review & Provision
+    expect(screen.getByText(/Step 5 of 5/i)).toBeDefined()
+    expect(screen.getByRole('button', { name: /Provision Tenant Fleet/i })).toBeDefined()
+  })
+
 })

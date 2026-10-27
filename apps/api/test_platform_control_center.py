@@ -451,3 +451,247 @@ def test_fleet_tenant_lifecycle_and_administration_overview(platform_env):
     del_resp = client.delete(f"/api/v1/platform/fleet/tenants/{tenant_id}")
     assert del_resp.status_code == 200
     assert del_resp.json()["status"] == "Archived"
+
+
+import base64
+
+def test_organization_slug_generation_and_immutability(platform_env):
+    authenticate_as(platform_env["admin_user_id"])
+    unique_suffix = uuid4().hex[:6]
+    org_name = f"Canada Life Financial {unique_suffix}"
+
+    # 1. Automatic slug generation without providing slug
+    create_resp = client.post(
+        "/api/v1/platform/organizations",
+        json={
+            "name": org_name,
+            "tier": "ENTERPRISE_CORE",
+            "administrators": [
+                {
+                    "email": f"owner@{unique_suffix}.com",
+                    "role": "ORGANIZATION_OWNER",
+                    "status": "ACTIVE",
+                    "is_primary": True,
+                }
+            ],
+        },
+    )
+    assert create_resp.status_code == 201
+    data = create_resp.json()
+    expected_prefix = f"canada-life-financial-{unique_suffix}"
+    assert data["slug"].startswith("canada-life-financial")
+    org_id = data["id"]
+    initial_slug = data["slug"]
+
+    # 2. Renaming organization does NOT change slug (slug is immutable)
+    patch_resp = client.patch(
+        f"/api/v1/platform/organizations/{org_id}",
+        json={"name": f"Great-West Lifeco {unique_suffix}"},
+    )
+    assert patch_resp.status_code == 200
+
+    # Verify via GET that slug remained exactly the same
+    get_resp = client.get("/api/v1/platform/organizations")
+    found = next(o for o in get_resp.json() if o["id"] == org_id)
+    assert found["name"] == f"Great-West Lifeco {unique_suffix}"
+    assert found["slug"] == initial_slug
+
+
+def test_organization_logo_upload_security_and_management(platform_env):
+    authenticate_as(platform_env["admin_user_id"])
+    unique_suffix = uuid4().hex[:6]
+
+    org_resp = client.post(
+        "/api/v1/platform/organizations",
+        json={
+            "name": f"Logo Test Org {unique_suffix}",
+            "tier": "ENTERPRISE_STARTER",
+        },
+    )
+    assert org_resp.status_code == 201
+    org_id = org_resp.json()["id"]
+
+    # 1. Upload valid PNG logo
+    sample_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15c4"
+    b64_png = base64.b64encode(sample_png).decode()
+
+    upload_resp = client.post(
+        f"/api/v1/platform/organizations/{org_id}/logo",
+        json={
+            "content_type": "image/png",
+            "data_base64": b64_png,
+        },
+    )
+    assert upload_resp.status_code == 200
+    up_data = upload_resp.json()
+    asset_id = up_data["asset_id"]
+    assert up_data["logo_url"] == f"/api/v1/platform/assets/{asset_id}"
+
+    # 2. Fetch asset via GET
+    get_asset_resp = client.get(f"/api/v1/platform/assets/{asset_id}")
+    assert get_asset_resp.status_code == 200
+    assert get_asset_resp.content == sample_png
+    assert "image/png" in get_asset_resp.headers["content-type"]
+
+    # 3. Reject malicious SVG with script tags
+    malicious_svg = b"<svg><script>alert('xss')</script></svg>"
+    b64_mal = base64.b64encode(malicious_svg).decode()
+    mal_resp = client.post(
+        f"/api/v1/platform/organizations/{org_id}/logo",
+        json={
+            "content_type": "image/svg+xml",
+            "data_base64": b64_mal,
+        },
+    )
+    assert mal_resp.status_code == 400
+    assert "prohibited executable content" in mal_resp.json()["detail"]
+
+    # 4. Remove logo
+    del_resp = client.delete(f"/api/v1/platform/organizations/{org_id}/logo")
+    assert del_resp.status_code == 200
+
+
+def test_organization_multi_administrator_governance(platform_env):
+    authenticate_as(platform_env["admin_user_id"])
+    unique_suffix = uuid4().hex[:6]
+
+    # 1. Create Org with 2 administrators (1 owner, 1 admin)
+    org_resp = client.post(
+        "/api/v1/platform/organizations",
+        json={
+            "name": f"Governance Org {unique_suffix}",
+            "administrators": [
+                {
+                    "email": f"owner@{unique_suffix}.com",
+                    "role": "ORGANIZATION_OWNER",
+                    "status": "ACTIVE",
+                    "is_primary": True,
+                },
+                {
+                    "email": f"it.admin@{unique_suffix}.com",
+                    "role": "ORGANIZATION_ADMIN",
+                    "status": "ACTIVE",
+                    "is_primary": False,
+                },
+            ],
+        },
+    )
+    assert org_resp.status_code == 201
+    org_id = org_resp.json()["id"]
+
+    # 2. List administrators
+    admins_resp = client.get(f"/api/v1/platform/organizations/{org_id}/administrators")
+    assert admins_resp.status_code == 200
+    admins = admins_resp.json()
+    assert len(admins) == 2
+
+    owner = next(a for a in admins if a["email"] == f"owner@{unique_suffix}.com")
+    it_admin = next(a for a in admins if a["email"] == f"it.admin@{unique_suffix}.com")
+    assert owner["is_primary"] is True
+
+    # 3. Delete secondary admin - should succeed
+    del_it_resp = client.delete(f"/api/v1/platform/organizations/{org_id}/administrators/{it_admin['id']}")
+    assert del_it_resp.status_code == 200
+
+    # 4. Attempt to delete last active admin (owner) - must be blocked with HTTP 400
+    del_owner_resp = client.delete(f"/api/v1/platform/organizations/{org_id}/administrators/{owner['id']}")
+    assert del_owner_resp.status_code == 400
+    assert "Cannot delete the last active organization administrator" in del_owner_resp.json()["detail"]
+
+
+def test_tenant_deployment_models_and_residency(platform_env):
+    authenticate_as(platform_env["admin_user_id"])
+    unique_suffix = uuid4().hex[:6]
+
+    # 1. Fetch supported regions catalog
+    regions_resp = client.get("/api/v1/platform/deployment/regions")
+    assert regions_resp.status_code == 200
+    regions = regions_resp.json()
+    assert len(regions) >= 4
+    region_ids = [r["id"] for r in regions]
+    assert "ca-central-1" in region_ids
+    assert "us-east-1" in region_ids
+
+    # Create parent organization
+    org_resp = client.post(
+        "/api/v1/platform/organizations",
+        json={"name": f"Enterprise Bank {unique_suffix}"},
+    )
+    assert org_resp.status_code == 201
+    org_id = org_resp.json()["id"]
+
+    # 2. Provision SaaS Tenant with ca-central-1
+    saas_tenant_resp = client.post(
+        "/api/v1/platform/fleet/tenants",
+        json={
+            "organization_id": org_id,
+            "name": f"SaaS Banking {unique_suffix}",
+            "deployment_model": "saas",
+            "hosting_region": "ca-central-1",
+            "tenant_admins": [f"admin@{unique_suffix}.ca"],
+        },
+    )
+    assert saas_tenant_resp.status_code == 201
+    saas_data = saas_tenant_resp.json()
+    saas_id = saas_data["id"]
+    assert saas_data["deployment"]["deployment_model"] == "saas"
+    assert saas_data["deployment"]["hosting_region"] == "ca-central-1"
+
+    # 3. Provision Client Cloud Tenant (AWS)
+    cloud_tenant_resp = client.post(
+        "/api/v1/platform/fleet/tenants",
+        json={
+            "organization_id": org_id,
+            "name": f"Cloud Payments {unique_suffix}",
+            "deployment_model": "client_cloud",
+            "cloud_provider": "AWS",
+            "cloud_account_id": "1234-5678-9012",
+            "infrastructure_region": "us-east-2",
+        },
+    )
+    assert cloud_tenant_resp.status_code == 201
+    cloud_data = cloud_tenant_resp.json()
+    assert cloud_data["deployment"]["deployment_model"] == "client_cloud"
+    assert cloud_data["deployment"]["cloud_provider"] == "AWS"
+    assert cloud_data["deployment"]["infrastructure_region"] == "us-east-2"
+
+    # 4. Provision On-Premises Tenant
+    onprem_tenant_resp = client.post(
+        "/api/v1/platform/fleet/tenants",
+        json={
+            "organization_id": org_id,
+            "name": f"Core Vault {unique_suffix}",
+            "deployment_model": "on_premises",
+            "site_name": "Toronto Tier-4 DataCenter",
+            "jurisdiction": "Canada - Federal",
+            "isolated_network": True,
+            "ai_inference_allowed": False,
+        },
+    )
+    assert onprem_tenant_resp.status_code == 201
+    onprem_data = onprem_tenant_resp.json()
+    assert onprem_data["deployment"]["deployment_model"] == "on_premises"
+    assert onprem_data["deployment"]["site_name"] == "Toronto Tier-4 DataCenter"
+    assert onprem_data["deployment"]["isolated_network"] is True
+    assert onprem_data["deployment"]["ai_inference_allowed"] is False
+
+    # 5. Check Effective Residency Endpoint
+    res_resp = client.get(f"/api/v1/platform/tenants/{saas_id}/residency")
+    assert res_resp.status_code == 200
+    res_data = res_resp.json()
+    assert res_data["deployment_model"] == "saas"
+    assert res_data["hosting_region"] == "ca-central-1"
+
+    # 6. Request Governed Residency Migration for SaaS Tenant
+    mig_resp = client.post(
+        f"/api/v1/platform/tenants/{saas_id}/residency-migrations",
+        json={
+            "target_region": "eu-west-1",
+            "reason": "Regulatory compliance with European DORA requirements",
+        },
+    )
+    assert mig_resp.status_code == 201
+    mig_data = mig_resp.json()
+    assert mig_data["source_region"] == "ca-central-1"
+    assert mig_data["target_region"] == "eu-west-1"
+    assert mig_data["status"] == "REQUESTED"

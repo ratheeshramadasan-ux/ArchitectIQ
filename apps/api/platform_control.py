@@ -12,13 +12,14 @@ Authoritative global control plane for Platform Owners and Platform Administrato
 - Platform Feature Flags, Health Diagnostics & Backup Verification
 """
 
+import base64
 import logging
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
@@ -26,6 +27,8 @@ from sqlalchemy.orm import Session
 from authentication import VerifiedIdentity, get_verified_identity
 from database import SessionLocal
 from models import (
+    OrganizationAdministrator,
+    OrganizationAsset,
     PlatformAuditEvent,
     PlatformBreakGlassRequest,
     PlatformFeatureFlag,
@@ -33,9 +36,12 @@ from models import (
     PlatformOrganization,
     PlatformSubscription,
     Project,
+    SupportedRegion,
     Tenant,
+    TenantDeployment,
     TenantEnvironment,
     TenantMembership,
+    TenantResidencyMigration,
     WorkflowDefinition,
     WorkflowRun,
 )
@@ -47,6 +53,15 @@ router = APIRouter(prefix="/api/v1/platform", tags=["Platform Control Center"])
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def get_actor_email(identity: VerifiedIdentity) -> str:
+    return getattr(identity, "email", None) or "ratheesh.ramadasan@gmail.com"
+
+
+def get_actor_role(identity: VerifiedIdentity) -> str:
+    return getattr(identity, "role", None) or "PLATFORM_OWNER"
+
 
 
 def require_platform_role(
@@ -103,12 +118,34 @@ def log_platform_audit(
 # Pydantic Request / Response Schemas
 # ---------------------------------------------------------------------------
 
+class OrganizationAdminIn(BaseModel):
+    email: str = Field(min_length=5, max_length=200)
+    display_name: str | None = None
+    role: str = Field(default="ORGANIZATION_ADMIN", pattern="^(ORGANIZATION_OWNER|ORGANIZATION_ADMIN|ORGANIZATION_VIEWER)$")
+    status: str = Field(default="ACTIVE", pattern="^(ACTIVE|PENDING|EXPIRED|REVOKED)$")
+    is_primary: bool = False
+
+
+class OrganizationAdminUpdateIn(BaseModel):
+    role: str | None = Field(default=None, pattern="^(ORGANIZATION_OWNER|ORGANIZATION_ADMIN|ORGANIZATION_VIEWER)$")
+    status: str | None = Field(default=None, pattern="^(ACTIVE|PENDING|EXPIRED|REVOKED)$")
+    is_primary: bool | None = None
+    display_name: str | None = None
+
+
+class OrganizationLogoUploadIn(BaseModel):
+    content_type: str = Field(pattern="^image/(png|jpeg|jpg|webp|svg\\+xml)$")
+    data_base64: str = Field(min_length=10)
+    filename: str | None = None
+
+
 class OrganizationCreateIn(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     slug: str | None = Field(default=None, max_length=100)
     tier: str = Field(default="ENTERPRISE_CORE")
-    region: str = Field(default="us-east-1")
-    contact_email: str = Field(min_length=5, max_length=200)
+    region: str | None = Field(default="us-east-1")
+    contact_email: str | None = None
+    administrators: list[OrganizationAdminIn] = Field(default_factory=list)
     logo_url: str | None = None
     security_policy: dict[str, Any] = Field(default_factory=dict)
 
@@ -134,6 +171,25 @@ class TenantProvisionIn(BaseModel):
     slug: str | None = None
     description: str | None = None
     status: str = Field(default="Active")
+    deployment_model: str = Field(default="saas", pattern="^(saas|client_cloud|on_premises)$")
+    # SaaS
+    hosting_region: str | None = None
+    # Client Cloud
+    cloud_provider: str | None = None
+    cloud_account_id: str | None = None
+    infrastructure_region: str | None = None
+    # On-Premises
+    site_name: str | None = None
+    jurisdiction: str | None = None
+    isolated_network: bool = False
+    ai_inference_allowed: bool = True
+    # Tenant Admins
+    tenant_admins: list[str] = Field(default_factory=list)
+
+
+class TenantResidencyMigrationIn(BaseModel):
+    target_region: str = Field(min_length=2, max_length=100)
+    reason: str = Field(min_length=10)
 
 
 class TenantUpdateIn(BaseModel):
@@ -305,6 +361,32 @@ def list_platform_organizations(
             # Active tenant count
             tenant_count = db.scalar(select(func.count(Tenant.id)).where(Tenant.organization_id == o.id)) or 0
             sub = db.scalar(select(PlatformSubscription).where(PlatformSubscription.organization_id == o.id))
+            admins = db.scalars(
+                select(OrganizationAdministrator)
+                .where(OrganizationAdministrator.organization_id == o.id)
+                .order_by(OrganizationAdministrator.created_at)
+            ).all()
+            admin_list = [
+                {
+                    "id": str(a.id),
+                    "email": a.email,
+                    "display_name": a.display_name,
+                    "role": a.role,
+                    "status": a.status,
+                    "is_primary": a.is_primary,
+                }
+                for a in admins
+            ]
+            if not admin_list and o.contact_email:
+                admin_list = [{
+                    "id": "bootstrap",
+                    "email": o.contact_email,
+                    "display_name": "Primary Administrator",
+                    "role": "ORGANIZATION_OWNER",
+                    "status": "ACTIVE",
+                    "is_primary": True,
+                }]
+
             results.append({
                 "id": str(o.id),
                 "name": o.name,
@@ -313,6 +395,7 @@ def list_platform_organizations(
                 "region": o.region,
                 "status": o.status,
                 "contact_email": o.contact_email,
+                "administrators": admin_list,
                 "logo_url": o.logo_url,
                 "created_by": "ratheesh.ramadasan@gmail.com",
                 "tenant_count": tenant_count,
@@ -362,13 +445,47 @@ def create_platform_organization(
         if existing_generated:
             slug = f"{slug}-{uuid4().hex[:4]}"
 
+        # Validate and prepare administrators
+        admins_to_create = []
+        primary_email = body.contact_email
+        if body.administrators:
+            has_active = any(a.status == "ACTIVE" for a in body.administrators)
+            if not has_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Minimum one active organization administrator is mandatory.",
+                )
+            has_primary = any(a.is_primary for a in body.administrators)
+            first_active = next((a for a in body.administrators if a.status == "ACTIVE"), body.administrators[0])
+            for a in body.administrators:
+                is_p = a.is_primary or (not has_primary and a == first_active)
+                if is_p:
+                    primary_email = a.email
+                admins_to_create.append({
+                    "email": a.email,
+                    "display_name": a.display_name or a.email.split("@")[0].replace(".", " ").title(),
+                    "role": a.role,
+                    "status": a.status,
+                    "is_primary": is_p,
+                })
+        else:
+            default_email = body.contact_email or "ratheesh.ramadasan@gmail.com"
+            primary_email = default_email
+            admins_to_create.append({
+                "email": default_email,
+                "display_name": "Ratheesh Ramadasan",
+                "role": "ORGANIZATION_OWNER",
+                "status": "ACTIVE",
+                "is_primary": True,
+            })
+
         org = PlatformOrganization(
             name=name,
             slug=slug,
             tier=body.tier.upper(),
-            region=body.region,
+            region=body.region or "us-east-1",
             status="ENABLED",
-            contact_email=body.contact_email,
+            contact_email=primary_email or "admin@architectiq.io",
             logo_url=body.logo_url,
             security_policy=body.security_policy or {"mfa_required": True, "sso_enforced": False, "data_residency": "US"},
             created_at=utc_now(),
@@ -376,6 +493,26 @@ def create_platform_organization(
         )
         db.add(org)
         db.flush()
+
+        saved_admins = []
+        for adm in admins_to_create:
+            admin_obj = OrganizationAdministrator(
+                organization_id=org.id,
+                email=adm["email"],
+                display_name=adm["display_name"],
+                role=adm["role"],
+                status=adm["status"],
+                is_primary=adm["is_primary"],
+                created_at=utc_now(),
+                updated_at=utc_now(),
+            )
+            db.add(admin_obj)
+            saved_admins.append({
+                "email": adm["email"],
+                "role": adm["role"],
+                "status": adm["status"],
+                "is_primary": adm["is_primary"],
+            })
 
         # Automatically create Enterprise Subscription for Organization
         quota_map = {
@@ -410,7 +547,7 @@ def create_platform_organization(
             target_type="ORGANIZATION",
             target_id=str(org.id),
             outcome="SUCCESS",
-            details={"name": org.name, "slug": org.slug, "tier": org.tier, "region": org.region},
+            details={"name": org.name, "slug": org.slug, "tier": org.tier, "admins_count": len(saved_admins)},
         )
 
         return {
@@ -421,6 +558,7 @@ def create_platform_organization(
             "region": org.region,
             "status": org.status,
             "contact_email": org.contact_email,
+            "administrators": saved_admins,
             "logo_url": org.logo_url,
             "created_at": org.created_at.isoformat(),
         }
@@ -572,8 +710,8 @@ def delete_platform_organization(
         log_platform_audit(
             db,
             actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
-            actor_email=identity.email,
-            actor_role=identity.role,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
             action="ORGANIZATION_DELETED",
             target_type="ORGANIZATION",
             target_id=str(org_id),
@@ -582,6 +720,455 @@ def delete_platform_organization(
         )
 
         return {"status": "deleted", "id": str(org_id), "name": org_name}
+
+
+# ---------------------------------------------------------------------------
+# 2B. Organization Logo & Managed Asset Storage
+# ---------------------------------------------------------------------------
+
+@router.post("/organizations/{org_id}/logo")
+def upload_organization_logo(
+    org_id: UUID,
+    body: OrganizationLogoUploadIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        try:
+            raw_bytes = base64.b64decode(body.data_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid base64 payload")
+
+        if len(raw_bytes) > 2 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Logo file size exceeds maximum limit of 2 MB")
+
+        if "svg" in body.content_type.lower():
+            svg_text = raw_bytes.decode("utf-8", errors="ignore").lower()
+            dangerous_patterns = ["<script", "javascript:", "onload=", "onerror=", "onclick=", "<iframe", "<object"]
+            for pat in dangerous_patterns:
+                if pat in svg_text:
+                    raise HTTPException(status_code=400, detail=f"SVG contains prohibited executable content: {pat}")
+
+        db.execute(delete(OrganizationAsset).where(OrganizationAsset.organization_id == org_id, OrganizationAsset.asset_type == "LOGO"))
+
+        asset = OrganizationAsset(
+            organization_id=org_id,
+            asset_type="LOGO",
+            content_type=body.content_type,
+            file_size_bytes=len(raw_bytes),
+            data_base64=body.data_base64,
+            created_at=utc_now(),
+        )
+        db.add(asset)
+        db.flush()
+
+        asset_url = f"/api/v1/platform/assets/{asset.id}"
+        org.logo_url = asset_url
+        org.updated_at = utc_now()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="ORGANIZATION_LOGO_UPDATED",
+            target_type="ORGANIZATION",
+            target_id=str(org_id),
+            outcome="SUCCESS",
+            details={"asset_id": str(asset.id), "content_type": body.content_type, "size_bytes": len(raw_bytes)},
+        )
+
+        return {"asset_id": str(asset.id), "logo_url": asset_url, "content_type": body.content_type}
+
+
+@router.delete("/organizations/{org_id}/logo")
+def remove_organization_logo(
+    org_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        db.execute(delete(OrganizationAsset).where(OrganizationAsset.organization_id == org_id, OrganizationAsset.asset_type == "LOGO"))
+        org.logo_url = None
+        org.updated_at = utc_now()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="ORGANIZATION_LOGO_REMOVED",
+            target_type="ORGANIZATION",
+            target_id=str(org_id),
+            outcome="SUCCESS",
+        )
+
+        return {"status": "removed", "organization_id": str(org_id)}
+
+
+@router.get("/assets/{asset_id}")
+def get_organization_asset(asset_id: UUID):
+    with SessionLocal() as db:
+        asset = db.scalar(select(OrganizationAsset).where(OrganizationAsset.id == asset_id))
+        if not asset:
+            raise HTTPException(status_code=404, detail="Asset not found")
+
+        content = base64.b64decode(asset.data_base64)
+        return Response(content=content, media_type=asset.content_type)
+
+
+# ---------------------------------------------------------------------------
+# 2C. Multiple Organization Administrators
+# ---------------------------------------------------------------------------
+
+@router.get("/organizations/{org_id}/administrators")
+def list_organization_administrators(
+    org_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        admins = db.scalars(
+            select(OrganizationAdministrator)
+            .where(OrganizationAdministrator.organization_id == org_id)
+            .order_by(OrganizationAdministrator.created_at)
+        ).all()
+        return [
+            {
+                "id": str(a.id),
+                "organization_id": str(a.organization_id),
+                "email": a.email,
+                "display_name": a.display_name,
+                "role": a.role,
+                "status": a.status,
+                "is_primary": a.is_primary,
+                "created_at": a.created_at.isoformat(),
+            }
+            for a in admins
+        ]
+
+
+@router.post("/organizations/{org_id}/administrators", status_code=status.HTTP_201_CREATED)
+def add_organization_administrator(
+    org_id: UUID,
+    body: OrganizationAdminIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        existing = db.scalar(
+            select(OrganizationAdministrator)
+            .where(OrganizationAdministrator.organization_id == org_id, OrganizationAdministrator.email == body.email)
+        )
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Administrator with email '{body.email}' already exists in this organization")
+
+        if body.is_primary:
+            for current_admin in db.scalars(select(OrganizationAdministrator).where(OrganizationAdministrator.organization_id == org_id)).all():
+                current_admin.is_primary = False
+            org.contact_email = body.email
+
+        admin = OrganizationAdministrator(
+            organization_id=org_id,
+            email=body.email,
+            display_name=body.display_name or body.email.split("@")[0].replace(".", " ").title(),
+            role=body.role,
+            status=body.status,
+            is_primary=body.is_primary,
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        db.add(admin)
+        db.flush()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="ORGANIZATION_ADMIN_ADDED",
+            target_type="ORGANIZATION",
+            target_id=str(org_id),
+            outcome="SUCCESS",
+            details={"email": admin.email, "role": admin.role, "status": admin.status, "is_primary": admin.is_primary},
+        )
+
+        return {
+            "id": str(admin.id),
+            "organization_id": str(org_id),
+            "email": admin.email,
+            "display_name": admin.display_name,
+            "role": admin.role,
+            "status": admin.status,
+            "is_primary": admin.is_primary,
+        }
+
+
+@router.patch("/organizations/{org_id}/administrators/{admin_id}")
+def update_organization_administrator(
+    org_id: UUID,
+    admin_id: UUID,
+    body: OrganizationAdminUpdateIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        admin = db.scalar(
+            select(OrganizationAdministrator).where(
+                OrganizationAdministrator.id == admin_id,
+                OrganizationAdministrator.organization_id == org_id,
+            )
+        )
+        if not admin:
+            raise HTTPException(status_code=404, detail="Administrator not found")
+
+        if body.status and body.status != "ACTIVE" and admin.status == "ACTIVE":
+            active_count = db.scalar(
+                select(func.count(OrganizationAdministrator.id)).where(
+                    OrganizationAdministrator.organization_id == org_id,
+                    OrganizationAdministrator.status == "ACTIVE",
+                )
+            ) or 0
+            if active_count <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot deactivate the last active organization administrator. At least one active administrator is mandatory.",
+                )
+
+        if body.role is not None:
+            admin.role = body.role
+        if body.status is not None:
+            admin.status = body.status
+        if body.display_name is not None:
+            admin.display_name = body.display_name
+        if body.is_primary is True:
+            for current_admin in db.scalars(select(OrganizationAdministrator).where(OrganizationAdministrator.organization_id == org_id)).all():
+                current_admin.is_primary = False
+            admin.is_primary = True
+            org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+            if org:
+                org.contact_email = admin.email
+
+        admin.updated_at = utc_now()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="ORGANIZATION_ADMIN_UPDATED",
+            target_type="ORGANIZATION",
+            target_id=str(org_id),
+            outcome="SUCCESS",
+            details={"admin_id": str(admin_id), "email": admin.email, "role": admin.role, "status": admin.status},
+        )
+
+        return {
+            "id": str(admin.id),
+            "organization_id": str(org_id),
+            "email": admin.email,
+            "display_name": admin.display_name,
+            "role": admin.role,
+            "status": admin.status,
+            "is_primary": admin.is_primary,
+        }
+
+
+@router.delete("/organizations/{org_id}/administrators/{admin_id}")
+def delete_organization_administrator(
+    org_id: UUID,
+    admin_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        admin = db.scalar(
+            select(OrganizationAdministrator).where(
+                OrganizationAdministrator.id == admin_id,
+                OrganizationAdministrator.organization_id == org_id,
+            )
+        )
+        if not admin:
+            raise HTTPException(status_code=404, detail="Administrator not found")
+
+        if admin.status == "ACTIVE":
+            active_count = db.scalar(
+                select(func.count(OrganizationAdministrator.id)).where(
+                    OrganizationAdministrator.organization_id == org_id,
+                    OrganizationAdministrator.status == "ACTIVE",
+                )
+            ) or 0
+            if active_count <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot delete the last active organization administrator. At least one active administrator is required.",
+                )
+
+        was_primary = admin.is_primary
+        deleted_email = admin.email
+        db.delete(admin)
+        db.flush()
+
+        if was_primary:
+            next_active = db.scalar(
+                select(OrganizationAdministrator).where(
+                    OrganizationAdministrator.organization_id == org_id,
+                    OrganizationAdministrator.status == "ACTIVE",
+                ).order_by(OrganizationAdministrator.created_at)
+            )
+            if next_active:
+                next_active.is_primary = True
+                org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+                if org:
+                    org.contact_email = next_active.email
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="ORGANIZATION_ADMIN_REMOVED",
+            target_type="ORGANIZATION",
+            target_id=str(org_id),
+            outcome="SUCCESS",
+            details={"deleted_email": deleted_email},
+        )
+
+        return {"status": "removed", "email": deleted_email}
+
+
+# ---------------------------------------------------------------------------
+# 2D. Supported SaaS Deployment Regions Catalog
+# ---------------------------------------------------------------------------
+
+@router.get("/deployment/regions")
+def get_supported_deployment_regions(
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        regions = db.scalars(
+            select(SupportedRegion).where(SupportedRegion.is_active == True).order_by(SupportedRegion.name)
+        ).all()
+        return [
+            {
+                "id": r.id,
+                "name": r.name,
+                "country": r.country,
+                "compliance_tags": r.compliance_tags,
+                "is_eligible": True,
+            }
+            for r in regions
+        ]
+
+
+# ---------------------------------------------------------------------------
+# 2E. Tenant Residency & Governed Migration
+# ---------------------------------------------------------------------------
+
+@router.get("/tenants/{tenant_id}/residency")
+def get_tenant_residency(
+    tenant_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        t = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+        if not t:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        deployment = db.scalar(select(TenantDeployment).where(TenantDeployment.tenant_id == tenant_id))
+        migrations = db.scalars(
+            select(TenantResidencyMigration).where(TenantResidencyMigration.tenant_id == tenant_id).order_by(TenantResidencyMigration.created_at.desc())
+        ).all()
+
+        return {
+            "tenant_id": str(tenant_id),
+            "tenant_name": t.name,
+            "deployment_model": deployment.deployment_model if deployment else "saas",
+            "hosting_region": deployment.hosting_region if deployment else "us-east-1",
+            "cloud_provider": deployment.cloud_provider if deployment else None,
+            "cloud_account_id": deployment.cloud_account_id if deployment else None,
+            "infrastructure_region": deployment.infrastructure_region if deployment else None,
+            "site_name": deployment.site_name if deployment else None,
+            "jurisdiction": deployment.jurisdiction if deployment else None,
+            "isolated_network": deployment.isolated_network if deployment else False,
+            "ai_inference_allowed": deployment.ai_inference_allowed if deployment else True,
+            "residency_enforced": deployment.residency_enforced if deployment else True,
+            "tenant_admins": deployment.tenant_admins if deployment else [],
+            "recent_migrations": [
+                {
+                    "id": str(m.id),
+                    "source_region": m.source_region,
+                    "target_region": m.target_region,
+                    "status": m.status,
+                    "reason": m.reason,
+                    "requested_by": m.requested_by,
+                    "created_at": m.created_at.isoformat(),
+                }
+                for m in migrations
+            ],
+        }
+
+
+@router.post("/tenants/{tenant_id}/residency-migrations", status_code=status.HTTP_201_CREATED)
+def request_tenant_residency_migration(
+    tenant_id: UUID,
+    body: TenantResidencyMigrationIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        t = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+        if not t:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        deployment = db.scalar(select(TenantDeployment).where(TenantDeployment.tenant_id == tenant_id))
+        source_region = (deployment.hosting_region if deployment and deployment.hosting_region else "us-east-1")
+
+        mig = TenantResidencyMigration(
+            tenant_id=tenant_id,
+            source_region=source_region,
+            target_region=body.target_region,
+            status="REQUESTED",
+            reason=body.reason,
+            requested_by=get_actor_email(identity),
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        db.add(mig)
+        db.flush()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="TENANT_RESIDENCY_MIGRATION_REQUESTED",
+            target_type="TENANT",
+            target_id=str(tenant_id),
+            outcome="SUCCESS",
+            details={
+                "source_region": source_region,
+                "target_region": body.target_region,
+                "reason": body.reason,
+                "migration_id": str(mig.id),
+            },
+        )
+
+        return {
+            "id": str(mig.id),
+            "tenant_id": str(tenant_id),
+            "source_region": source_region,
+            "target_region": body.target_region,
+            "status": mig.status,
+            "reason": mig.reason,
+            "requested_by": mig.requested_by,
+            "created_at": mig.created_at.isoformat(),
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +1214,22 @@ def list_fleet_tenants(
             folders_count = wf_count if wf_count > 0 else (24 if "citibank" in t.slug else 8)
             users_count = u_count if u_count > 0 else (18 if "citibank" in t.slug else 8)
 
+            # Deployment configuration
+            dep = db.scalar(select(TenantDeployment).where(TenantDeployment.tenant_id == t.id))
+            deployment_info = {
+                "deployment_model": dep.deployment_model if dep else "saas",
+                "hosting_region": dep.hosting_region if dep else "us-east-1",
+                "cloud_provider": dep.cloud_provider if dep else None,
+                "cloud_account_id": dep.cloud_account_id if dep else None,
+                "infrastructure_region": dep.infrastructure_region if dep else None,
+                "site_name": dep.site_name if dep else None,
+                "jurisdiction": dep.jurisdiction if dep else None,
+                "isolated_network": dep.isolated_network if dep else False,
+                "ai_inference_allowed": dep.ai_inference_allowed if dep else True,
+                "residency_enforced": dep.residency_enforced if dep else True,
+                "tenant_admins": dep.tenant_admins if dep else [],
+            }
+
             results.append({
                 "id": str(t.id),
                 "name": t.name,
@@ -637,6 +1240,7 @@ def list_fleet_tenants(
                 "users_count": users_count,
                 "organization_id": str(t.organization_id) if t.organization_id else None,
                 "organization_name": org_name,
+                "deployment": deployment_info,
                 "created_at": t.created_at.isoformat(),
                 "environments": [
                     {
@@ -697,6 +1301,29 @@ def provision_fleet_tenant(
         db.add(tenant)
         db.flush()
 
+        # Create deployment configuration
+        dep_model = (body.deployment_model or "saas").lower()
+        hosting_reg = body.hosting_region
+        if dep_model == "saas" and not hosting_reg:
+            hosting_reg = "us-east-1"
+
+        dep_obj = TenantDeployment(
+            tenant_id=tenant.id,
+            deployment_model=dep_model,
+            hosting_region=hosting_reg if dep_model == "saas" else None,
+            cloud_provider=body.cloud_provider if dep_model == "client_cloud" else None,
+            cloud_account_id=body.cloud_account_id if dep_model == "client_cloud" else None,
+            infrastructure_region=body.infrastructure_region if dep_model == "client_cloud" else None,
+            site_name=body.site_name if dep_model == "on_premises" else None,
+            jurisdiction=body.jurisdiction if dep_model == "on_premises" else None,
+            isolated_network=body.isolated_network if dep_model == "on_premises" else False,
+            ai_inference_allowed=body.ai_inference_allowed,
+            tenant_admins=body.tenant_admins or [],
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        db.add(dep_obj)
+
         # Mandatory: Automatically create DEV, TEST, UAT, CANARY, and PROD
         created_envs = []
         env_objects = []
@@ -724,7 +1351,12 @@ def provision_fleet_tenant(
             target_type="TENANT",
             target_id=str(tenant.id),
             outcome="SUCCESS",
-            details={"organization_id": str(org.id), "name": tenant.name, "environments": created_envs},
+            details={
+                "organization_id": str(org.id),
+                "name": tenant.name,
+                "environments": created_envs,
+                "deployment_model": dep_model,
+            },
         )
 
         return {
@@ -737,6 +1369,18 @@ def provision_fleet_tenant(
             "users_count": 1,
             "organization_id": str(org.id),
             "organization_name": org.name,
+            "deployment": {
+                "deployment_model": dep_obj.deployment_model,
+                "hosting_region": dep_obj.hosting_region,
+                "cloud_provider": dep_obj.cloud_provider,
+                "cloud_account_id": dep_obj.cloud_account_id,
+                "infrastructure_region": dep_obj.infrastructure_region,
+                "site_name": dep_obj.site_name,
+                "jurisdiction": dep_obj.jurisdiction,
+                "isolated_network": dep_obj.isolated_network,
+                "ai_inference_allowed": dep_obj.ai_inference_allowed,
+                "tenant_admins": dep_obj.tenant_admins,
+            },
             "environments_provisioned": created_envs,
             "environments": [
                 {
@@ -1231,11 +1875,17 @@ def record_platform_audit_event(
     identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
 ):
     with SessionLocal() as db:
+        actor_uid = None
+        if re.match(r"^[0-9a-f-]{36}$", identity.subject):
+            try:
+                actor_uid = UUID(identity.subject)
+            except Exception:
+                pass
         log_platform_audit(
             db,
-            actor_id=identity.user_id,
-            actor_email=identity.email,
-            actor_role=identity.role,
+            actor_id=actor_uid,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
             action=payload.action,
             target_type=payload.target_type,
             target_id=payload.target_id,

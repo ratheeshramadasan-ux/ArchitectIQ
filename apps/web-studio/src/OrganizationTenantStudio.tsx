@@ -26,11 +26,36 @@ import {
   Clock,
   Download,
   Power,
+  Upload,
+  Server,
+  Cloud,
+  Layers,
+  Globe,
+  UserPlus,
+  ArrowRight,
+  ArrowLeft,
 } from 'lucide-react'
 import AccessDirectoryStudio from './AccessDirectoryStudio'
 import IamRolesStudio from './IamRolesStudio'
 import TenantIntegrationsStudio from './TenantIntegrationsStudio'
 import ArtifactsRegistryStudio from './ArtifactsRegistryStudio'
+
+export interface OrgAdminItem {
+  id?: string
+  email: string
+  display_name?: string
+  role: 'ORGANIZATION_OWNER' | 'ORGANIZATION_ADMIN' | 'ORGANIZATION_VIEWER'
+  status: 'ACTIVE' | 'PENDING' | 'EXPIRED' | 'REVOKED'
+  is_primary: boolean
+}
+
+export interface SupportedRegionItem {
+  id: string
+  name: string
+  country: string
+  compliance_tags?: string[]
+  is_eligible?: boolean
+}
 
 export interface TenantRecord {
   id: string
@@ -44,6 +69,18 @@ export interface TenantRecord {
   created_at: string
   created_by: string
   color: 'emerald' | 'indigo' | 'amber' | 'blue' | 'purple'
+  deployment?: {
+    deployment_model: 'saas' | 'client_cloud' | 'on_premises'
+    hosting_region?: string
+    cloud_provider?: string
+    cloud_account_id?: string
+    infrastructure_region?: string
+    site_name?: string
+    jurisdiction?: string
+    isolated_network?: boolean
+    ai_inference_allowed?: boolean
+    tenant_admins?: string[]
+  }
 }
 
 export type DomainTabId =
@@ -134,21 +171,108 @@ export default function OrganizationTenantStudio({
   const [orgToDelete, setOrgToDelete] = useState<any | null>(null)
   const [orgActionMsg, setOrgActionMsg] = useState<string | null>(null)
 
-  // Create Org Form State
+  // Supported SaaS Regions Catalog State
+  const [supportedRegions, setSupportedRegions] = useState<SupportedRegionItem[]>([
+    { id: 'ca-central-1', name: 'Canada — Central', country: 'Canada', compliance_tags: ['PIPEDA', 'SOC2', 'ISO27001'], is_eligible: true },
+    { id: 'us-east-1', name: 'United States — East (N. Virginia)', country: 'United States', compliance_tags: ['SOC2', 'ISO27001', 'PCI-DSS', 'FedRAMP'], is_eligible: true },
+    { id: 'us-west-2', name: 'United States — West (Oregon)', country: 'United States', compliance_tags: ['SOC2', 'ISO27001', 'HIPAA'], is_eligible: true },
+    { id: 'eu-west-1', name: 'European Union — Ireland', country: 'European Union', compliance_tags: ['GDPR', 'SOC2', 'ISO27001', 'DORA'], is_eligible: true },
+    { id: 'ap-southeast-1', name: 'Asia Pacific — Singapore', country: 'Singapore', compliance_tags: ['MAS-TRM', 'SOC2', 'ISO27001'], is_eligible: true },
+  ])
+
+  // Create Org Form State (Organization level only - Data Residency removed!)
   const [newOrgName, setNewOrgName] = useState('')
   const [newOrgSlug, setNewOrgSlug] = useState('')
-  const [newOrgTier, setNewOrgTier] = useState('ENTERPRISE_ULTRA')
-  const [newOrgRegion, setNewOrgRegion] = useState('us-east-1')
-  const [newOrgContact, setNewOrgContact] = useState('ratheesh.ramadasan@gmail.com')
-  const [newOrgLogo, setNewOrgLogo] = useState('https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg')
+  const [newOrgTier, setNewOrgTier] = useState('ENTERPRISE_CORE')
+  const [newOrgLogoPreview, setNewOrgLogoPreview] = useState<string | null>('https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg')
+  const [newOrgLogoData, setNewOrgLogoData] = useState<string | null>('https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg')
+  const [newOrgLogoType, setNewOrgLogoType] = useState<string | null>('image/svg+xml')
+  const [newOrgLogoError, setNewOrgLogoError] = useState<string | null>(null)
+  const [newOrgAdmins, setNewOrgAdmins] = useState<OrgAdminItem[]>([
+    { email: 'ratheesh.ramadasan@gmail.com', display_name: 'Ratheesh Ramadasan', role: 'ORGANIZATION_OWNER', status: 'ACTIVE', is_primary: true },
+  ])
+  const [newAdminInputEmail, setNewAdminInputEmail] = useState('')
+  const [newAdminInputRole, setNewAdminInputRole] = useState<'ORGANIZATION_OWNER' | 'ORGANIZATION_ADMIN' | 'ORGANIZATION_VIEWER'>('ORGANIZATION_ADMIN')
   const [creatingOrg, setCreatingOrg] = useState(false)
 
-  // Edit Org Form State
+  // Edit Org Form State (Organization level only - Data Residency removed!)
   const [editOrgName, setEditOrgName] = useState('')
-  const [editOrgTier, setEditOrgTier] = useState('ENTERPRISE_ULTRA')
-  const [editOrgRegion, setEditOrgRegion] = useState('us-east-1')
-  const [editOrgContact, setEditOrgContact] = useState('')
-  const [editOrgLogo, setEditOrgLogo] = useState('')
+  const [editOrgTier, setEditOrgTier] = useState('ENTERPRISE_CORE')
+  const [editOrgLogoPreview, setEditOrgLogoPreview] = useState<string | null>(null)
+  const [editOrgLogoData, setEditOrgLogoData] = useState<string | null>(null)
+  const [editOrgLogoType, setEditOrgLogoType] = useState<string | null>(null)
+  const [editOrgLogoError, setEditOrgLogoError] = useState<string | null>(null)
+  const [editOrgAdmins, setEditOrgAdmins] = useState<OrgAdminItem[]>([])
+  const [editAdminInputEmail, setEditAdminInputEmail] = useState('')
+  const [editAdminInputRole, setEditAdminInputRole] = useState<'ORGANIZATION_OWNER' | 'ORGANIZATION_ADMIN' | 'ORGANIZATION_VIEWER'>('ORGANIZATION_ADMIN')
+
+  // Tenant Creation 5-Step Guided Wizard State
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1)
+  const [wizardOrgId, setWizardOrgId] = useState('')
+  const [wizardName, setWizardName] = useState('')
+  const [wizardSlug, setWizardSlug] = useState('')
+  const [wizardEnv, setWizardEnv] = useState<'Production' | 'Development' | 'Sandbox' | 'UAT'>('Development')
+  const [wizardDesc, setWizardDesc] = useState('')
+  const [wizardModel, setWizardModel] = useState<'saas' | 'client_cloud' | 'on_premises'>('saas')
+  const [wizardHostingRegion, setWizardHostingRegion] = useState('us-east-1')
+  const [wizardCloudProvider, setWizardCloudProvider] = useState<'AWS' | 'Azure' | 'GCP' | 'Private Cloud'>('AWS')
+  const [wizardCloudAccount, setWizardCloudAccount] = useState('')
+  const [wizardCloudRegion, setWizardCloudRegion] = useState('us-east-2')
+  const [wizardSiteName, setWizardSiteName] = useState('')
+  const [wizardJurisdiction, setWizardJurisdiction] = useState('United States - Federal')
+  const [wizardIsolatedNetwork, setWizardIsolatedNetwork] = useState(false)
+  const [wizardAiInference, setWizardAiInference] = useState(true)
+  const [wizardTenantAdmins, setWizardTenantAdmins] = useState<string[]>(['ratheesh.ramadasan@gmail.com'])
+  const [wizardAdminInput, setWizardAdminInput] = useState('')
+
+  // Governed Residency Migration Modal State
+  const [migratingTenant, setMigratingTenant] = useState<TenantRecord | null>(null)
+  const [migrationTargetRegion, setMigrationTargetRegion] = useState('eu-west-1')
+  const [migrationReason, setMigrationReason] = useState('')
+  const [migrationSubmitting, setMigrationSubmitting] = useState(false)
+  const [migrationNotice, setMigrationNotice] = useState<string | null>(null)
+
+  const generateSlugFromName = (name: string) => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  }
+
+  const handleLogoUpload = (file: File, isEdit: boolean) => {
+    const setError = isEdit ? setEditOrgLogoError : setNewOrgLogoError
+    const setPreview = isEdit ? setEditOrgLogoPreview : setNewOrgLogoPreview
+    const setData = isEdit ? setEditOrgLogoData : setNewOrgLogoData
+    const setType = isEdit ? setEditOrgLogoType : setNewOrgLogoType
+
+    setError(null)
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml']
+    if (!validTypes.includes(file.type)) {
+      setError('Invalid format. Please upload PNG, JPG, WebP, or SVG.')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('File exceeds 2 MB size limit.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const result = e.target?.result as string
+      if (file.type === 'image/svg+xml') {
+        const textContent = atob(result.split(',')[1] || '')
+        if (/<script|javascript:|onload=|onerror=/i.test(textContent)) {
+          setError('Prohibited executable content detected in SVG file.')
+          return
+        }
+      }
+      setPreview(result)
+      setData(result)
+      setType(file.type)
+    }
+    reader.readAsDataURL(file)
+  }
 
   const loadOrganizationsList = () => {
     setLoadingOrgs(true)
@@ -165,14 +289,21 @@ export default function OrganizationTenantStudio({
               id: orgDetails.id || 'org-citibank-global',
               name: orgDetails.name || 'Citibank Global',
               slug: orgDetails.slug || 'citibank-global',
-              tier: orgDetails.tier || 'ENTERPRISE_ULTRA',
-              region: orgDetails.region || 'us-east-1',
+              tier: orgDetails.tier || 'ENTERPRISE_CORE',
               status: 'ENABLED',
-              contact_email: orgDetails.contact_email || 'ratheesh.ramadasan@gmail.com',
               logo_url: orgDetails.logo_url || 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg',
               created_by: 'ratheesh.ramadasan@gmail.com',
               created_at: '2026-10-25T23:20:00Z',
               tenant_count: 1,
+              administrators: [
+                {
+                  email: 'ratheesh.ramadasan@gmail.com',
+                  display_name: 'Ratheesh Ramadasan',
+                  role: 'ORGANIZATION_OWNER',
+                  status: 'ACTIVE',
+                  is_primary: true,
+                },
+              ],
             },
           ])
         }
@@ -183,33 +314,47 @@ export default function OrganizationTenantStudio({
             id: orgDetails.id || 'org-citibank-global',
             name: orgDetails.name || 'Citibank Global',
             slug: orgDetails.slug || 'citibank-global',
-            tier: orgDetails.tier || 'ENTERPRISE_ULTRA',
-            region: orgDetails.region || 'us-east-1',
+            tier: orgDetails.tier || 'ENTERPRISE_CORE',
             status: 'ENABLED',
-            contact_email: orgDetails.contact_email || 'ratheesh.ramadasan@gmail.com',
             logo_url: orgDetails.logo_url || 'https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg',
             created_by: 'ratheesh.ramadasan@gmail.com',
             created_at: '2026-10-25T23:20:00Z',
             tenant_count: 1,
+            administrators: [
+              {
+                email: 'ratheesh.ramadasan@gmail.com',
+                display_name: 'Ratheesh Ramadasan',
+                role: 'ORGANIZATION_OWNER',
+                status: 'ACTIVE',
+                is_primary: true,
+              },
+            ],
           },
         ])
       })
       .finally(() => setLoadingOrgs(false))
   }
 
-  // Handle Create Organization
+  // Handle Create Organization (Organization Level only - Data Residency removed!)
   const handleCreateOrgSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newOrgName.trim()) return
+    const activeAdmins = newOrgAdmins.filter(a => a.status === 'ACTIVE')
+    if (activeAdmins.length === 0) {
+      setOrgActionMsg('Minimum one active organization administrator is mandatory.')
+      setTimeout(() => setOrgActionMsg(null), 4000)
+      return
+    }
     setCreatingOrg(true)
     try {
-      const payload = {
+      const payload: any = {
         name: newOrgName.trim(),
         slug: newOrgSlug.trim() || undefined,
         tier: newOrgTier,
-        region: newOrgRegion,
-        contact_email: newOrgContact.trim() || 'ratheesh.ramadasan@gmail.com',
-        logo_url: newOrgLogo.trim() || undefined,
+        administrators: newOrgAdmins,
+      }
+      if (newOrgLogoData && !newOrgLogoData.startsWith('data:')) {
+        payload.logo_url = newOrgLogoData
       }
       const r = await fetch('/api/v1/platform/organizations', {
         method: 'POST',
@@ -221,10 +366,25 @@ export default function OrganizationTenantStudio({
       })
       if (r.ok) {
         const created = await r.json()
+        if (newOrgLogoData && newOrgLogoData.startsWith('data:')) {
+          try {
+            await fetch(`/api/v1/platform/organizations/${created.id}/logo`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                file_content: newOrgLogoData,
+                media_type: newOrgLogoType || 'image/png',
+              }),
+            })
+          } catch {}
+        }
         recordAuditEvent('ORGANIZATION_CREATED', 'ORGANIZATION', created.id || created.slug, {
           name: created.name,
           tier: created.tier,
-          region: created.region,
+          administrators: newOrgAdmins.map(a => a.email),
         })
         loadOrganizationsList()
         setShowCreateOrgModal(false)
@@ -243,17 +403,23 @@ export default function OrganizationTenantStudio({
     }
   }
 
-  // Handle Update / Rename & Modify Organization
+  // Handle Update / Rename & Modify Organization (Organization Level only - Data Residency removed!)
   const handleUpdateOrgSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingOrg || !editOrgName.trim()) return
+    const activeAdmins = editOrgAdmins.filter(a => a.status === 'ACTIVE')
+    if (activeAdmins.length === 0) {
+      setOrgActionMsg('Minimum one active organization administrator is mandatory.')
+      setTimeout(() => setOrgActionMsg(null), 4000)
+      return
+    }
     try {
-      const payload = {
+      const payload: any = {
         name: editOrgName.trim(),
         tier: editOrgTier,
-        region: editOrgRegion,
-        contact_email: editOrgContact.trim(),
-        logo_url: editOrgLogo.trim() || undefined,
+      }
+      if (editOrgLogoData && !editOrgLogoData.startsWith('data:')) {
+        payload.logo_url = editOrgLogoData
       }
       const r = await fetch(`/api/v1/platform/organizations/${editingOrg.id}`, {
         method: 'PATCH',
@@ -265,10 +431,31 @@ export default function OrganizationTenantStudio({
       })
       if (r.ok) {
         const updated = await r.json()
+        if (!editOrgLogoData) {
+          try {
+            await fetch(`/api/v1/platform/organizations/${editingOrg.id}/logo`, {
+              method: 'DELETE',
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            })
+          } catch {}
+        } else if (editOrgLogoData.startsWith('data:')) {
+          try {
+            await fetch(`/api/v1/platform/organizations/${editingOrg.id}/logo`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({
+                file_content: editOrgLogoData,
+                media_type: editOrgLogoType || 'image/png',
+              }),
+            })
+          } catch {}
+        }
         recordAuditEvent('ORGANIZATION_UPDATED', 'ORGANIZATION', updated.id, {
           name: updated.name,
           tier: updated.tier,
-          region: updated.region,
         })
         loadOrganizationsList()
         if (editingOrg.slug === orgDetails.slug) {
@@ -276,8 +463,6 @@ export default function OrganizationTenantStudio({
             ...prev,
             name: updated.name,
             tier: updated.tier,
-            region: updated.region,
-            contact_email: updated.contact_email,
             logo_url: updated.logo_url,
           }))
         }
@@ -290,6 +475,46 @@ export default function OrganizationTenantStudio({
     } catch {
       setOrgActionMsg('Error updating organization')
       setTimeout(() => setOrgActionMsg(null), 4000)
+    }
+  }
+
+  // Handle Governed Residency Migration Request Submit
+  const handleResidencyMigrationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!migratingTenant) return
+    setMigrationSubmitting(true)
+    setMigrationNotice(null)
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${migratingTenant.id}/residency-migrations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          target_region: migrationTargetRegion,
+          justification: migrationReason.trim() || 'Compliance data sovereignty realignment request',
+        }),
+      })
+      if (r.ok) {
+        recordAuditEvent('RESIDENCY_MIGRATION_REQUESTED', 'TENANT', migratingTenant.id, {
+          tenant_name: migratingTenant.name,
+          target_region: migrationTargetRegion,
+        })
+        setMigrationNotice('Residency migration request submitted successfully with dual-custody audit.')
+        setTimeout(() => {
+          setMigratingTenant(null)
+          setMigrationNotice(null)
+          setMigrationReason('')
+        }, 1800)
+      } else {
+        const err = await r.json()
+        setMigrationNotice(err.detail || 'Failed to submit migration request.')
+      }
+    } catch {
+      setMigrationNotice('Network error submitting migration request.')
+    } finally {
+      setMigrationSubmitting(false)
     }
   }
 
@@ -362,7 +587,7 @@ export default function OrganizationTenantStudio({
 
   // Create Tenant Form State
   const [newTenantName, setNewTenantName] = useState('')
-  const [newTenantEnv, setNewTenantEnv] = useState<'Production' | 'Development' | 'Sandbox' | 'UAT'>('Development')
+  const [newTenantEnv] = useState<'Production' | 'Development' | 'Sandbox' | 'UAT'>('Development')
   const [newTenantDesc, setNewTenantDesc] = useState('')
   const [creatingTenant, setCreatingTenant] = useState(false)
 
@@ -517,8 +742,23 @@ export default function OrganizationTenantStudio({
                     year: 'numeric',
                   })
                 : 'Jan 15, 2026',
-              created_by: 'admin',
+              created_by: 'ratheesh.ramadasan@gmail.com',
               color,
+              deployment: t.deployment ? {
+                deployment_model: t.deployment.deployment_model || 'saas',
+                hosting_region: t.deployment.hosting_region || 'us-east-1',
+                cloud_provider: t.deployment.cloud_provider,
+                cloud_account_id: t.deployment.cloud_account_id,
+                infrastructure_region: t.deployment.infrastructure_region,
+                site_name: t.deployment.site_name,
+                jurisdiction: t.deployment.jurisdiction,
+                isolated_network: t.deployment.isolated_network,
+                ai_inference_allowed: t.deployment.ai_inference_allowed,
+                tenant_admins: t.deployment.tenant_admins,
+              } : {
+                deployment_model: 'saas',
+                hosting_region: 'us-east-1',
+              },
             }
           })
           setTenantsList(mapped)
@@ -535,8 +775,12 @@ export default function OrganizationTenantStudio({
               users_count: 18,
               status: 'Active',
               created_at: 'Jan 15, 2026',
-              created_by: 'admin',
+              created_by: 'ratheesh.ramadasan@gmail.com',
               color: 'emerald',
+              deployment: {
+                deployment_model: 'saas',
+                hosting_region: 'us-east-1',
+              },
             },
           ])
         }
@@ -554,8 +798,12 @@ export default function OrganizationTenantStudio({
               users_count: 18,
               status: 'Active',
               created_at: 'Jan 15, 2026',
-              created_by: 'admin',
+              created_by: 'ratheesh.ramadasan@gmail.com',
               color: 'emerald',
+              deployment: {
+                deployment_model: 'saas',
+                hosting_region: 'us-east-1',
+              },
             },
           ])
         }
@@ -563,6 +811,18 @@ export default function OrganizationTenantStudio({
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
+
+    // 4. Fetch supported deployment regions catalog
+    fetch('/api/v1/platform/deployment/regions', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setSupportedRegions(data)
+        }
+      })
+      .catch(() => {})
 
     return () => {
       cancelled = true
@@ -600,10 +860,11 @@ export default function OrganizationTenantStudio({
     }
   }
 
-  // Handle Tenant Creation
+  // Handle Tenant Creation Guided 5-Step Wizard
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newTenantName.trim()) return
+    const nameToUse = wizardName.trim() || newTenantName.trim()
+    if (!nameToUse) return
     setCreatingTenant(true)
 
     const colorMap: Record<string, TenantRecord['color']> = {
@@ -614,48 +875,82 @@ export default function OrganizationTenantStudio({
     }
 
     const tempId = `tenant-${Date.now()}`
+    const finalSlug = wizardSlug.trim() || generateSlugFromName(nameToUse)
+    const envToUse = wizardEnv || newTenantEnv
     const newRecord: TenantRecord = {
       id: tempId,
-      name: newTenantName.trim(),
-      slug: newTenantName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-      environment: newTenantEnv,
-      description: newTenantDesc.trim() || `${newTenantEnv} tenant environment for ${orgDetails.name}.`,
-      folders_count: 1,
-      users_count: 1,
+      name: nameToUse,
+      slug: finalSlug,
+      environment: envToUse,
+      description: (wizardDesc.trim() || newTenantDesc.trim()) || `${envToUse} tenant environment for ${orgDetails.name}.`,
+      folders_count: 5,
+      users_count: wizardTenantAdmins.length || 1,
       status: 'Active',
       created_at: new Date().toLocaleDateString('en-US', {
         month: 'short',
         day: '2-digit',
         year: 'numeric',
       }),
-      created_by: 'admin',
-      color: colorMap[newTenantEnv] || 'indigo',
+      created_by: 'ratheesh.ramadasan@gmail.com',
+      color: colorMap[envToUse] || 'indigo',
+      deployment: {
+        deployment_model: wizardModel,
+        hosting_region: wizardModel === 'saas' ? wizardHostingRegion : undefined,
+        cloud_provider: wizardModel === 'client_cloud' ? wizardCloudProvider : undefined,
+        cloud_account_id: wizardModel === 'client_cloud' ? wizardCloudAccount : undefined,
+        infrastructure_region: wizardModel === 'client_cloud' ? wizardCloudRegion : undefined,
+        site_name: wizardModel === 'on_premises' ? wizardSiteName : undefined,
+        jurisdiction: wizardModel === 'on_premises' ? wizardJurisdiction : undefined,
+        isolated_network: wizardModel === 'on_premises' ? wizardIsolatedNetwork : false,
+        ai_inference_allowed: wizardModel === 'on_premises' ? wizardAiInference : true,
+        tenant_admins: wizardTenantAdmins,
+      },
     }
 
     try {
       const resp = await fetch('/api/v1/platform/fleet/tenants', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: newTenantName.trim(),
-          slug: newTenantName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-          organization_id: orgDetails.id || undefined,
-          description: newTenantDesc.trim() || undefined,
+          name: nameToUse,
+          slug: finalSlug,
+          organization_id: wizardOrgId || orgDetails.id || undefined,
+          description: (wizardDesc.trim() || newTenantDesc.trim()) || undefined,
           status: 'Active',
+          deployment_model: wizardModel,
+          hosting_region: wizardModel === 'saas' ? wizardHostingRegion : undefined,
+          cloud_provider: wizardModel === 'client_cloud' ? wizardCloudProvider : undefined,
+          cloud_account_id: wizardModel === 'client_cloud' ? wizardCloudAccount : undefined,
+          infrastructure_region: wizardModel === 'client_cloud' ? wizardCloudRegion : undefined,
+          site_name: wizardModel === 'on_premises' ? wizardSiteName : undefined,
+          jurisdiction: wizardModel === 'on_premises' ? wizardJurisdiction : undefined,
+          isolated_network: wizardModel === 'on_premises' ? wizardIsolatedNetwork : false,
+          ai_inference_allowed: wizardModel === 'on_premises' ? wizardAiInference : true,
+          tenant_admins: wizardTenantAdmins,
         }),
       })
       if (resp.ok) {
         const data = await resp.json()
         newRecord.id = data.id || tempId
+        recordAuditEvent('TENANT_PROVISIONED', 'TENANT', newRecord.id, {
+          name: newRecord.name,
+          slug: newRecord.slug,
+          deployment_model: wizardModel,
+          environments: ['DEV', 'TEST', 'UAT', 'CANARY', 'PROD'],
+        })
       }
     } catch {}
 
     setTenantsList(prev => [newRecord, ...prev])
     setNewTenantName('')
     setNewTenantDesc('')
+    setWizardName('')
+    setWizardSlug('')
+    setWizardDesc('')
+    setWizardStep(1)
     setCreatingTenant(false)
     setShowCreateModal(false)
   }
@@ -1377,10 +1672,14 @@ export default function OrganizationTenantStudio({
                     onClick={() => {
                       setNewOrgName('')
                       setNewOrgSlug('')
-                      setNewOrgTier('ENTERPRISE_ULTRA')
-                      setNewOrgRegion('us-east-1')
-                      setNewOrgContact('ratheesh.ramadasan@gmail.com')
-                      setNewOrgLogo('https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg')
+                      setNewOrgTier('ENTERPRISE_CORE')
+                      setNewOrgLogoPreview('https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg')
+                      setNewOrgLogoData('https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg')
+                      setNewOrgLogoType('image/svg+xml')
+                      setNewOrgLogoError(null)
+                      setNewOrgAdmins([
+                        { email: 'ratheesh.ramadasan@gmail.com', display_name: 'Ratheesh Ramadasan', role: 'ORGANIZATION_OWNER', status: 'ACTIVE', is_primary: true },
+                      ])
                       setShowCreateOrgModal(true)
                     }}
                     style={{
@@ -1481,7 +1780,26 @@ export default function OrganizationTenantStudio({
 
                   {/* Create Tenant Button */}
                   <button
-                    onClick={() => setShowCreateModal(true)}
+                    onClick={() => {
+                      setWizardStep(1)
+                      setWizardOrgId(orgDetails.id || (organizationsList[0] ? organizationsList[0].id : ''))
+                      setWizardName('')
+                      setWizardSlug('')
+                      setWizardDesc('')
+                      setWizardModel('saas')
+                      setWizardHostingRegion('us-east-1')
+                      setWizardCloudProvider('AWS')
+                      setWizardCloudAccount('')
+                      setWizardCloudRegion('us-east-2')
+                      setWizardSiteName('')
+                      setWizardJurisdiction('United States - Federal')
+                      setWizardIsolatedNetwork(false)
+                      setWizardAiInference(true)
+                      setWizardTenantAdmins(['ratheesh.ramadasan@gmail.com'])
+                      setNewTenantName('')
+                      setNewTenantDesc('')
+                      setShowCreateModal(true)
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1553,8 +1871,7 @@ export default function OrganizationTenantStudio({
                         >
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Organization</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Status</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 600 }}>Data Residency</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 600 }}>Admin Contact</th>
+                          <th style={{ padding: '10px 12px', fontWeight: 600 }}>Administrators</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Created By</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Created On</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Fleet</th>
@@ -1668,17 +1985,37 @@ export default function OrganizationTenantStudio({
                                   </span>
                                 </td>
 
-                                {/* Region */}
-                                <td style={{ padding: '12px', color: 'var(--foreground)', fontSize: '0.8rem' }}>
-                                  {o.region || 'us-east-1'}
-                                </td>
-
-                                {/* Admin Contact Info */}
+                                {/* Administrators */}
                                 <td style={{ padding: '12px', color: 'var(--foreground)' }}>
-                                  <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{o.contact_email}</div>
-                                  <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
-                                    Primary Admin
-                                  </div>
+                                  {o.administrators && o.administrators.length > 0 ? (
+                                    <div>
+                                      <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                                        {o.administrators.find((a: any) => a.is_primary)?.email || o.administrators[0].email}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                        <span style={{ fontSize: '0.68rem', color: '#0284c7', fontWeight: 700 }}>Primary Owner</span>
+                                        {o.administrators.length > 1 && (
+                                          <span
+                                            style={{
+                                              fontSize: '0.66rem',
+                                              padding: '1px 5px',
+                                              borderRadius: 6,
+                                              background: 'color-mix(in srgb, var(--foreground) 10%, transparent)',
+                                              color: 'color-mix(in srgb, var(--foreground) 75%, transparent)',
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            +{o.administrators.length - 1} admin{o.administrators.length > 2 ? 's' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <div style={{ fontSize: '0.8rem', fontWeight: 600 }}>{o.contact_email || 'ratheesh.ramadasan@gmail.com'}</div>
+                                      <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Primary Owner</div>
+                                    </div>
+                                  )}
                                 </td>
 
                                 {/* Created By */}
@@ -1715,10 +2052,31 @@ export default function OrganizationTenantStudio({
                                       onClick={() => {
                                         setEditingOrg(o)
                                         setEditOrgName(o.name)
-                                        setEditOrgTier(o.tier || 'ENTERPRISE_ULTRA')
-                                        setEditOrgRegion(o.region || 'us-east-1')
-                                        setEditOrgContact(o.contact_email || 'ratheesh.ramadasan@gmail.com')
-                                        setEditOrgLogo(o.logo_url || '')
+                                        setEditOrgTier(o.tier || o.subscription_tier || 'ENTERPRISE_CORE')
+                                        setEditOrgLogoPreview(o.logo_url || null)
+                                        setEditOrgLogoData(o.logo_url || null)
+                                        setEditOrgLogoType(null)
+                                        setEditOrgLogoError(null)
+                                        setEditOrgAdmins(
+                                          Array.isArray(o.administrators) && o.administrators.length > 0
+                                            ? o.administrators.map((a: any) => ({
+                                                id: a.id,
+                                                email: a.email,
+                                                display_name: a.display_name,
+                                                role: a.role || 'ORGANIZATION_ADMIN',
+                                                status: a.status || 'ACTIVE',
+                                                is_primary: Boolean(a.is_primary),
+                                              }))
+                                            : [
+                                                {
+                                                  email: o.contact_email || 'ratheesh.ramadasan@gmail.com',
+                                                  display_name: 'Primary Admin',
+                                                  role: 'ORGANIZATION_OWNER',
+                                                  status: 'ACTIVE',
+                                                  is_primary: true,
+                                                },
+                                              ]
+                                        )
                                       }}
                                       style={{
                                         display: 'flex',
@@ -1834,7 +2192,7 @@ export default function OrganizationTenantStudio({
                           }}
                         >
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Tenant Name</th>
-                          <th style={{ padding: '10px 12px', fontWeight: 600 }}>Environment</th>
+                          <th style={{ padding: '10px 12px', fontWeight: 600 }}>Environment & Model</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Description</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Folders</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Users</th>
@@ -1881,40 +2239,91 @@ export default function OrganizationTenantStudio({
                                 </div>
                               </td>
 
-                              {/* Environment Pill */}
+                              {/* Environment & Deployment Model */}
                               <td style={{ padding: '12px' }}>
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    padding: '3px 8px',
-                                    borderRadius: 12,
-                                    fontSize: '0.74rem',
-                                    fontWeight: 600,
-                                    background:
-                                      t.environment === 'Production'
-                                        ? 'rgba(16, 185, 129, 0.15)'
-                                        : t.environment === 'Sandbox'
-                                        ? 'rgba(168, 85, 247, 0.15)'
-                                        : 'rgba(2, 132, 199, 0.15)',
-                                    color:
-                                      t.environment === 'Production'
-                                        ? '#10b981'
-                                        : t.environment === 'Sandbox'
-                                        ? '#a855f7'
-                                        : '#0284c7',
-                                    border: `1px solid ${
-                                      t.environment === 'Production'
-                                        ? 'rgba(16, 185, 129, 0.3)'
-                                        : t.environment === 'Sandbox'
-                                        ? 'rgba(168, 85, 247, 0.3)'
-                                        : 'rgba(2, 132, 199, 0.3)'
-                                    }`,
-                                  }}
-                                >
-                                  ✦ {t.environment}
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      padding: '3px 8px',
+                                      borderRadius: 12,
+                                      fontSize: '0.74rem',
+                                      fontWeight: 600,
+                                      background:
+                                        t.environment === 'Production'
+                                          ? 'rgba(16, 185, 129, 0.15)'
+                                          : t.environment === 'Sandbox'
+                                          ? 'rgba(168, 85, 247, 0.15)'
+                                          : 'rgba(2, 132, 199, 0.15)',
+                                      color:
+                                        t.environment === 'Production'
+                                          ? '#10b981'
+                                          : t.environment === 'Sandbox'
+                                          ? '#a855f7'
+                                          : '#0284c7',
+                                      border: `1px solid ${
+                                        t.environment === 'Production'
+                                          ? 'rgba(16, 185, 129, 0.3)'
+                                          : t.environment === 'Sandbox'
+                                          ? 'rgba(168, 85, 247, 0.3)'
+                                          : 'rgba(2, 132, 199, 0.3)'
+                                      }`,
+                                    }}
+                                  >
+                                    ✦ {t.environment}
+                                  </span>
+                                  {t.deployment ? (
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        padding: '2px 6px',
+                                        borderRadius: 6,
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        background: 'color-mix(in srgb, var(--foreground) 8%, transparent)',
+                                        color: 'color-mix(in srgb, var(--foreground) 80%, transparent)',
+                                      }}
+                                    >
+                                      {t.deployment.deployment_model === 'saas' ? (
+                                        <>
+                                          <Cloud size={10} style={{ color: '#0284c7' }} />
+                                          <span>SaaS · {t.deployment.hosting_region || 'us-east-1'}</span>
+                                        </>
+                                      ) : t.deployment.deployment_model === 'client_cloud' ? (
+                                        <>
+                                          <Layers size={10} style={{ color: '#10b981' }} />
+                                          <span>{t.deployment.cloud_provider || 'Cloud'} ({t.deployment.infrastructure_region || 'Client'})</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Server size={10} style={{ color: '#f59e0b' }} />
+                                          <span>On-Prem · {t.deployment.site_name || 'Datacenter'}</span>
+                                        </>
+                                      )}
+                                    </span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 4,
+                                        padding: '2px 6px',
+                                        borderRadius: 6,
+                                        fontSize: '0.68rem',
+                                        fontWeight: 600,
+                                        background: 'color-mix(in srgb, var(--foreground) 8%, transparent)',
+                                        color: 'color-mix(in srgb, var(--foreground) 80%, transparent)',
+                                      }}
+                                    >
+                                      <Cloud size={10} style={{ color: '#0284c7' }} />
+                                      <span>SaaS · us-east-1</span>
+                                    </span>
+                                  )}
+                                </div>
                               </td>
 
                               {/* Description */}
@@ -2932,7 +3341,7 @@ export default function OrganizationTenantStudio({
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: CREATE TENANT                                                      */}
+      {/* MODAL: CREATE TENANT (5-STEP GUIDED WIZARD)                              */}
       {/* ========================================================================= */}
       {showCreateModal && (
         <div
@@ -2952,19 +3361,27 @@ export default function OrganizationTenantStudio({
           <div
             style={{
               width: '100%',
-              maxWidth: 480,
+              maxWidth: 640,
+              maxHeight: '90vh',
+              overflowY: 'auto',
               borderRadius: 16,
               background: 'var(--card, #1e293b)',
               border: '1px solid var(--border)',
-              padding: 22,
+              padding: 24,
               boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
               display: 'flex',
               flexDirection: 'column',
-              gap: 14,
+              gap: 16,
             }}
           >
+            {/* Header & Step Indicator */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--foreground)' }}>Create New Tenant</h3>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--foreground)' }}>Create New Tenant</h3>
+                <p style={{ margin: '2px 0 0 0', fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                  Step {wizardStep} of 5 — {wizardStep === 1 ? 'Identity' : wizardStep === 2 ? 'Deployment Model' : wizardStep === 3 ? 'Infrastructure & Residency' : wizardStep === 4 ? 'Administrators & Access' : 'Review & Provision'}
+                </p>
+              </div>
               <button
                 onClick={() => setShowCreateModal(false)}
                 style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
@@ -2973,114 +3390,806 @@ export default function OrganizationTenantStudio({
               </button>
             </div>
 
-            <form onSubmit={handleCreateTenant} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Tenant Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g., Wealth Management Solutions"
-                  value={newTenantName}
-                  onChange={e => setNewTenantName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                    color: 'var(--foreground)',
-                    fontSize: '0.86rem',
+            {/* Step Progress Pills */}
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+              {[
+                { s: 1, label: '1. Identity' },
+                { s: 2, label: '2. Model' },
+                { s: 3, label: '3. Residency' },
+                { s: 4, label: '4. Access' },
+                { s: 5, label: '5. Review' },
+              ].map(st => (
+                <div
+                  key={st.s}
+                  onClick={() => {
+                    if (wizardName.trim() || st.s <= wizardStep) {
+                      setWizardStep(st.s as any)
+                    }
                   }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Environment Type
-                </label>
-                <select
-                  value={newTenantEnv}
-                  onChange={e => setNewTenantEnv(e.target.value as any)}
                   style={{
-                    width: '100%',
-                    padding: '8px 12px',
+                    flex: 1,
+                    textAlign: 'center',
+                    padding: '6px 8px',
                     borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                    color: 'var(--foreground)',
-                    fontSize: '0.86rem',
-                  }}
-                >
-                  <option value="Production">Production</option>
-                  <option value="Development">Development</option>
-                  <option value="Sandbox">Sandbox</option>
-                  <option value="UAT">UAT</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Operational scope, client boundaries, or automated pipeline purpose..."
-                  value={newTenantDesc}
-                  onChange={e => setNewTenantDesc(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                    color: 'var(--foreground)',
-                    fontSize: '0.86rem',
-                    resize: 'none',
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 6 }}>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 8,
-                    border: '1px solid var(--border)',
-                    background: 'transparent',
-                    color: 'var(--foreground)',
-                    fontSize: '0.82rem',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
                     cursor: 'pointer',
+                    background: wizardStep === st.s
+                      ? 'rgba(2, 132, 199, 0.18)'
+                      : wizardStep > st.s
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                    color: wizardStep === st.s ? '#0284c7' : wizardStep > st.s ? '#10b981' : 'color-mix(in srgb, var(--foreground) 60%, transparent)',
+                    border: `1px solid ${wizardStep === st.s ? '#0284c7' : 'transparent'}`,
                   }}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creatingTenant}
-                  style={{
-                    padding: '8px 18px',
-                    borderRadius: 8,
-                    background: '#0284c7',
-                    color: '#ffffff',
-                    border: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.82rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {creatingTenant ? 'Provisioning...' : 'Provision Tenant'}
-                </button>
-              </div>
+                  {st.label}
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleCreateTenant} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* STEP 1: IDENTITY */}
+              {wizardStep === 1 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Parent Organization *
+                    </label>
+                    <select
+                      value={wizardOrgId || (organizationsList[0]?.id || '')}
+                      onChange={e => setWizardOrgId(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                        color: 'var(--foreground)',
+                        fontSize: '0.84rem',
+                      }}
+                    >
+                      {organizationsList.map(o => (
+                        <option key={o.id} value={o.id}>{o.name} ({o.slug})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                        Tenant Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g., Wealth Management Solutions"
+                        value={wizardName}
+                        onChange={e => {
+                          setWizardName(e.target.value)
+                          setWizardSlug(generateSlugFromName(e.target.value))
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: '1px solid var(--border)',
+                          background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                          color: 'var(--foreground)',
+                          fontSize: '0.84rem',
+                        }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                        Tenant Slug (Auto-Generated)
+                      </label>
+                      <input
+                        type="text"
+                        disabled
+                        value={wizardSlug || generateSlugFromName(wizardName)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          borderRadius: 8,
+                          border: '1px solid var(--border)',
+                          background: 'color-mix(in srgb, var(--card) 30%, transparent)',
+                          color: 'color-mix(in srgb, var(--foreground) 50%, transparent)',
+                          fontSize: '0.84rem',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Environment Class
+                    </label>
+                    <select
+                      value={wizardEnv}
+                      onChange={e => setWizardEnv(e.target.value as any)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                        color: 'var(--foreground)',
+                        fontSize: '0.84rem',
+                      }}
+                    >
+                      <option value="Production">Production</option>
+                      <option value="Development">Development</option>
+                      <option value="Sandbox">Sandbox</option>
+                      <option value="UAT">UAT</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Description
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Operational scope, client boundaries, or automated pipeline purpose..."
+                      value={wizardDesc}
+                      onChange={e => setWizardDesc(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                        color: 'var(--foreground)',
+                        fontSize: '0.84rem',
+                        resize: 'none',
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(false)}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--foreground)',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!wizardName.trim()}
+                      onClick={() => setWizardStep(2)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 18px',
+                        borderRadius: 8,
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        opacity: !wizardName.trim() ? 0.5 : 1,
+                      }}
+                    >
+                      <span>Next: Deployment Model</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: DEPLOYMENT MODEL */}
+              {wizardStep === 2 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ fontSize: '0.82rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                    Select the architectural deployment model for this tenant. An organization may deploy different tenants across multiple models:
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* Model 1: SaaS */}
+                    <div
+                      onClick={() => setWizardModel('saas')}
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        border: `2px solid ${wizardModel === 'saas' ? '#0284c7' : 'var(--border)'}`,
+                        background: wizardModel === 'saas' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Cloud size={18} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--foreground)' }}>ArchitectIQ SaaS</span>
+                          <input type="radio" checked={wizardModel === 'saas'} onChange={() => setWizardModel('saas')} />
+                        </div>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', lineHeight: 1.4 }}>
+                          Vendor-hosted, multi-tenant or dedicated control plane with turnkey infrastructure and automatic patching.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Model 2: Client Cloud */}
+                    <div
+                      onClick={() => setWizardModel('client_cloud')}
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        border: `2px solid ${wizardModel === 'client_cloud' ? '#0284c7' : 'var(--border)'}`,
+                        background: wizardModel === 'client_cloud' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Layers size={18} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--foreground)' }}>Client Cloud</span>
+                          <input type="radio" checked={wizardModel === 'client_cloud'} onChange={() => setWizardModel('client_cloud')} />
+                        </div>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', lineHeight: 1.4 }}>
+                          Customer subscription (AWS, Azure, GCP, or Private Cloud). Customer infrastructure is authoritative.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Model 3: On-Premises */}
+                    <div
+                      onClick={() => setWizardModel('on_premises')}
+                      style={{
+                        padding: 14,
+                        borderRadius: 12,
+                        border: `2px solid ${wizardModel === 'on_premises' ? '#0284c7' : 'var(--border)'}`,
+                        background: wizardModel === 'on_premises' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Server size={18} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--foreground)' }}>Client On-Premises</span>
+                          <input type="radio" checked={wizardModel === 'on_premises'} onChange={() => setWizardModel('on_premises')} />
+                        </div>
+                        <p style={{ margin: '3px 0 0 0', fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', lineHeight: 1.4 }}>
+                          Customer data center or private bare-metal infrastructure with strict physical custody.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(1)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--foreground)',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Back</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(3)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 18px',
+                        borderRadius: 8,
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>Next: Infrastructure & Residency</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: INFRASTRUCTURE & RESIDENCY */}
+              {wizardStep === 3 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {/* Dynamic Fields for SaaS */}
+                  {wizardModel === 'saas' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                          SaaS Preferred Hosting Region *
+                        </label>
+                        <select
+                          value={wizardHostingRegion}
+                          onChange={e => setWizardHostingRegion(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                            color: 'var(--foreground)',
+                            fontSize: '0.84rem',
+                          }}
+                        >
+                          {supportedRegions.map(r => (
+                            <option key={r.id} value={r.id}>{r.name} ({r.id}) — {r.country}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ padding: 12, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#0284c7', marginBottom: 6 }}>
+                          Regional Compliance & Sovereignty Badges
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {(supportedRegions.find(r => r.id === wizardHostingRegion)?.compliance_tags || ['SOC2', 'ISO27001', 'PCI-DSS']).map(tag => (
+                            <span key={tag} style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.12)', border: '1px solid rgba(2, 132, 199, 0.25)', fontSize: '0.7rem', color: '#0284c7', fontWeight: 700 }}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                        <p style={{ margin: '8px 0 0 0', fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                          Tenant data residency boundary enforced strictly at tenant deployment level with immutable regional isolation.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dynamic Fields for Client Cloud */}
+                  {wizardModel === 'client_cloud' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                            Cloud Provider *
+                          </label>
+                          <select
+                            value={wizardCloudProvider}
+                            onChange={e => setWizardCloudProvider(e.target.value as any)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              border: '1px solid var(--border)',
+                              background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                              color: 'var(--foreground)',
+                              fontSize: '0.84rem',
+                            }}
+                          >
+                            <option value="AWS">Amazon Web Services (AWS)</option>
+                            <option value="Azure">Microsoft Azure</option>
+                            <option value="GCP">Google Cloud Platform (GCP)</option>
+                            <option value="Private Cloud">Private Cloud</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                            Infrastructure Region *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. us-east-2, ca-central-1"
+                            value={wizardCloudRegion}
+                            onChange={e => setWizardCloudRegion(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              border: '1px solid var(--border)',
+                              background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                              color: 'var(--foreground)',
+                              fontSize: '0.84rem',
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                          Cloud Account / Subscription ID
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 12-digit AWS Account ID or Azure Subscription UUID"
+                          value={wizardCloudAccount}
+                          onChange={e => setWizardCloudAccount(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: '1px solid var(--border)',
+                            background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                            color: 'var(--foreground)',
+                            fontSize: '0.84rem',
+                          }}
+                        />
+                      </div>
+
+                      <div style={{ padding: 10, borderRadius: 8, background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '0.76rem', color: 'var(--foreground)' }}>
+                        <strong>Customer Infrastructure Custody:</strong> Tenant workload executes entirely inside customer cloud subscription. ArchitectIQ connects via zero-trust agent.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dynamic Fields for Client On-Premises */}
+                  {wizardModel === 'on_premises' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div>
+                          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                            Site Name / Datacenter ID *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Toronto Primary DC-01"
+                            value={wizardSiteName}
+                            onChange={e => setWizardSiteName(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              border: '1px solid var(--border)',
+                              background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                              color: 'var(--foreground)',
+                              fontSize: '0.84rem',
+                            }}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                            Sovereign Jurisdiction *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Canada — Federal"
+                            value={wizardJurisdiction}
+                            onChange={e => setWizardJurisdiction(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              border: '1px solid var(--border)',
+                              background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                              color: 'var(--foreground)',
+                              fontSize: '0.84rem',
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: 'var(--foreground)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={wizardIsolatedNetwork}
+                            onChange={e => setWizardIsolatedNetwork(e.target.checked)}
+                          />
+                          <span>Enforce Strict Air-Gapped / Isolated Private Network</span>
+                        </label>
+
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: 'var(--foreground)', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={wizardAiInference}
+                            onChange={e => setWizardAiInference(e.target.checked)}
+                          />
+                          <span>Allow External AI Inference (Gemini Enterprise Gateways)</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(2)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--foreground)',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Back</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(4)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 18px',
+                        borderRadius: 8,
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>Next: Administrators & Access</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: ADMINISTRATORS & ACCESS */}
+              {wizardStep === 4 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Tenant Administrators
+                    </label>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="email"
+                        placeholder="admin.user@company.com"
+                        value={wizardAdminInput}
+                        onChange={e => setWizardAdminInput(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: '7px 12px',
+                          borderRadius: 8,
+                          border: '1px solid var(--border)',
+                          background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                          color: 'var(--foreground)',
+                          fontSize: '0.82rem',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (wizardAdminInput.trim() && !wizardTenantAdmins.includes(wizardAdminInput.trim())) {
+                            setWizardTenantAdmins([...wizardTenantAdmins, wizardAdminInput.trim()])
+                            setWizardAdminInput('')
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '7px 14px',
+                          borderRadius: 8,
+                          background: '#0284c7',
+                          color: '#ffffff',
+                          border: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <UserPlus size={14} />
+                        <span>Add</span>
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {wizardTenantAdmins.map((adm, i) => (
+                        <div
+                          key={adm}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            background: 'color-mix(in srgb, var(--card) 40%, transparent)',
+                            border: '1px solid var(--border)',
+                            fontSize: '0.8rem',
+                          }}
+                        >
+                          <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{adm} {i === 0 && <span style={{ color: '#0284c7', fontSize: '0.7rem' }}>(Primary)</span>}</span>
+                          {wizardTenantAdmins.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setWizardTenantAdmins(wizardTenantAdmins.filter(x => x !== adm))}
+                              style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 12, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 40%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#10b981', marginBottom: 4 }}>
+                      Canonical Environments Provisioning
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', lineHeight: 1.4 }}>
+                      ArchitectIQ will automatically provision 5 canonical environments: <strong>DEV, TEST, UAT, CANARY, and PROD</strong> with continuous deployment pipelines and role-based branch protections.
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(3)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--foreground)',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Back</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(5)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 18px',
+                        borderRadius: 8,
+                        background: '#0284c7',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 600,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span>Next: Review & Provision</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 5: REVIEW & PROVISION */}
+              {wizardStep === 5 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ padding: 14, borderRadius: 12, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Tenant Name</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--foreground)' }}>{wizardName}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Tenant Slug</div>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--foreground)' }}>{wizardSlug || generateSlugFromName(wizardName)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Deployment Model</div>
+                      <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#0284c7' }}>
+                        {wizardModel === 'saas' ? 'ArchitectIQ SaaS' : wizardModel === 'client_cloud' ? `Client Cloud (${wizardCloudProvider})` : 'Client On-Premises'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Residency / Infrastructure</div>
+                      <div style={{ fontSize: '0.84rem', color: 'var(--foreground)' }}>
+                        {wizardModel === 'saas' ? wizardHostingRegion : wizardModel === 'client_cloud' ? `${wizardCloudProvider} (${wizardCloudRegion})` : `${wizardSiteName || 'Local Site'} (${wizardJurisdiction})`}
+                      </div>
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Tenant Administrators</div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--foreground)', marginTop: 2 }}>
+                        {wizardTenantAdmins.join(', ')}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(4)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '8px 14px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'transparent',
+                        color: 'var(--foreground)',
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <ArrowLeft size={14} />
+                      <span>Back</span>
+                    </button>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateModal(false)}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: 8,
+                          border: '1px solid var(--border)',
+                          background: 'transparent',
+                          color: 'var(--foreground)',
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={creatingTenant}
+                        style={{
+                          padding: '8px 20px',
+                          borderRadius: 8,
+                          background: '#0284c7',
+                          color: '#ffffff',
+                          border: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.82rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {creatingTenant ? 'Provisioning Fleet...' : 'Provision Tenant Fleet'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </form>
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
       {/* MODAL: EDIT TENANT                                                        */}
       {/* ========================================================================= */}
       {editingTenant && (
@@ -3244,15 +4353,15 @@ export default function OrganizationTenantStudio({
           <div
             style={{
               width: '100%',
-              maxWidth: 440,
+              maxWidth: 480,
               height: '100%',
               background: 'var(--card, #1e293b)',
               borderLeft: '1px solid var(--border)',
-              padding: 22,
+              padding: 24,
               boxShadow: '-10px 0 30px rgba(0,0,0,0.5)',
               display: 'flex',
               flexDirection: 'column',
-              gap: 18,
+              gap: 16,
               overflowY: 'auto',
             }}
           >
@@ -3278,6 +4387,63 @@ export default function OrganizationTenantStudio({
               <div style={{ padding: 12, borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>Environment Tier</div>
                 <div style={{ fontWeight: 700, marginTop: 2, color: '#0284c7' }}>{viewingTenant.environment}</div>
+              </div>
+
+              {/* Deployment Model & Residency Governance Card */}
+              <div style={{ padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Deployment & Sovereignty
+                  </div>
+                  <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.12)', color: '#0284c7', fontWeight: 700 }}>
+                    {viewingTenant.deployment?.deployment_model?.toUpperCase() || 'SAAS'}
+                  </span>
+                </div>
+
+                {viewingTenant.deployment?.deployment_model === 'client_cloud' ? (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--foreground)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div><strong>Cloud Provider:</strong> {viewingTenant.deployment.cloud_provider || 'AWS'}</div>
+                    <div><strong>Infrastructure Region:</strong> {viewingTenant.deployment.infrastructure_region || 'us-east-2'}</div>
+                    {viewingTenant.deployment.cloud_account_id && (
+                      <div><strong>Cloud Account:</strong> {viewingTenant.deployment.cloud_account_id}</div>
+                    )}
+                  </div>
+                ) : viewingTenant.deployment?.deployment_model === 'on_premises' ? (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--foreground)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div><strong>Site Name:</strong> {viewingTenant.deployment.site_name || 'Datacenter'}</div>
+                    <div><strong>Jurisdiction:</strong> {viewingTenant.deployment.jurisdiction || 'Canada — Federal'}</div>
+                    <div><strong>Air-Gap Network:</strong> {viewingTenant.deployment.isolated_network ? 'Enforced' : 'Connected'}</div>
+                    <div><strong>External AI Inference:</strong> {viewingTenant.deployment.ai_inference_allowed ? 'Allowed' : 'Prohibited'}</div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--foreground)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div><strong>Hosting Region:</strong> {viewingTenant.deployment?.hosting_region || 'us-east-1'}</div>
+                    <div><strong>Data Sovereignty:</strong> Dedicated customer workspace with database row-level security.</div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMigratingTenant(viewingTenant)
+                        setMigrationTargetRegion(viewingTenant.deployment?.hosting_region === 'eu-west-1' ? 'ca-central-1' : 'eu-west-1')
+                        setMigrationReason('')
+                        setMigrationNotice(null)
+                      }}
+                      style={{
+                        marginTop: 4,
+                        padding: '6px 12px',
+                        borderRadius: 6,
+                        border: '1px solid #0284c7',
+                        background: 'rgba(2, 132, 199, 0.12)',
+                        color: '#0284c7',
+                        fontSize: '0.76rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      Request Governed Residency Migration →
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div style={{ padding: 12, borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
@@ -3340,6 +4506,149 @@ export default function OrganizationTenantStudio({
       )}
 
       {/* ========================================================================= */}
+      {/* MODAL: GOVERNED RESIDENCY MIGRATION                                       */}
+      {/* ========================================================================= */}
+      {migratingTenant && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 520,
+              borderRadius: 14,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              padding: 24,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Globe size={18} style={{ color: '#0284c7' }} />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                  Request Residency Migration
+                </h3>
+              </div>
+              <button
+                onClick={() => setMigratingTenant(null)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--foreground)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {migrationNotice && (
+              <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(2, 132, 199, 0.15)', border: '1px solid #0284c7', fontSize: '0.8rem', color: '#0284c7' }}>
+                {migrationNotice}
+              </div>
+            )}
+
+            <form onSubmit={handleResidencyMigrationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ padding: 12, borderRadius: 8, background: 'color-mix(in srgb, var(--card) 40%, transparent)', border: '1px solid var(--border)', fontSize: '0.8rem' }}>
+                <div><strong>Target Tenant:</strong> {migratingTenant.name} ({migratingTenant.id})</div>
+                <div style={{ marginTop: 4 }}><strong>Current Hosting Region:</strong> {migratingTenant.deployment?.hosting_region || 'us-east-1'}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                  Target Sovereign Hosting Region *
+                </label>
+                <select
+                  value={migrationTargetRegion}
+                  onChange={e => setMigrationTargetRegion(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                    color: 'var(--foreground)',
+                    fontSize: '0.84rem',
+                  }}
+                >
+                  {supportedRegions
+                    .filter(r => r.id !== (migratingTenant.deployment?.hosting_region || 'us-east-1'))
+                    .map(r => (
+                      <option key={r.id} value={r.id}>{r.name} ({r.id}) — {r.country}</option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                  Business & Regulatory Justification *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="State the compliance or legal jurisdiction requirement requiring this tenant relocation..."
+                  value={migrationReason}
+                  onChange={e => setMigrationReason(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                    color: 'var(--foreground)',
+                    fontSize: '0.84rem',
+                    resize: 'none',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setMigratingTenant(null)}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: '1px solid var(--border)',
+                    background: 'transparent',
+                    color: 'var(--foreground)',
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={migrationSubmitting}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 8,
+                    background: '#0284c7',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {migrationSubmitting ? 'Submitting...' : 'Submit Migration Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: LEARN ABOUT ORGANIZATION SETUP                                     */}
       {/* ========================================================================= */}
       {showLearnModal && (
@@ -3441,7 +4750,9 @@ export default function OrganizationTenantStudio({
           <div
             style={{
               width: '100%',
-              maxWidth: 540,
+              maxWidth: 620,
+              maxHeight: '90vh',
+              overflowY: 'auto',
               borderRadius: 14,
               background: 'var(--card, #1e293b)',
               border: '1px solid var(--border)',
@@ -3468,6 +4779,7 @@ export default function OrganizationTenantStudio({
             </div>
 
             <form onSubmit={handleCreateOrgSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Row 1: Name and Auto-Slug */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
@@ -3480,9 +4792,7 @@ export default function OrganizationTenantStudio({
                     value={newOrgName}
                     onChange={e => {
                       setNewOrgName(e.target.value)
-                      if (!newOrgSlug || newOrgSlug.startsWith('org-')) {
-                        setNewOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
-                      }
+                      setNewOrgSlug(generateSlugFromName(e.target.value))
                     }}
                     style={{
                       width: '100%',
@@ -3499,90 +4809,36 @@ export default function OrganizationTenantStudio({
 
                 <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                    Organization Slug *
+                    Organization Slug (Read Only)
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. citibank-wealth"
-                    value={newOrgSlug}
-                    onChange={e => setNewOrgSlug(e.target.value)}
+                    disabled
+                    value={newOrgSlug || generateSlugFromName(newOrgName)}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
                       borderRadius: 8,
                       border: '1px solid var(--border)',
-                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                      color: 'var(--foreground)',
+                      background: 'color-mix(in srgb, var(--card) 30%, transparent)',
+                      color: 'color-mix(in srgb, var(--foreground) 50%, transparent)',
                       fontSize: '0.84rem',
-                      outline: 'none',
                     }}
                   />
+                  <span style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                    Automatically generated and immutable once created
+                  </span>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                    Subscription Tier
-                  </label>
-                  <select
-                    value={newOrgTier}
-                    onChange={e => setNewOrgTier(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid var(--border)',
-                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                      color: 'var(--foreground)',
-                      fontSize: '0.84rem',
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="ENTERPRISE_STARTER">ENTERPRISE_STARTER</option>
-                    <option value="ENTERPRISE_CORE">ENTERPRISE_CORE</option>
-                    <option value="ENTERPRISE_ULTRA">ENTERPRISE_ULTRA</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                    Data Residency Region
-                  </label>
-                  <select
-                    value={newOrgRegion}
-                    onChange={e => setNewOrgRegion(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid var(--border)',
-                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                      color: 'var(--foreground)',
-                      fontSize: '0.84rem',
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
-                    <option value="us-west-2">us-west-2 (Oregon)</option>
-                    <option value="eu-west-1">eu-west-1 (Ireland)</option>
-                    <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
-                  </select>
-                </div>
-              </div>
-
+              {/* Row 2: Subscription Tier (Data Residency completely removed per specification) */}
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Admin Contact Email *
+                  Subscription Tier
                 </label>
-                <input
-                  type="email"
-                  required
-                  value={newOrgContact}
-                  onChange={e => setNewOrgContact(e.target.value)}
+                <select
+                  value={newOrgTier}
+                  onChange={e => setNewOrgTier(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -3592,36 +4848,268 @@ export default function OrganizationTenantStudio({
                     color: 'var(--foreground)',
                     fontSize: '0.84rem',
                     outline: 'none',
+                    cursor: 'pointer',
                   }}
-                />
+                >
+                  <option value="ENTERPRISE_STARTER">ENTERPRISE_STARTER</option>
+                  <option value="ENTERPRISE_CORE">ENTERPRISE_CORE</option>
+                  <option value="ENTERPRISE_ULTRA">ENTERPRISE_ULTRA</option>
+                </select>
               </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Organization Logo URL
+              {/* Row 3: Organization Logo Upload Control */}
+              <div style={{ padding: 12, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 40%, transparent)', border: '1px solid var(--border)' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: 2 }}>
+                  Organization Logo
                 </label>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', display: 'block', marginBottom: 8 }}>
+                  PNG, JPG, WebP or sanitized SVG · Maximum 2 MB
+                </span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      padding: 4,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {newOrgLogoPreview ? (
+                      <img
+                        src={newOrgLogoPreview}
+                        alt="Logo Preview"
+                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                        onError={() => setNewOrgLogoPreview(null)}
+                      />
+                    ) : (
+                      <Boxes size={22} style={{ color: 'var(--primary, #0284c7)' }} />
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        background: 'color-mix(in srgb, var(--primary, #0284c7) 15%, transparent)',
+                        color: 'var(--primary, #0284c7)',
+                        border: '1px solid var(--primary, #0284c7)',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Upload size={14} />
+                      <span>Upload Logo</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        style={{ display: 'none' }}
+                        onChange={e => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleLogoUpload(e.target.files[0], false)
+                          }
+                        }}
+                      />
+                    </label>
+
+                    {newOrgLogoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewOrgLogoPreview(null)
+                          setNewOrgLogoData(null)
+                          setNewOrgLogoType(null)
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          background: 'transparent',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove Logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {newOrgLogoError && (
+                  <div style={{ marginTop: 8, fontSize: '0.74rem', color: '#ef4444', fontWeight: 600 }}>
+                    {newOrgLogoError}
+                  </div>
+                )}
+              </div>
+
+              {/* Row 4: Multiple Organization Administrators */}
+              <div style={{ padding: 12, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 40%, transparent)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', display: 'block' }}>
+                      Organization Administrators
+                    </label>
+                    <span style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>
+                      Minimum 1 active administrator is mandatory
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7' }}>
+                    {newOrgAdmins.filter(a => a.status === 'ACTIVE').length} Active
+                  </span>
+                </div>
+
+                {/* Administrators list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {newOrgAdmins.map((adm, idx) => (
+                    <div
+                      key={adm.email}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        background: 'color-mix(in srgb, var(--card) 70%, transparent)',
+                        border: '1px solid var(--border)',
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{adm.email}</span>
+                        {adm.is_primary && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'rgba(2, 132, 199, 0.2)', color: '#0284c7' }}>
+                            Primary
+                          </span>
+                        )}
+                        <span style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: 4, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600 }}>
+                          {adm.role}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {!adm.is_primary && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewOrgAdmins(newOrgAdmins.map((a, i) => ({
+                                ...a,
+                                is_primary: i === idx,
+                              })))
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#0284c7',
+                              fontSize: '0.72rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Set Primary
+                          </button>
+                        )}
+                        {newOrgAdmins.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const remaining = newOrgAdmins.filter((_, i) => i !== idx)
+                              if (adm.is_primary && remaining.length > 0) {
+                                remaining[0].is_primary = true
+                              }
+                              setNewOrgAdmins(remaining)
+                            }}
+                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add admin inline */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
-                    type="url"
-                    placeholder="https://.../logo.svg"
-                    value={newOrgLogo}
-                    onChange={e => setNewOrgLogo(e.target.value)}
+                    type="email"
+                    placeholder="new.admin@company.com"
+                    value={newAdminInputEmail}
+                    onChange={e => setNewAdminInputEmail(e.target.value)}
                     style={{
                       flex: 1,
-                      padding: '8px 12px',
+                      padding: '6px 10px',
                       borderRadius: 8,
                       border: '1px solid var(--border)',
                       background: 'color-mix(in srgb, var(--card) 60%, transparent)',
                       color: 'var(--foreground)',
-                      fontSize: '0.84rem',
+                      fontSize: '0.8rem',
                       outline: 'none',
                     }}
                   />
-                  {newOrgLogo && (
-                    <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={newOrgLogo} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={e => (e.currentTarget.style.display = 'none')} />
-                    </div>
-                  )}
+                  <select
+                    value={newAdminInputRole}
+                    onChange={e => setNewAdminInputRole(e.target.value as any)}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.8rem',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="ORGANIZATION_ADMIN">Admin</option>
+                    <option value="ORGANIZATION_OWNER">Owner</option>
+                    <option value="ORGANIZATION_VIEWER">Viewer</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newAdminInputEmail.trim() && !newOrgAdmins.some(a => a.email.toLowerCase() === newAdminInputEmail.trim().toLowerCase())) {
+                        setNewOrgAdmins([
+                          ...newOrgAdmins,
+                          {
+                            email: newAdminInputEmail.trim().toLowerCase(),
+                            display_name: newAdminInputEmail.split('@')[0],
+                            role: newAdminInputRole,
+                            status: 'ACTIVE',
+                            is_primary: false,
+                          },
+                        ])
+                        setNewAdminInputEmail('')
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      background: 'var(--primary, #0284c7)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <UserPlus size={13} />
+                    <span>Add</span>
+                  </button>
                 </div>
               </div>
 
@@ -3644,7 +5132,7 @@ export default function OrganizationTenantStudio({
                 </button>
                 <button
                   type="submit"
-                  disabled={creatingOrg}
+                  disabled={creatingOrg || newOrgAdmins.filter(a => a.status === 'ACTIVE').length === 0}
                   style={{
                     padding: '8px 20px',
                     borderRadius: 8,
@@ -3654,6 +5142,7 @@ export default function OrganizationTenantStudio({
                     cursor: 'pointer',
                     fontWeight: 600,
                     fontSize: '0.82rem',
+                    opacity: (creatingOrg || newOrgAdmins.filter(a => a.status === 'ACTIVE').length === 0) ? 0.5 : 1,
                   }}
                 >
                   {creatingOrg ? 'Creating...' : 'Create Organization'}
@@ -3684,7 +5173,9 @@ export default function OrganizationTenantStudio({
           <div
             style={{
               width: '100%',
-              maxWidth: 540,
+              maxWidth: 620,
+              maxHeight: '90vh',
+              overflowY: 'auto',
               borderRadius: 14,
               background: 'var(--card, #1e293b)',
               border: '1px solid var(--border)',
@@ -3711,6 +5202,7 @@ export default function OrganizationTenantStudio({
             </div>
 
             <form onSubmit={handleUpdateOrgSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Row 1: Name and Immutable Slug */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
@@ -3752,71 +5244,20 @@ export default function OrganizationTenantStudio({
                       fontSize: '0.84rem',
                     }}
                   />
+                  <span style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                    Immutable system identifier
+                  </span>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                    Subscription Tier
-                  </label>
-                  <select
-                    value={editOrgTier}
-                    onChange={e => setEditOrgTier(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid var(--border)',
-                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                      color: 'var(--foreground)',
-                      fontSize: '0.84rem',
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="ENTERPRISE_STARTER">ENTERPRISE_STARTER</option>
-                    <option value="ENTERPRISE_CORE">ENTERPRISE_CORE</option>
-                    <option value="ENTERPRISE_ULTRA">ENTERPRISE_ULTRA</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                    Data Residency Region
-                  </label>
-                  <select
-                    value={editOrgRegion}
-                    onChange={e => setEditOrgRegion(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: 8,
-                      border: '1px solid var(--border)',
-                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
-                      color: 'var(--foreground)',
-                      fontSize: '0.84rem',
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
-                    <option value="us-west-2">us-west-2 (Oregon)</option>
-                    <option value="eu-west-1">eu-west-1 (Ireland)</option>
-                    <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
-                  </select>
-                </div>
-              </div>
-
+              {/* Row 2: Subscription Tier (Data Residency completely removed per specification) */}
               <div>
                 <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Admin Contact Email *
+                  Subscription Tier
                 </label>
-                <input
-                  type="email"
-                  required
-                  value={editOrgContact}
-                  onChange={e => setEditOrgContact(e.target.value)}
+                <select
+                  value={editOrgTier}
+                  onChange={e => setEditOrgTier(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -3826,36 +5267,268 @@ export default function OrganizationTenantStudio({
                     color: 'var(--foreground)',
                     fontSize: '0.84rem',
                     outline: 'none',
+                    cursor: 'pointer',
                   }}
-                />
+                >
+                  <option value="ENTERPRISE_STARTER">ENTERPRISE_STARTER</option>
+                  <option value="ENTERPRISE_CORE">ENTERPRISE_CORE</option>
+                  <option value="ENTERPRISE_ULTRA">ENTERPRISE_ULTRA</option>
+                </select>
               </div>
 
-              <div>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
-                  Organization Logo URL
+              {/* Row 3: Logo Management Control */}
+              <div style={{ padding: 12, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 40%, transparent)', border: '1px solid var(--border)' }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', display: 'block', marginBottom: 2 }}>
+                  Organization Logo
                 </label>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', display: 'block', marginBottom: 8 }}>
+                  PNG, JPG, WebP or sanitized SVG · Maximum 2 MB
+                </span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div
+                    style={{
+                      width: 52,
+                      height: 52,
+                      borderRadius: 10,
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      padding: 4,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {editOrgLogoPreview ? (
+                      <img
+                        src={editOrgLogoPreview}
+                        alt="Logo Preview"
+                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                        onError={() => setEditOrgLogoPreview(null)}
+                      />
+                    ) : (
+                      <Boxes size={22} style={{ color: 'var(--primary, #0284c7)' }} />
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        padding: '6px 14px',
+                        borderRadius: 8,
+                        background: 'color-mix(in srgb, var(--primary, #0284c7) 15%, transparent)',
+                        color: 'var(--primary, #0284c7)',
+                        border: '1px solid var(--primary, #0284c7)',
+                        fontSize: '0.78rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Upload size={14} />
+                      <span>Replace Logo</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        style={{ display: 'none' }}
+                        onChange={e => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleLogoUpload(e.target.files[0], true)
+                          }
+                        }}
+                      />
+                    </label>
+
+                    {editOrgLogoPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditOrgLogoPreview(null)
+                          setEditOrgLogoData(null)
+                          setEditOrgLogoType(null)
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: 8,
+                          background: 'transparent',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239, 68, 68, 0.3)',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove Logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {editOrgLogoError && (
+                  <div style={{ marginTop: 8, fontSize: '0.74rem', color: '#ef4444', fontWeight: 600 }}>
+                    {editOrgLogoError}
+                  </div>
+                )}
+              </div>
+
+              {/* Row 4: Multiple Organization Administrators */}
+              <div style={{ padding: 12, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 40%, transparent)', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--foreground)', display: 'block' }}>
+                      Organization Administrators
+                    </label>
+                    <span style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>
+                      Minimum 1 active administrator is mandatory
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7' }}>
+                    {editOrgAdmins.filter(a => a.status === 'ACTIVE').length} Active
+                  </span>
+                </div>
+
+                {/* Administrators list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {editOrgAdmins.map((adm, idx) => (
+                    <div
+                      key={adm.email}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: 8,
+                        background: 'color-mix(in srgb, var(--card) 70%, transparent)',
+                        border: '1px solid var(--border)',
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--foreground)' }}>{adm.email}</span>
+                        {adm.is_primary && (
+                          <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: 'rgba(2, 132, 199, 0.2)', color: '#0284c7' }}>
+                            Primary
+                          </span>
+                        )}
+                        <span style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: 4, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600 }}>
+                          {adm.role}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {!adm.is_primary && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditOrgAdmins(editOrgAdmins.map((a, i) => ({
+                                ...a,
+                                is_primary: i === idx,
+                              })))
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#0284c7',
+                              fontSize: '0.72rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Set Primary
+                          </button>
+                        )}
+                        {editOrgAdmins.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const remaining = editOrgAdmins.filter((_, i) => i !== idx)
+                              if (adm.is_primary && remaining.length > 0) {
+                                remaining[0].is_primary = true
+                              }
+                              setEditOrgAdmins(remaining)
+                            }}
+                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add admin inline */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <input
-                    type="url"
-                    placeholder="https://.../logo.svg"
-                    value={editOrgLogo}
-                    onChange={e => setEditOrgLogo(e.target.value)}
+                    type="email"
+                    placeholder="additional.admin@company.com"
+                    value={editAdminInputEmail}
+                    onChange={e => setEditAdminInputEmail(e.target.value)}
                     style={{
                       flex: 1,
-                      padding: '8px 12px',
+                      padding: '6px 10px',
                       borderRadius: 8,
                       border: '1px solid var(--border)',
                       background: 'color-mix(in srgb, var(--card) 60%, transparent)',
                       color: 'var(--foreground)',
-                      fontSize: '0.84rem',
+                      fontSize: '0.8rem',
                       outline: 'none',
                     }}
                   />
-                  {editOrgLogo && (
-                    <div style={{ width: 34, height: 34, borderRadius: 6, background: 'rgba(255,255,255,0.08)', border: '1px solid var(--border)', padding: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={editOrgLogo} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={e => (e.currentTarget.style.display = 'none')} />
-                    </div>
-                  )}
+                  <select
+                    value={editAdminInputRole}
+                    onChange={e => setEditAdminInputRole(e.target.value as any)}
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.8rem',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="ORGANIZATION_ADMIN">Admin</option>
+                    <option value="ORGANIZATION_OWNER">Owner</option>
+                    <option value="ORGANIZATION_VIEWER">Viewer</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editAdminInputEmail.trim() && !editOrgAdmins.some(a => a.email.toLowerCase() === editAdminInputEmail.trim().toLowerCase())) {
+                        setEditOrgAdmins([
+                          ...editOrgAdmins,
+                          {
+                            email: editAdminInputEmail.trim().toLowerCase(),
+                            display_name: editAdminInputEmail.split('@')[0],
+                            role: editAdminInputRole,
+                            status: 'ACTIVE',
+                            is_primary: false,
+                          },
+                        ])
+                        setEditAdminInputEmail('')
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      background: 'var(--primary, #0284c7)',
+                      color: '#fff',
+                      border: 'none',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <UserPlus size={13} />
+                    <span>Add</span>
+                  </button>
                 </div>
               </div>
 
@@ -3878,6 +5551,7 @@ export default function OrganizationTenantStudio({
                 </button>
                 <button
                   type="submit"
+                  disabled={editOrgAdmins.filter(a => a.status === 'ACTIVE').length === 0}
                   style={{
                     padding: '8px 20px',
                     borderRadius: 8,
@@ -3887,6 +5561,7 @@ export default function OrganizationTenantStudio({
                     cursor: 'pointer',
                     fontWeight: 600,
                     fontSize: '0.82rem',
+                    opacity: editOrgAdmins.filter(a => a.status === 'ACTIVE').length === 0 ? 0.5 : 1,
                   }}
                 >
                   Save Changes
@@ -3897,7 +5572,6 @@ export default function OrganizationTenantStudio({
         </div>
       )}
 
-      {/* ========================================================================= */}
       {/* DELETE ORGANIZATION CONFIRMATION MODAL                                    */}
       {/* ========================================================================= */}
       {orgToDelete && (
