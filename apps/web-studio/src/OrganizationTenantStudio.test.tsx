@@ -248,4 +248,21 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.getByRole('button', { name: /Provision Tenant Fleet/i })).toBeDefined()
   })
 
+it('navigates to Folders & Subfolders Explorer and displays folder tree controls', async () => {
+    render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+    const foldersTab = screen.getByRole('button', { name: /Folders & Subfolders/i })
+    fireEvent.click(foldersTab)
+    expect(screen.getByRole('button', { name: /New Root Folder/i })).toBeDefined()
+    expect(screen.getByLabelText(/Select Tenant for Folders/i)).toBeDefined()
+  })
+
+  it('filters tenants by parent organization in Tenants view', async () => {
+    render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+    const tenantsTab = screen.getByRole('button', { name: /^Tenants$/i })
+    fireEvent.click(tenantsTab)
+    expect(screen.getByLabelText(/Filter by Organization/i)).toBeDefined()
+    await waitFor(() => {
+      expect(screen.getByText('Organization', { selector: 'th' })).toBeDefined()
+    })
+  })
 })

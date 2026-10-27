@@ -360,6 +360,7 @@ function App(){
  const unauthorized=useCallback(()=>{clearSession();setToken('');setTenant('');setLiveNodes([]);setTenants([])},[]);
  const changed=useCallback(()=>{fetch(`/api/v1/tenants/${tenant}/workspace/tree`,{headers:{Authorization:`Bearer ${token}`}}).then(r=>r.ok?r.json():Promise.reject(new Error(`HTTP ${r.status}`))).then(setLiveNodes).catch(e=>setWorkspaceError(String(e)))},[tenant,token]);
 
+  const [platformOrganizations, setPlatformOrganizations] = useState<Array<{ id: string; name: string; slug: string; logo_url?: string }>>([])
   const [activeOrg, setActiveOrg] = useState<{ id?: string; name: string; logo_url?: string }>(() => {
     try {
       const saved = localStorage.getItem('architectiq.active_org')
@@ -393,6 +394,7 @@ function App(){
       .then(r => r.ok ? r.json() : null)
       .then((list: Array<{ id: string; name: string; slug: string; logo_url?: string }>) => {
         if (Array.isArray(list) && list.length > 0) {
+          setPlatformOrganizations(list)
           const current = list.find(o => o.slug === 'citibank-global' || o.name.toLowerCase().includes('citibank')) || list[0]
           setActiveOrg({ id: current.id, name: current.name, logo_url: current.logo_url || undefined })
           try {
@@ -805,7 +807,42 @@ function App(){
         ) : (
           <Building2 size={13} style={{ color: 'var(--accent, #BA9731)' }} />
         )}
-        <span className="topbar-org-name">{activeOrg.name}</span>
+        <select
+          aria-label="Active customer organization selector"
+          className="topbar-tenant-select"
+          style={{ fontWeight: 600, color: 'var(--foreground)', maxWidth: 160 }}
+          value={activeOrg.id || 'all'}
+          onChange={e => {
+            const orgId = e.target.value
+            if (orgId === 'all') {
+              const allOrg = { id: undefined, name: 'All Organizations', logo_url: undefined }
+              setActiveOrg(allOrg)
+              window.dispatchEvent(new CustomEvent('architectiq:org_changed', { detail: allOrg }))
+            } else {
+              const matched = platformOrganizations.find(o => o.id === orgId)
+              if (matched) {
+                const newActive = { id: matched.id, name: matched.name, logo_url: matched.logo_url }
+                setActiveOrg(newActive)
+                try {
+                  localStorage.setItem('architectiq.active_org', JSON.stringify(newActive))
+                } catch {}
+                window.dispatchEvent(new CustomEvent('architectiq:org_changed', { detail: newActive }))
+              }
+            }
+          }}
+        >
+          <option value="all" style={{ background: 'var(--card)', color: 'var(--foreground)' }}>All Organizations</option>
+          {!platformOrganizations.some(o => o.name === activeOrg.name) && activeOrg.name !== 'All Organizations' && (
+            <option value={activeOrg.id || 'initial-org'} style={{ background: 'var(--card)', color: 'var(--foreground)' }}>
+              {activeOrg.name}
+            </option>
+          )}
+          {platformOrganizations.map(o => (
+            <option key={o.id} value={o.id} style={{ background: 'var(--card)', color: 'var(--foreground)' }}>
+              {o.name}
+            </option>
+          ))}
+        </select>
         <span className="topbar-sep">/</span>
         <select
           aria-label="Active tenant selector"

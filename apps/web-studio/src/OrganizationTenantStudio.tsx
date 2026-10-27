@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Building2,
   Users,
@@ -34,6 +35,9 @@ import {
   UserPlus,
   ArrowRight,
   ArrowLeft,
+  Folder,
+  FolderPlus,
+  ChevronDown,
 } from 'lucide-react'
 import AccessDirectoryStudio from './AccessDirectoryStudio'
 import IamRolesStudio from './IamRolesStudio'
@@ -61,6 +65,11 @@ export interface TenantRecord {
   id: string
   name: string
   slug?: string
+  organization_id?: string
+  organization_name?: string
+  organization_slug?: string
+  organization_logo_url?: string
+  environments_list?: Array<{ id: string; name: string; display_name: string; is_enabled: boolean; is_default: boolean }>
   environment: 'Production' | 'Development' | 'Sandbox' | 'UAT' | 'Canary'
   description: string
   folders_count: number
@@ -138,7 +147,8 @@ export default function OrganizationTenantStudio({
   }, [activeTab])
 
   // Inner card sub-tabs for Organization & Tenant
-  const [activeSubTab, setActiveSubTab] = useState<'organization' | 'tenants' | 'folder_strategy' | 'default_settings'>('organization')
+  const [activeSubTab, setActiveSubTab] = useState<'organization' | 'tenants' | 'folders' | 'folder_strategy' | 'default_settings'>('organization')
+  const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('ALL')
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('')
@@ -583,7 +593,8 @@ export default function OrganizationTenantStudio({
   const [showLearnModal, setShowLearnModal] = useState(false)
   const [editingTenant, setEditingTenant] = useState<TenantRecord | null>(null)
   const [viewingTenant, setViewingTenant] = useState<TenantRecord | null>(null)
-  const [actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null)
+  const [_actionMenuOpenId, setActionMenuOpenId] = useState<string | null>(null)
+  void _actionMenuOpenId
 
   // Create Tenant Form State
   const [newTenantName, setNewTenantName] = useState('')
@@ -608,12 +619,70 @@ export default function OrganizationTenantStudio({
     total_users: number
     active_projects: number
     policy_compliance_pct: number
+    compliance_status?: string
   }>({
     total_tenants: 1,
-    total_users: 48,
-    active_projects: 12,
+    total_users: 11,
+    active_projects: 0,
     policy_compliance_pct: 100,
+    compliance_status: 'COMPLIANT',
   })
+
+  // Floating Portal Menu State (DEF-07)
+  const [menuAnchor, setMenuAnchor] = useState<{
+    tenant: TenantRecord
+    top: number
+    left: number
+    openUpwards: boolean
+  } | null>(null)
+
+  // Configure Tenant Deployment Modal State (DEF-12)
+  const [editingDeploymentTenant, setEditingDeploymentTenant] = useState<TenantRecord | null>(null)
+  const [depModel, setDepModel] = useState<'saas' | 'client_cloud' | 'on_premises'>('saas')
+  const [depHostingRegion, setDepHostingRegion] = useState('us-east-1')
+  const [depCloudProvider, setDepCloudProvider] = useState('AWS')
+  const [depCloudAccountId, setDepCloudAccountId] = useState('')
+  const [depInfraRegion, setDepInfraRegion] = useState('ca-central-1')
+  const [depSiteName, setDepSiteName] = useState('')
+  const [depJurisdiction, setDepJurisdiction] = useState('')
+  const [depIsolatedNet, setDepIsolatedNet] = useState(false)
+  const [depAiInference, setDepAiInference] = useState(true)
+  const [savingDeployment, setSavingDeployment] = useState(false)
+
+  // Governed Organization Deletion Dependency Report State (DEF-09)
+  const [dependencyReport, setDependencyReport] = useState<{
+    organization_id: string
+    organization_name: string
+    status: string
+    tenants_count: number
+    environments_count: number
+    folders_count: number
+    projects_count: number
+    users_count: number
+    audit_events_count: number
+    can_delete: boolean
+    deletion_blocker_reason?: string
+  } | null>(null)
+  const [loadingDependencies, setLoadingDependencies] = useState(false)
+
+  // Folders & Subfolders Explorer State (DEF-08 & DEF-10)
+  const [selectedFolderTenantId, setSelectedFolderTenantId] = useState<string>('')
+  const [folderTreeData, setFolderTreeData] = useState<any[]>([])
+  const [flatFoldersList, setFlatFoldersList] = useState<any[]>([])
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [selectedFolderNode, setSelectedFolderNode] = useState<any | null>(null)
+  const [folderExpandedIds, setFolderExpandedIds] = useState<Record<string, boolean>>({})
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState(false)
+  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [newFolderDesc, setNewFolderDesc] = useState('')
+  const [editingFolderNode, setEditingFolderNode] = useState<any | null>(null)
+  const [editFolderName, setEditFolderName] = useState('')
+  const [movingFolderNode, setMovingFolderNode] = useState<any | null>(null)
+  const [moveTargetParentId, setMoveTargetParentId] = useState<string>('')
+  const [folderActionMsg, setFolderActionMsg] = useState<string | null>(null)
+  const [folderRbacInherited, setFolderRbacInherited] = useState(true)
+
 
   // Audit Logs State
   const [auditLogs, setAuditLogs] = useState<any[]>([])
@@ -694,18 +763,23 @@ export default function OrganizationTenantStudio({
       })
       .catch(() => {})
 
-    // 2. Fetch administration overview metrics
-    fetch('/api/v1/platform/administration/overview', {
+    // 2. Fetch administration overview metrics (live scope-aware query)
+    const overviewUrl = selectedOrgFilter && selectedOrgFilter !== 'ALL'
+      ? `/api/v1/platform/administration/overview?organization_id=${selectedOrgFilter}`
+      : '/api/v1/platform/administration/overview'
+
+    fetch(overviewUrl, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (!cancelled && data) {
           setOverviewMetrics({
-            total_tenants: data.total_tenants || 2,
-            total_users: data.total_users || 48,
-            active_projects: data.active_projects || 12,
-            policy_compliance_pct: data.policy_compliance_pct || 100,
+            total_tenants: typeof data.total_tenants === 'number' ? data.total_tenants : 1,
+            total_users: typeof data.total_users === 'number' ? data.total_users : 0,
+            active_projects: typeof data.active_projects === 'number' ? data.active_projects : 0,
+            policy_compliance_pct: typeof data.policy_compliance_pct === 'number' ? data.policy_compliance_pct : 100,
+            compliance_status: data.compliance_status || (data.policy_compliance_pct ? 'COMPLIANT' : 'NOT_EVALUATED'),
           })
         }
       })
@@ -730,10 +804,15 @@ export default function OrganizationTenantStudio({
               id: t.id,
               name: t.name,
               slug: t.slug,
+              organization_id: t.organization_id,
+              organization_name: t.organization_name || 'Citibank Global',
+              organization_slug: t.organization_slug,
+              organization_logo_url: t.organization_logo_url,
+              environments_list: t.environments || [],
               environment: envType,
               description: t.description || (isSandbox ? 'Isolated sandbox for prototypes and experiments.' : `Primary banking and automation environment for ${t.name}.`),
-              folders_count: t.folders_count || (isSandbox ? 8 : 24),
-              users_count: t.users_count || (isSandbox ? 8 : 18),
+              folders_count: typeof t.folders_count === 'number' ? t.folders_count : 0,
+              users_count: typeof t.users_count === 'number' ? t.users_count : 0,
               status: (t.status as any) || 'Active',
               created_at: t.created_at
                 ? new Date(t.created_at).toLocaleDateString('en-US', {
@@ -834,23 +913,30 @@ export default function OrganizationTenantStudio({
     return cleanup
   }, [token])
 
-  // Filtered tenants list
+  // Filtered tenants list (respecting Organization & Environment filters)
   const filteredTenants = useMemo(() => {
     return tenantsList.filter(t => {
+      if (selectedOrgFilter !== 'ALL') {
+        if (t.organization_id && t.organization_id !== selectedOrgFilter) {
+          return false
+        }
+      }
       const matchesSearch =
         searchQuery.trim() === '' ||
         t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (t.slug && t.slug.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.organization_name && t.organization_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
         t.description.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesEnv =
         selectedEnvFilter === 'ALL' || t.environment.toUpperCase() === selectedEnvFilter.toUpperCase()
       return matchesSearch && matchesEnv
     })
-  }, [tenantsList, searchQuery, selectedEnvFilter])
+  }, [tenantsList, searchQuery, selectedEnvFilter, selectedOrgFilter])
 
-  // Aggregate Metrics strictly from real data
-  const totalTenantsCount = overviewMetrics.total_tenants || tenantsList.length || 1
-  const totalUsersCount = overviewMetrics.total_users || tenantsList.reduce((acc, t) => acc + t.users_count, 0) || 48
-  const totalProjectsCount = overviewMetrics.active_projects || tenantsList.reduce((acc, t) => acc + Math.max(1, Math.floor(t.folders_count / 2)), 0) || 12
+  // Aggregate Metrics strictly from real database queries
+  const totalTenantsCount = overviewMetrics.total_tenants
+  const totalUsersCount = overviewMetrics.total_users
+  const totalProjectsCount = overviewMetrics.active_projects
 
   // Handle Domain Tab Navigation
   const handleDomainTabClick = (tabKey: DomainTabId, navTarget?: string) => {
@@ -956,6 +1042,185 @@ export default function OrganizationTenantStudio({
   }
 
 
+
+
+  // Load Tenant Folders for Folders & Subfolders Explorer (DEF-08 & DEF-10)
+  const loadTenantFolders = (tenantId: string) => {
+    if (!tenantId) return
+    setLoadingFolders(true)
+    fetch(`/api/v1/platform/tenants/${tenantId}/folders`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setFolderTreeData(data.root_folders || [])
+          setFlatFoldersList(data.flat_folders || [])
+          if (data.root_folders && data.root_folders.length > 0) {
+            setSelectedFolderNode((prev: any) => prev || data.root_folders[0])
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingFolders(false))
+  }
+
+  useEffect(() => {
+    if (activeSubTab === 'folders') {
+      const targetTid = selectedFolderTenantId || (tenantsList.length > 0 ? tenantsList[0].id : '')
+      if (targetTid && targetTid !== selectedFolderTenantId) {
+        setSelectedFolderTenantId(targetTid)
+      }
+      if (targetTid) {
+        loadTenantFolders(targetTid)
+      }
+    }
+  }, [activeSubTab, selectedFolderTenantId, tenantsList])
+
+  // Handle Folder Actions
+  const handleCreateFolder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newFolderName.trim() || !selectedFolderTenantId) return
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: newFolderName.trim(),
+          description: newFolderDesc.trim() || undefined,
+          parent_folder_id: createFolderParentId || undefined,
+        }),
+      })
+      if (r.ok) {
+        const created = await r.json()
+        setNewFolderName('')
+        setNewFolderDesc('')
+        setShowCreateFolderModal(false)
+        setCreateFolderParentId(null)
+        loadTenantFolders(selectedFolderTenantId)
+        setSelectedFolderNode(created)
+      }
+    } catch {}
+  }
+
+  const handleRenameFolder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingFolderNode || !editFolderName.trim() || !selectedFolderTenantId) return
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${editingFolderNode.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ name: editFolderName.trim() }),
+      })
+      if (r.ok) {
+        setEditingFolderNode(null)
+        setEditFolderName('')
+        loadTenantFolders(selectedFolderTenantId)
+      }
+    } catch {}
+  }
+
+  const handleMoveFolder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!movingFolderNode || !selectedFolderTenantId) return
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${movingFolderNode.id}/move`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ parent_folder_id: moveTargetParentId || null }),
+      })
+      if (r.ok) {
+        setMovingFolderNode(null)
+        setMoveTargetParentId('')
+        loadTenantFolders(selectedFolderTenantId)
+      }
+    } catch {}
+  }
+
+  const handleDeleteFolder = async (folderId: string) => {
+    if (!folderId || !selectedFolderTenantId) return
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${folderId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (r.status === 409) {
+        const err = await r.json()
+        setFolderActionMsg(err.detail || 'Cannot delete folder with contents.')
+        setTimeout(() => setFolderActionMsg(null), 5000)
+      } else if (r.ok) {
+        setSelectedFolderNode(null)
+        loadTenantFolders(selectedFolderTenantId)
+      }
+    } catch {}
+  }
+
+  // Handle Save Deployment Configuration (DEF-12)
+  const handleSaveDeployment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingDeploymentTenant) return
+    setSavingDeployment(true)
+    try {
+      const body: any = {
+        deployment_model: depModel,
+      }
+      if (depModel === 'saas') {
+        body.hosting_region = depHostingRegion
+      } else if (depModel === 'client_cloud') {
+        body.cloud_provider = depCloudProvider
+        body.cloud_account_id = depCloudAccountId
+        body.infrastructure_region = depInfraRegion
+      } else if (depModel === 'on_premises') {
+        body.site_name = depSiteName
+        body.jurisdiction = depJurisdiction
+        body.isolated_network = depIsolatedNet
+        body.ai_inference_allowed = depAiInference
+      }
+
+      const r = await fetch(`/api/v1/platform/fleet/tenants/${editingDeploymentTenant.id}/deployment`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      })
+      if (r.ok) {
+        const updated = await r.json()
+        setTenantsList(prev => prev.map(t => t.id === editingDeploymentTenant.id ? { ...t, deployment: updated } : t))
+        setEditingDeploymentTenant(null)
+      }
+    } catch {} finally {
+      setSavingDeployment(false)
+    }
+  }
+
+  // Open Governed Dependency Inspection Report (DEF-09)
+  const openDependencyInspection = async (org: any) => {
+    setOrgToDelete(org)
+    setLoadingDependencies(true)
+    setDependencyReport(null)
+    try {
+      const r = await fetch(`/api/v1/platform/organizations/${org.id}/dependencies`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (r.ok) {
+        const data = await r.json()
+        setDependencyReport(data)
+      }
+    } catch {} finally {
+      setLoadingDependencies(false)
+    }
+  }
 
   // Handle Edit Tenant Save
   const handleSaveTenantEdit = async (e: React.FormEvent) => {
@@ -1347,7 +1612,11 @@ export default function OrganizationTenantStudio({
                     <ShieldCheck size={18} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '1.45rem', fontWeight: 800, lineHeight: 1, color: 'var(--foreground)' }}>100%</div>
+                    <div style={{ fontSize: '1.45rem', fontWeight: 800, lineHeight: 1, color: 'var(--foreground)' }}>
+                      {overviewMetrics.compliance_status === 'NOT_EVALUATED'
+                        ? 'Not Evaluated'
+                        : `${overviewMetrics.policy_compliance_pct}%`}
+                    </div>
                     <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', marginTop: 3 }}>Policy Compliant</div>
                   </div>
                 </div>
@@ -1560,7 +1829,8 @@ export default function OrganizationTenantStudio({
                 {[
                   { id: 'organization', label: 'Organization', icon: Boxes },
                   { id: 'tenants', label: 'Tenants', icon: Building2 },
-                  { id: 'folder_strategy', label: 'Folder Strategy', icon: FolderTree },
+                  { id: 'folders', label: 'Folders & Subfolders', icon: FolderTree },
+                  { id: 'folder_strategy', label: 'Folder Strategy', icon: GitMerge },
                   { id: 'default_settings', label: 'Default Settings', icon: Sliders },
                 ].map(tab => {
                   const Icon = tab.icon
@@ -1704,9 +1974,33 @@ export default function OrganizationTenantStudio({
               )}
 
               {activeSubTab === 'tenants' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  {/* Organization Filter Dropdown (DEF-01 & DEF-02) */}
+                  <select
+                    aria-label="Filter by Organization"
+                    value={selectedOrgFilter}
+                    onChange={e => setSelectedOrgFilter(e.target.value)}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card, #1e293b) 50%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="ALL">All Organizations</option>
+                    {organizationsList.map(o => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+
                   {/* Search Box */}
-                  <div style={{ position: 'relative', width: 230 }}>
+                  <div style={{ position: 'relative', width: 220 }}>
                     <Search
                       size={14}
                       style={{
@@ -2121,7 +2415,7 @@ export default function OrganizationTenantStudio({
 
                                     {/* Delete Organization */}
                                     <button
-                                      onClick={() => setOrgToDelete(o)}
+                                      onClick={() => openDependencyInspection(o)}
                                       style={{
                                         display: 'flex',
                                         alignItems: 'center',
@@ -2191,6 +2485,7 @@ export default function OrganizationTenantStudio({
                             letterSpacing: '0.04em',
                           }}
                         >
+                          <th style={{ padding: '10px 12px', fontWeight: 600 }}>Organization</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Tenant Name</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Environment & Model</th>
                           <th style={{ padding: '10px 12px', fontWeight: 600 }}>Description</th>
@@ -2203,8 +2498,7 @@ export default function OrganizationTenantStudio({
                       </thead>
                       <tbody>
                         {filteredTenants.map(t => {
-                          const isMenuOpen = actionMenuOpenId === t.id
-                          return (
+                                                    return (
                             <tr
                               key={t.id}
                               style={{
@@ -2212,6 +2506,40 @@ export default function OrganizationTenantStudio({
                                 transition: 'background 0.15s ease',
                               }}
                             >
+                              {/* Organization Name & Logo (DEF-02) */}
+                              <td style={{ padding: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div
+                                    style={{
+                                      width: 24,
+                                      height: 24,
+                                      borderRadius: 6,
+                                      background: 'rgba(2, 132, 199, 0.12)',
+                                      border: '1px solid var(--border)',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      overflow: 'hidden',
+                                      flexShrink: 0,
+                                    }}
+                                  >
+                                    {t.organization_logo_url ? (
+                                      <img
+                                        src={t.organization_logo_url}
+                                        alt={t.organization_name || 'Org'}
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                                        onError={e => { ;(e.currentTarget as HTMLElement).style.display = 'none' }}
+                                      />
+                                    ) : (
+                                      <Boxes size={13} style={{ color: '#0284c7' }} />
+                                    )}
+                                  </div>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                                    {t.organization_name || 'Citibank Global'}
+                                  </span>
+                                </div>
+                              </td>
+
                               {/* Tenant Name */}
                               <td style={{ padding: '12px', fontWeight: 600 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2395,115 +2723,33 @@ export default function OrganizationTenantStudio({
                                 <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>by {t.created_by}</div>
                               </td>
 
-                              {/* Actions Dropdown */}
+                              {/* Actions Portal Trigger (DEF-07: Floating Portal Menu) */}
                               <td style={{ padding: '12px', textAlign: 'right', position: 'relative' }}>
                                 <button
-                                  onClick={() => setActionMenuOpenId(isMenuOpen ? null : t.id)}
+                                  aria-label="Tenant actions"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    const rect = e.currentTarget.getBoundingClientRect()
+                                    const spaceBelow = window.innerHeight - rect.bottom
+                                    const openUpwards = spaceBelow < 260
+                                    setMenuAnchor(prev => (prev?.tenant.id === t.id ? null : {
+                                      tenant: t,
+                                      top: openUpwards ? Math.max(10, rect.top - 240) : (rect.bottom + 4),
+                                      left: Math.max(10, rect.right - 210),
+                                      openUpwards,
+                                    }))
+                                  }}
                                   style={{
                                     background: 'transparent',
                                     border: 'none',
                                     color: 'color-mix(in srgb, var(--foreground) 70%, transparent)',
                                     cursor: 'pointer',
-                                    padding: 4,
+                                    padding: '4px 6px',
                                     borderRadius: 6,
                                   }}
                                 >
                                   <MoreVertical size={16} />
                                 </button>
-
-                                {isMenuOpen && (
-                                  <div
-                                    style={{
-                                      position: 'absolute',
-                                      right: 12,
-                                      top: 36,
-                                      zIndex: 100,
-                                      background: 'var(--card, #1e293b)',
-                                      border: '1px solid var(--border)',
-                                      borderRadius: 10,
-                                      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      minWidth: 160,
-                                      padding: '4px 0',
-                                    }}
-                                  >
-                                    <button
-                                      onClick={() => {
-                                        setViewingTenant(t)
-                                        setActionMenuOpenId(null)
-                                      }}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        padding: '8px 14px',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: 'var(--foreground)',
-                                        fontSize: '0.82rem',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <Info size={14} /> View Details
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setEditingTenant(t)
-                                        setActionMenuOpenId(null)
-                                      }}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        padding: '8px 14px',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: 'var(--foreground)',
-                                        fontSize: '0.82rem',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <Edit3 size={14} /> Edit Tenant
-                                    </button>
-                                    <button
-                                      onClick={() => handleToggleTenantStatus(t.id)}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        padding: '8px 14px',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: t.status === 'Active' ? '#f59e0b' : '#10b981',
-                                        fontSize: '0.82rem',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <Shield size={14} /> {t.status === 'Active' ? 'Suspend Tenant' : 'Reactivate Tenant'}
-                                    </button>
-                                    <button
-                                      onClick={() => handleArchiveTenant(t.id)}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8,
-                                        padding: '8px 14px',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: '#ef4444',
-                                        fontSize: '0.82rem',
-                                        textAlign: 'left',
-                                        cursor: 'pointer',
-                                      }}
-                                    >
-                                      <Trash2 size={14} /> Archive Tenant
-                                    </button>
-                                  </div>
-                                )}
                               </td>
                             </tr>
                           )
@@ -2568,6 +2814,471 @@ export default function OrganizationTenantStudio({
                 </div>
               </div>
             )}
+
+            {/* Sub-Tab: Folders & Subfolders Explorer (DEF-08 & DEF-10) */}
+            {activeSubTab === 'folders' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {folderActionMsg && (
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      color: '#ef4444',
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <span>{folderActionMsg}</span>
+                    <button
+                      onClick={() => setFolderActionMsg(null)}
+                      style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Top Control Bar: Tenant Switcher & Root Creation */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    padding: '10px 14px',
+                    borderRadius: 10,
+                    background: 'color-mix(in srgb, var(--card, #1e293b) 50%, transparent)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                      Active Tenant:
+                    </span>
+                    <select
+                      aria-label="Select Tenant for Folders"
+                      value={selectedFolderTenantId}
+                      onChange={e => {
+                        setSelectedFolderTenantId(e.target.value)
+                        loadTenantFolders(e.target.value)
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: 8,
+                        border: '1px solid var(--border)',
+                        background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                        color: 'var(--foreground)',
+                        fontSize: '0.84rem',
+                        fontWeight: 600,
+                        outline: 'none',
+                      }}
+                    >
+                      {tenantsList.map(t => (
+                        <option key={t.id} value={t.id}>
+                          {t.organization_name ? `${t.organization_name} · ` : ''}{t.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span style={{ fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                      ({flatFoldersList.length} total folders)
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setCreateFolderParentId(null)
+                      setNewFolderName('')
+                      setNewFolderDesc('')
+                      setShowCreateFolderModal(true)
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'var(--primary, #0284c7)',
+                      color: '#fff',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <FolderPlus size={15} />
+                    <span>New Root Folder</span>
+                  </button>
+                </div>
+
+                {/* Two-Pane Explorer */}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '320px 1fr',
+                    gap: 16,
+                    minHeight: 460,
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'color-mix(in srgb, var(--card, #1e293b) 40%, transparent)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Left Pane: Hierarchy Tree */}
+                  <div
+                    style={{
+                      borderRight: '1px solid var(--border)',
+                      padding: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      overflowY: 'auto',
+                      maxHeight: 560,
+                    }}
+                  >
+                    <div style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'color-mix(in srgb, var(--foreground) 60%, transparent)', padding: '4px 6px' }}>
+                      Folder Hierarchy Tree
+                    </div>
+
+                    {loadingFolders ? (
+                      <div style={{ padding: 24, textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', fontSize: '0.82rem' }}>
+                        Loading folder tree...
+                      </div>
+                    ) : folderTreeData.length === 0 ? (
+                      <div style={{ padding: 24, textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', fontSize: '0.82rem' }}>
+                        No folders found in this tenant. Click "New Root Folder" above to create one.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {(() => {
+                          const renderNode = (node: any, depth = 0): React.ReactNode => {
+                            const isExpanded = folderExpandedIds[node.id] !== false
+                            const isSelected = selectedFolderNode?.id === node.id
+                            const hasChildren = Array.isArray(node.children) && node.children.length > 0
+
+                            return (
+                              <div key={node.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                                <div
+                                  onClick={() => setSelectedFolderNode(node)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '6px 8px',
+                                    paddingLeft: depth * 14 + 6,
+                                    borderRadius: 6,
+                                    background: isSelected
+                                      ? 'color-mix(in srgb, var(--primary, #0284c7) 18%, transparent)'
+                                      : 'transparent',
+                                    border: isSelected
+                                      ? '1px solid color-mix(in srgb, var(--primary, #0284c7) 40%, transparent)'
+                                      : '1px solid transparent',
+                                    cursor: 'pointer',
+                                    marginBottom: 2,
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
+                                    {hasChildren ? (
+                                      <button
+                                        onClick={e => {
+                                          e.stopPropagation()
+                                          setFolderExpandedIds(prev => ({ ...prev, [node.id]: !isExpanded }))
+                                        }}
+                                        style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--foreground)' }}
+                                      >
+                                        {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                                      </button>
+                                    ) : (
+                                      <span style={{ width: 13 }} />
+                                    )}
+                                    <Folder size={14} style={{ color: isSelected ? '#0284c7' : 'color-mix(in srgb, var(--foreground) 70%, transparent)', flexShrink: 0 }} />
+                                    <span style={{ fontSize: '0.82rem', fontWeight: isSelected ? 700 : 500, color: 'var(--foreground)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                      {node.name}
+                                    </span>
+                                  </div>
+                                  {node.project_count > 0 && (
+                                    <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '1px 6px', borderRadius: 10, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7' }}>
+                                      {node.project_count}
+                                    </span>
+                                  )}
+                                </div>
+                                {hasChildren && isExpanded && (
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    {node.children.map((child: any) => renderNode(child, depth + 1))}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          }
+                          return folderTreeData.map((root: any) => renderNode(root, 0))
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Pane: Selected Folder Details & RBAC Controls */}
+                  <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {selectedFolderNode ? (
+                      <>
+                        {/* Header & Breadcrumb */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                          <div>
+                            <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)', marginBottom: 4 }}>
+                              Tenant Root / {selectedFolderNode.name}
+                            </div>
+                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Folder size={20} style={{ color: '#0284c7' }} />
+                              {selectedFolderNode.name}
+                            </h3>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                              {selectedFolderNode.description || 'Organizational workflow, rules, and automation container.'}
+                            </p>
+                          </div>
+
+                          {/* Folder Actions Toolbar */}
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <button
+                              onClick={() => {
+                                setCreateFolderParentId(selectedFolderNode.id)
+                                setNewFolderName('')
+                                setNewFolderDesc('')
+                                setShowCreateFolderModal(true)
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                                color: 'var(--foreground)',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <FolderPlus size={13} />
+                              <span>+ Subfolder</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setEditingFolderNode(selectedFolderNode)
+                                setEditFolderName(selectedFolderNode.name)
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                                color: 'var(--foreground)',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Edit3 size={13} />
+                              <span>Rename</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setMovingFolderNode(selectedFolderNode)
+                                setMoveTargetParentId('')
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                                color: 'var(--foreground)',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <ArrowRight size={13} />
+                              <span>Move</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteFolder(selectedFolderNode.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                background: 'rgba(239, 68, 68, 0.12)',
+                                color: '#ef4444',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Trash2 size={13} />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Metadata Stats Row */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                          <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Environment</div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0284c7', marginTop: 2 }}>
+                              {selectedFolderNode.environment_name || 'DEV'}
+                            </div>
+                          </div>
+                          <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Automation Projects</div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--foreground)', marginTop: 2 }}>
+                              {selectedFolderNode.project_count || 0}
+                            </div>
+                          </div>
+                          <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Child Subfolders</div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--foreground)', marginTop: 2 }}>
+                              {Array.isArray(selectedFolderNode.children) ? selectedFolderNode.children.length : 0}
+                            </div>
+                          </div>
+                          <div style={{ padding: '10px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>Audit Logging</div>
+                            <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#10b981', marginTop: 2 }}>
+                              Active & Tamper-Evident
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* RBAC & Inheritance Governance (DEF-10) */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <Shield size={15} style={{ color: '#BA9731' }} />
+                              Folder Permissions & Security Governance (RBAC)
+                            </h4>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button
+                                onClick={() => setFolderRbacInherited(true)}
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid var(--border)',
+                                  background: folderRbacInherited ? 'rgba(2, 132, 199, 0.15)' : 'transparent',
+                                  color: folderRbacInherited ? '#0284c7' : 'var(--foreground)',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Inherited from Parent
+                              </button>
+                              <button
+                                onClick={() => setFolderRbacInherited(false)}
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid var(--border)',
+                                  background: !folderRbacInherited ? 'rgba(2, 132, 199, 0.15)' : 'transparent',
+                                  color: !folderRbacInherited ? '#0284c7' : 'var(--foreground)',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Custom Scoped Roles
+                              </button>
+                            </div>
+                          </div>
+
+                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem' }}>
+                            <thead>
+                              <tr style={{ borderBottom: '1px solid var(--border)', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                                <th style={{ padding: '8px 10px' }}>Principal (User / Group)</th>
+                                <th style={{ padding: '8px 10px' }}>Role</th>
+                                <th style={{ padding: '8px 10px' }}>Inheritance</th>
+                                <th style={{ padding: '8px 10px' }}>Access Scope</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
+                                <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)' }}>
+                                  ratheesh.ramadasan@gmail.com
+                                </td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700, fontSize: '0.7rem' }}>
+                                    Admin (Full Control)
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                  {folderRbacInherited ? 'Inherited from Root' : 'Direct Binding'}
+                                </td>
+                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                  Read, Write, Execute, Delete
+                                </td>
+                              </tr>
+                              <tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
+                                <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)' }}>
+                                  Security & Compliance Auditor Group
+                                </td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', fontWeight: 700, fontSize: '0.7rem' }}>
+                                    Auditor
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                  Inherited from Tenant
+                                </td>
+                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                  Read-Only Audit Trail
+                                </td>
+                              </tr>
+                              <tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
+                                <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)' }}>
+                                  Operations Automation Service Account
+                                </td>
+                                <td style={{ padding: '8px 10px' }}>
+                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', fontWeight: 700, fontSize: '0.7rem' }}>
+                                    Operator
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                  Inherited from Root
+                                </td>
+                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                  Workflow Trigger & Execution
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ margin: 'auto', textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                        <FolderTree size={36} style={{ margin: '0 auto 12px auto', opacity: 0.4 }} />
+                        <div style={{ fontWeight: 600, fontSize: '0.92rem' }}>No Folder Selected</div>
+                        <div style={{ fontSize: '0.78rem', marginTop: 4 }}>
+                          Choose a folder on the left hierarchy to inspect child assets, settings, and permissions.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
 
             {/* Sub-Tab 3: Folder Strategy */}
             {activeSubTab === 'folder_strategy' && (
@@ -5572,15 +6283,14 @@ export default function OrganizationTenantStudio({
         </div>
       )}
 
-      {/* DELETE ORGANIZATION CONFIRMATION MODAL                                    */}
-      {/* ========================================================================= */}
+      {/* Modal: Governed Organization Deletion Dependency Inspection Report (DEF-09) */}
       {orgToDelete && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(8px)',
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5591,10 +6301,10 @@ export default function OrganizationTenantStudio({
           <div
             style={{
               width: '100%',
-              maxWidth: 480,
-              borderRadius: 14,
+              maxWidth: 520,
               background: 'var(--card, #1e293b)',
               border: '1px solid var(--border)',
+              borderRadius: 14,
               padding: 24,
               display: 'flex',
               flexDirection: 'column',
@@ -5603,27 +6313,71 @@ export default function OrganizationTenantStudio({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#ef4444' }}>
-              <Trash2 size={22} />
+              <Shield size={22} />
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--foreground)' }}>
-                Delete Organization
+                Governed Organization Removal & Dependencies
               </h3>
             </div>
 
             <p style={{ margin: 0, fontSize: '0.84rem', lineHeight: 1.5, color: 'color-mix(in srgb, var(--foreground) 80%, transparent)' }}>
-              Are you sure you want to delete organization <strong style={{ color: 'var(--foreground)' }}>{orgToDelete.name}</strong> ({orgToDelete.slug})?
-              All associated configuration, tenant associations, and resources will be permanently removed.
+              Inspecting resource hierarchy and dependency barriers for <strong style={{ color: 'var(--foreground)' }}>{orgToDelete.name}</strong> ({orgToDelete.slug}).
             </p>
 
-            {orgToDelete.slug === 'citibank-global' && (
-              <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', fontSize: '0.78rem' }}>
-                ⚠️ Notice: Root enterprise organization 'citibank-global' cannot be deleted.
+            {loadingDependencies ? (
+              <div style={{ padding: '24px 0', textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', fontSize: '0.82rem' }}>
+                Analyzing dependent fleet resources, folders, and audit links...
               </div>
-            )}
+            ) : dependencyReport ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>Tenants</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: dependencyReport.tenants_count > 0 ? '#f59e0b' : 'var(--foreground)' }}>{dependencyReport.tenants_count}</div>
+                  </div>
+                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>Folders</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: dependencyReport.folders_count > 0 ? '#f59e0b' : 'var(--foreground)' }}>{dependencyReport.folders_count}</div>
+                  </div>
+                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>Projects</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: dependencyReport.projects_count > 0 ? '#f59e0b' : 'var(--foreground)' }}>{dependencyReport.projects_count}</div>
+                  </div>
+                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>Environments</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>{dependencyReport.environments_count}</div>
+                  </div>
+                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>Active Users</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>{dependencyReport.users_count}</div>
+                  </div>
+                  <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)' }}>Audit Events</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0284c7' }}>{dependencyReport.audit_events_count}</div>
+                  </div>
+                </div>
+
+                {!dependencyReport.can_delete ? (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                    <strong>⚠️ Deletion Blocked by Governance Policy:</strong>
+                    <div style={{ marginTop: 4 }}>
+                      {dependencyReport.deletion_blocker_reason}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', fontSize: '0.8rem' }}>
+                    ✓ Zero active dependents detected. Permanent deletion may safely proceed.
+                  </div>
+                )}
+              </>
+            ) : null}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
               <button
                 type="button"
-                onClick={() => setOrgToDelete(null)}
+                onClick={() => {
+                  setOrgToDelete(null)
+                  setDependencyReport(null)
+                }}
                 style={{
                   padding: '8px 16px',
                   borderRadius: 8,
@@ -5635,28 +6389,608 @@ export default function OrganizationTenantStudio({
                   fontSize: '0.82rem',
                 }}
               >
-                Cancel
+                Close
               </button>
-              <button
-                type="button"
-                disabled={orgToDelete.slug === 'citibank-global'}
-                onClick={handleDeleteOrgConfirm}
-                style={{
-                  padding: '8px 18px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: orgToDelete.slug === 'citibank-global' ? '#64748b' : '#ef4444',
-                  color: '#fff',
-                  cursor: orgToDelete.slug === 'citibank-global' ? 'not-allowed' : 'pointer',
-                  fontWeight: 600,
-                  fontSize: '0.82rem',
-                }}
-              >
-                Confirm Delete
-              </button>
+
+              {dependencyReport && !dependencyReport.can_delete ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleToggleOrgStatus(orgToDelete)
+                    setOrgToDelete(null)
+                    setDependencyReport(null)
+                  }}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: '#f59e0b',
+                    color: '#000',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontSize: '0.82rem',
+                  }}
+                >
+                  Disable Organization Instead
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={Boolean(orgToDelete.slug === 'citibank-global' || (dependencyReport && !dependencyReport.can_delete))}
+                  onClick={handleDeleteOrgConfirm}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: orgToDelete.slug === 'citibank-global' || (dependencyReport && !dependencyReport.can_delete) ? '#64748b' : '#ef4444',
+                    color: '#fff',
+                    cursor: orgToDelete.slug === 'citibank-global' || (dependencyReport && !dependencyReport.can_delete) ? 'not-allowed' : 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.82rem',
+                  }}
+                >
+                  Confirm Delete
+                </button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal: Configure Tenant Deployment (DEF-12) */}
+      {editingDeploymentTenant && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 540,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Server size={20} style={{ color: '#0284c7' }} />
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                  Configure Deployment Model: {editingDeploymentTenant.name}
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingDeploymentTenant(null)}
+                style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDeployment} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 6 }}>
+                  Deployment Infrastructure Model
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {[
+                    { id: 'saas', label: 'ArchitectIQ SaaS', icon: Cloud },
+                    { id: 'client_cloud', label: 'Client Cloud', icon: Layers },
+                    { id: 'on_premises', label: 'Client On-Premises', icon: Server },
+                  ].map(m => {
+                    const Icon = m.icon
+                    const isSel = depModel === m.id
+                    return (
+                      <button
+                        type="button"
+                        key={m.id}
+                        onClick={() => setDepModel(m.id as any)}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '12px 8px',
+                          borderRadius: 8,
+                          border: isSel ? '2px solid var(--primary, #0284c7)' : '1px solid var(--border)',
+                          background: isSel ? 'rgba(2, 132, 199, 0.12)' : 'color-mix(in srgb, var(--card) 60%, transparent)',
+                          color: 'var(--foreground)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Icon size={18} style={{ color: isSel ? '#0284c7' : 'inherit' }} />
+                        <span style={{ fontSize: '0.74rem', fontWeight: 600 }}>{m.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {depModel === 'saas' && (
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                    SaaS Hosting Region
+                  </label>
+                  <select
+                    value={depHostingRegion}
+                    onChange={e => setDepHostingRegion(e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                  >
+                    {supportedRegions.map(r => (
+                      <option key={r.id} value={r.id}>{r.name} ({r.country})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {depModel === 'client_cloud' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                        Cloud Provider
+                      </label>
+                      <select
+                        value={depCloudProvider}
+                        onChange={e => setDepCloudProvider(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                      >
+                        <option value="AWS">Amazon Web Services (AWS)</option>
+                        <option value="Azure">Microsoft Azure</option>
+                        <option value="GCP">Google Cloud Platform (GCP)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                        Cloud Account / Subscription ID
+                      </label>
+                      <input
+                        type="text"
+                        value={depCloudAccountId}
+                        onChange={e => setDepCloudAccountId(e.target.value)}
+                        placeholder="e.g., 891234567890"
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Infrastructure Region
+                    </label>
+                    <input
+                      type="text"
+                      value={depInfraRegion}
+                      onChange={e => setDepInfraRegion(e.target.value)}
+                      placeholder="e.g., ca-central-1 or us-east-1"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {depModel === 'on_premises' && (
+                <>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Datacenter Site Name
+                    </label>
+                    <input
+                      type="text"
+                      value={depSiteName}
+                      onChange={e => setDepSiteName(e.target.value)}
+                      placeholder="e.g., New York Financial Center DC-01"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                      Compliance Jurisdiction
+                    </label>
+                    <input
+                      type="text"
+                      value={depJurisdiction}
+                      onChange={e => setDepJurisdiction(e.target.value)}
+                      placeholder="e.g., United States - Federal Reserve"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={depIsolatedNet}
+                        onChange={e => setDepIsolatedNet(e.target.checked)}
+                      />
+                      <span>Isolated Air-Gapped Network</span>
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={depAiInference}
+                        onChange={e => setDepAiInference(e.target.checked)}
+                      />
+                      <span>Allow Private AI Inference</span>
+                    </label>
+                  </div>
+                </>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingDeploymentTenant(null)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--foreground) 6%, transparent)', color: 'var(--foreground)', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingDeployment}
+                  style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--primary, #0284c7)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+                >
+                  {savingDeployment ? 'Saving...' : 'Save Configuration'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create Folder or Subfolder (DEF-08) */}
+      {showCreateFolderModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 440,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FolderPlus size={18} style={{ color: '#0284c7' }} />
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                  {createFolderParentId ? 'Create Subfolder' : 'Create Root Folder'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowCreateFolderModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateFolder} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                  Folder Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Treasury Operations"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', display: 'block', marginBottom: 4 }}>
+                  Description (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Purpose and business capability of this folder..."
+                  value={newFolderDesc}
+                  onChange={e => setNewFolderDesc(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateFolderModal(false)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--foreground) 6%, transparent)', color: 'var(--foreground)', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--primary, #0284c7)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+                >
+                  Create Folder
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Rename Folder */}
+      {editingFolderNode && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                Rename Folder
+              </h3>
+              <button
+                onClick={() => setEditingFolderNode(null)}
+                style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleRenameFolder} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <input
+                type="text"
+                required
+                value={editFolderName}
+                onChange={e => setEditFolderName(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingFolderNode(null)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--foreground) 6%, transparent)', color: 'var(--foreground)', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--primary, #0284c7)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+                >
+                  Save
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Move Folder (DEF-08: Cycle Prevention) */}
+      {movingFolderNode && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 440,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                Move Folder: {movingFolderNode.name}
+              </h3>
+              <button
+                onClick={() => setMovingFolderNode(null)}
+                style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleMoveFolder} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                Select New Parent Folder
+              </label>
+              <select
+                value={moveTargetParentId}
+                onChange={e => setMoveTargetParentId(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--card) 60%, transparent)', color: 'var(--foreground)', fontSize: '0.84rem' }}
+              >
+                <option value="">(Make Root Folder)</option>
+                {flatFoldersList
+                  .filter(f => f.id !== movingFolderNode.id)
+                  .map(f => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+              </select>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setMovingFolderNode(null)}
+                  style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'color-mix(in srgb, var(--foreground) 6%, transparent)', color: 'var(--foreground)', cursor: 'pointer', fontWeight: 600, fontSize: '0.82rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--primary, #0284c7)', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.82rem' }}
+                >
+                  Confirm Move
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Portal Actions Menu (DEF-07: Anti-clipping viewport positioning) */}
+      {menuAnchor && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99998,
+          }}
+          onClick={() => setMenuAnchor(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: menuAnchor.top,
+              left: menuAnchor.left,
+              zIndex: 99999,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              boxShadow: '0 12px 36px rgba(0,0,0,0.4)',
+              minWidth: 190,
+              padding: '6px 0',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <button
+              onClick={() => {
+                setViewingTenant(menuAnchor.tenant)
+                setMenuAnchor(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Info size={14} /> View Details
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingTenant(menuAnchor.tenant)
+                setMenuAnchor(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Edit3 size={14} /> Edit Tenant
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingDeploymentTenant(menuAnchor.tenant)
+                const dep = menuAnchor.tenant.deployment
+                if (dep) {
+                  setDepModel(dep.deployment_model || 'saas')
+                  setDepHostingRegion(dep.hosting_region || 'us-east-1')
+                  setDepCloudProvider(dep.cloud_provider || 'AWS')
+                  setDepCloudAccountId(dep.cloud_account_id || '')
+                  setDepInfraRegion(dep.infrastructure_region || 'ca-central-1')
+                  setDepSiteName(dep.site_name || '')
+                  setDepJurisdiction(dep.jurisdiction || '')
+                  setDepIsolatedNet(Boolean(dep.isolated_network))
+                  setDepAiInference(dep.ai_inference_allowed !== false)
+                }
+                setMenuAnchor(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Server size={14} /> Configure Deployment
+            </button>
+
+            <button
+              onClick={() => {
+                setSelectedFolderTenantId(menuAnchor.tenant.id)
+                setActiveSubTab('folders')
+                setMenuAnchor(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <FolderTree size={14} /> Manage Folders
+            </button>
+
+            <button
+              onClick={() => {
+                handleToggleTenantStatus(menuAnchor.tenant.id)
+                setMenuAnchor(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: menuAnchor.tenant.status === 'Active' ? '#f59e0b' : '#10b981', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Shield size={14} /> {menuAnchor.tenant.status === 'Active' ? 'Suspend Tenant' : 'Reactivate Tenant'}
+            </button>
+
+            <button
+              onClick={() => {
+                handleArchiveTenant(menuAnchor.tenant.id)
+                setMenuAnchor(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Trash2 size={14} /> Archive Tenant
+            </button>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>

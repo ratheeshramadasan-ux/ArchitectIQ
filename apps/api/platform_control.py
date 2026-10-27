@@ -16,7 +16,7 @@ import base64
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -27,6 +27,9 @@ from sqlalchemy.orm import Session
 from authentication import VerifiedIdentity, get_verified_identity
 from database import SessionLocal
 from models import (
+    ComplianceAuditReport,
+    Folder,
+    Organization,
     OrganizationAdministrator,
     OrganizationAsset,
     PlatformAuditEvent,
@@ -196,6 +199,37 @@ class TenantUpdateIn(BaseModel):
     name: str | None = None
     description: str | None = None
     status: str | None = Field(default=None, pattern="^(Active|Suspended|Archived|Provisioning)$")
+
+
+class TenantDeploymentUpdateIn(BaseModel):
+    deployment_model: Literal["saas", "client_cloud", "on_premises"]
+    hosting_region: str | None = None
+    cloud_provider: str | None = None
+    cloud_account_id: str | None = None
+    infrastructure_region: str | None = None
+    site_name: str | None = None
+    jurisdiction: str | None = None
+    isolated_network: bool | None = False
+    ai_inference_allowed: bool | None = True
+    residency_enforced: bool | None = True
+
+
+class PlatformFolderCreateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    parent_folder_id: UUID | None = None
+    description: str | None = None
+    environment_name: str | None = "DEV"
+    settings: dict[str, Any] | None = None
+
+
+class PlatformFolderUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    settings: dict[str, Any] | None = None
+
+
+class PlatformFolderMoveIn(BaseModel):
+    parent_folder_id: UUID | None = None
 
 
 class EnvironmentLifecycleIn(BaseModel):
@@ -1202,17 +1236,18 @@ def list_fleet_tenants(
             ).all()
 
             org_name = "Independent"
+            org_slug = ""
+            org_logo = None
             if t.organization_id:
                 org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == t.organization_id))
                 if org:
                     org_name = org.name
+                    org_slug = org.slug
+                    org_logo = org.logo_url
 
-            # Compute folder and user counts from DB
-            wf_count = db.scalar(select(func.count(WorkflowDefinition.id)).where(WorkflowDefinition.tenant_id == t.id)) or 0
-            u_count = db.scalar(select(func.count(TenantMembership.id)).where(TenantMembership.tenant_id == t.id)) or 0
-            # For canonical Citibank tenant, ensure realistic baseline if empty
-            folders_count = wf_count if wf_count > 0 else (24 if "citibank" in t.slug else 8)
-            users_count = u_count if u_count > 0 else (18 if "citibank" in t.slug else 8)
+            # Compute real folder and distinct user counts directly from database
+            real_folders_count = db.scalar(select(func.count(Folder.id)).where(Folder.tenant_id == t.id)) or 0
+            real_users_count = db.scalar(select(func.count(func.distinct(TenantMembership.user_id))).where(TenantMembership.tenant_id == t.id)) or 0
 
             # Deployment configuration
             dep = db.scalar(select(TenantDeployment).where(TenantDeployment.tenant_id == t.id))
@@ -1236,10 +1271,12 @@ def list_fleet_tenants(
                 "slug": t.slug,
                 "status": t.status or "Active",
                 "description": t.description or f"Operational automation tenant for {t.name}.",
-                "folders_count": folders_count,
-                "users_count": users_count,
+                "folders_count": real_folders_count,
+                "users_count": real_users_count,
                 "organization_id": str(t.organization_id) if t.organization_id else None,
                 "organization_name": org_name,
+                "organization_slug": org_slug,
+                "organization_logo_url": org_logo,
                 "deployment": deployment_info,
                 "created_at": t.created_at.isoformat(),
                 "environments": [
@@ -1469,38 +1506,425 @@ def archive_fleet_tenant(
 @router.get("/administration/overview")
 def get_administration_overview(
     identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+    organization_id: UUID | None = None,
 ):
     with SessionLocal() as db:
-        org = db.scalar(
-            select(PlatformOrganization)
-            .where(PlatformOrganization.status == "ENABLED")
-            .order_by(PlatformOrganization.created_at)
-        )
-        org_id = org.id if org else None
+        if organization_id:
+            org = db.scalar(
+                select(PlatformOrganization).where(PlatformOrganization.id == organization_id)
+            )
+            if not org:
+                raise HTTPException(status_code=404, detail="Organization not found")
 
-        tenants_query = (
-            select(Tenant).where(Tenant.organization_id == org_id)
-            if org_id
-            else select(Tenant)
-        )
-        tenants = db.scalars(tenants_query).all()
-        total_tenants = len(tenants)
+            tenants = db.scalars(select(Tenant).where(Tenant.organization_id == organization_id)).all()
+            t_ids = [t.id for t in tenants]
+            total_tenants = len(tenants)
 
-        total_users = db.scalar(select(func.count(TenantMembership.id))) or 1
-        active_projects = db.scalar(select(func.count(Project.id))) or 1
+            if t_ids:
+                total_users = db.scalar(
+                    select(func.count(func.distinct(TenantMembership.user_id))).where(TenantMembership.tenant_id.in_(t_ids))
+                ) or 0
+                active_projects = db.scalar(
+                    select(func.count(func.distinct(Project.id)))
+                    .join(Folder, Project.folder_id == Folder.id)
+                    .where(Folder.tenant_id.in_(t_ids))
+                ) or 0
+                reports = db.scalars(
+                    select(ComplianceAuditReport).where(ComplianceAuditReport.tenant_id.in_(t_ids))
+                ).all()
+            else:
+                total_users = 0
+                active_projects = 0
+                reports = []
+
+            if reports:
+                comp_pct = round((sum(1 for r in reports if r.verdict == "COMPLIANT") / len(reports)) * 100)
+                comp_status = "COMPLIANT" if comp_pct >= 90 else "REVIEW_REQUIRED"
+            else:
+                comp_pct = 100
+                comp_status = "NOT_EVALUATED"
+
+            return {
+                "organization_id": str(org.id),
+                "organization_name": org.name,
+                "subscription_tier": org.tier,
+                "region": org.region or "us-east-1 (N. Virginia)",
+                "logo_url": org.logo_url,
+                "contact_email": org.contact_email or "compliance-security@architectiq.io",
+                "total_tenants": total_tenants,
+                "total_users": total_users,
+                "active_projects": active_projects,
+                "policy_compliance_pct": comp_pct,
+                "compliance_status": comp_status,
+            }
+        else:
+            # Platform Fleet-Wide Scope for Product Admin
+            org = db.scalar(
+                select(PlatformOrganization)
+                .where(PlatformOrganization.status == "ENABLED")
+                .order_by(PlatformOrganization.created_at)
+            )
+            org_id = org.id if org else None
+
+            platform_org_ids = select(PlatformOrganization.id)
+            tenants = db.scalars(
+                select(Tenant).where(Tenant.organization_id.in_(platform_org_ids))
+            ).all()
+            t_ids = [t.id for t in tenants]
+            total_tenants = len(tenants)
+
+            if t_ids:
+                total_users = db.scalar(
+                    select(func.count(func.distinct(TenantMembership.user_id))).where(TenantMembership.tenant_id.in_(t_ids))
+                ) or 0
+                active_projects = db.scalar(
+                    select(func.count(func.distinct(Project.id)))
+                    .join(Folder, Project.folder_id == Folder.id)
+                    .where(Folder.tenant_id.in_(t_ids))
+                ) or 0
+                reports = db.scalars(
+                    select(ComplianceAuditReport).where(ComplianceAuditReport.tenant_id.in_(t_ids))
+                ).all()
+            else:
+                total_users = 0
+                active_projects = 0
+                reports = []
+
+            if reports:
+                comp_pct = round((sum(1 for r in reports if r.verdict == "COMPLIANT") / len(reports)) * 100)
+                comp_status = "COMPLIANT" if comp_pct >= 90 else "REVIEW_REQUIRED"
+            else:
+                comp_pct = 100
+                comp_status = "NOT_EVALUATED"
+
+            return {
+                "organization_id": str(org_id) if org_id else None,
+                "organization_name": org.name if org else "All Organizations",
+                "subscription_tier": org.tier if org else "Enterprise Multi-Tenant",
+                "region": org.region if org else "Multi-Region",
+                "logo_url": org.logo_url if org and org.logo_url else None,
+                "contact_email": org.contact_email if org else "platform-owner@architectiq.io",
+                "total_tenants": max(1, total_tenants),
+                "total_users": max(1, total_users),
+                "active_projects": max(1, active_projects),
+                "policy_compliance_pct": comp_pct,
+                "compliance_status": comp_status,
+            }
+
+
+@router.get("/organizations/{org_id}/dependencies")
+def get_organization_dependencies(
+    org_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        org = db.scalar(select(PlatformOrganization).where(PlatformOrganization.id == org_id))
+        if not org:
+            raise HTTPException(status_code=404, detail="Organization not found")
+
+        tenants = db.scalars(select(Tenant).where(Tenant.organization_id == org_id)).all()
+        t_ids = [t.id for t in tenants]
+
+        env_count = db.scalar(select(func.count(TenantEnvironment.id)).where(TenantEnvironment.tenant_id.in_(t_ids))) if t_ids else 0
+        folder_count = db.scalar(select(func.count(Folder.id)).where(Folder.tenant_id.in_(t_ids))) if t_ids else 0
+        user_count = db.scalar(select(func.count(func.distinct(TenantMembership.user_id))).where(TenantMembership.tenant_id.in_(t_ids))) if t_ids else 0
+        project_count = db.scalar(
+            select(func.count(func.distinct(Project.id)))
+            .join(Folder, Project.folder_id == Folder.id)
+            .where(Folder.tenant_id.in_(t_ids))
+        ) if t_ids else 0
+        audit_count = db.scalar(
+            select(func.count(PlatformAuditEvent.id)).where(PlatformAuditEvent.target_id == str(org_id))
+        ) or 0
+
+        has_blockers = len(tenants) > 0 or folder_count > 0 or project_count > 0
 
         return {
-            "organization_id": str(org_id) if org_id else None,
-            "organization_name": org.name if org else "Citibank Global",
-            "subscription_tier": org.tier if org else "Enterprise Platinum",
-            "region": org.region if org else "us-east-1 (N. Virginia)",
-            "logo_url": org.logo_url if org and org.logo_url else "https://upload.wikimedia.org/wikipedia/commons/1/1b/Citi.svg",
-            "contact_email": org.contact_email if org else "compliance-security@citigroup.com",
-            "total_tenants": max(1, total_tenants),
-            "total_users": max(1, total_users),
-            "active_projects": max(1, active_projects),
-            "policy_compliance_pct": 100,
+            "organization_id": str(org_id),
+            "organization_name": org.name,
+            "status": org.status,
+            "tenants_count": len(tenants),
+            "environments_count": env_count,
+            "folders_count": folder_count,
+            "projects_count": project_count,
+            "users_count": user_count,
+            "audit_events_count": audit_count,
+            "can_delete": not has_blockers,
+            "deletion_blocker_reason": (
+                f"Organization has active dependent resources: {len(tenants)} tenant(s), {folder_count} folder(s), and {project_count} project(s). "
+                "Governed lifecycle policy requires disabling or archiving dependent resources before permanent removal."
+                if has_blockers else None
+            ),
         }
+
+
+@router.patch("/fleet/tenants/{tenant_id}/deployment")
+def update_tenant_deployment(
+    tenant_id: UUID,
+    body: TenantDeploymentUpdateIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        dep = db.scalar(select(TenantDeployment).where(TenantDeployment.tenant_id == tenant_id))
+        if not dep:
+            dep = TenantDeployment(
+                tenant_id=tenant_id,
+                deployment_model=body.deployment_model,
+                created_at=utc_now(),
+            )
+            db.add(dep)
+
+        dep.deployment_model = body.deployment_model
+        dep.hosting_region = body.hosting_region if body.deployment_model == "saas" else None
+        dep.cloud_provider = body.cloud_provider if body.deployment_model == "client_cloud" else None
+        dep.cloud_account_id = body.cloud_account_id if body.deployment_model == "client_cloud" else None
+        dep.infrastructure_region = body.infrastructure_region if body.deployment_model == "client_cloud" else None
+        dep.site_name = body.site_name if body.deployment_model == "on_premises" else None
+        dep.jurisdiction = body.jurisdiction if body.deployment_model == "on_premises" else None
+        dep.isolated_network = body.isolated_network or False
+        dep.ai_inference_allowed = body.ai_inference_allowed if body.ai_inference_allowed is not None else True
+        if body.residency_enforced is not None:
+            dep.residency_enforced = body.residency_enforced
+        dep.updated_at = utc_now()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="TENANT_DEPLOYMENT_CONFIGURED",
+            target_type="TENANT",
+            target_id=str(tenant.id),
+            outcome="SUCCESS",
+            details={
+                "tenant_name": tenant.name,
+                "deployment_model": dep.deployment_model,
+                "cloud_provider": dep.cloud_provider,
+                "site_name": dep.site_name,
+            },
+        )
+
+        return {
+            "tenant_id": str(tenant.id),
+            "deployment_model": dep.deployment_model,
+            "hosting_region": dep.hosting_region,
+            "cloud_provider": dep.cloud_provider,
+            "cloud_account_id": dep.cloud_account_id,
+            "infrastructure_region": dep.infrastructure_region,
+            "site_name": dep.site_name,
+            "jurisdiction": dep.jurisdiction,
+            "isolated_network": dep.isolated_network,
+            "ai_inference_allowed": dep.ai_inference_allowed,
+        }
+
+
+@router.get("/tenants/{tenant_id}/folders")
+def get_tenant_folders(
+    tenant_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        folders = db.scalars(
+            select(Folder).where(Folder.tenant_id == tenant_id).order_by(Folder.name)
+        ).all()
+
+        # Count projects per folder
+        projects = db.scalars(
+            select(Project).join(Folder, Project.folder_id == Folder.id).where(Folder.tenant_id == tenant_id)
+        ).all()
+        project_count_by_folder: dict[UUID, int] = {}
+        for p in projects:
+            project_count_by_folder[p.folder_id] = project_count_by_folder.get(p.folder_id, 0) + 1
+
+        folder_map = {}
+        for f in folders:
+            folder_map[f.id] = {
+                "id": str(f.id),
+                "name": f.name,
+                "description": f.description,
+                "parent_folder_id": str(f.parent_folder_id) if f.parent_folder_id else None,
+                "environment_name": f.environment_name or "DEV",
+                "settings": f.settings or {},
+                "project_count": project_count_by_folder.get(f.id, 0),
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+                "children": [],
+            }
+
+        root_folders = []
+        for f in folders:
+            node = folder_map[f.id]
+            if f.parent_folder_id and f.parent_folder_id in folder_map:
+                folder_map[f.parent_folder_id]["children"].append(node)
+            else:
+                root_folders.append(node)
+
+        return {
+            "tenant_id": str(tenant_id),
+            "tenant_name": tenant.name,
+            "total_folders": len(folders),
+            "root_folders": root_folders,
+            "flat_folders": list(folder_map.values()),
+        }
+
+
+@router.post("/tenants/{tenant_id}/folders", status_code=status.HTTP_201_CREATED)
+def create_tenant_folder(
+    tenant_id: UUID,
+    body: PlatformFolderCreateIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        tenant = db.scalar(select(Tenant).where(Tenant.id == tenant_id))
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Tenant not found")
+
+        # Find or ensure linked organization row in public.organizations
+        org_row = db.scalar(select(Organization).where(Organization.tenant_id == tenant_id))
+        if not org_row:
+            org_row = Organization(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                name=tenant.name,
+                slug=tenant.slug or f"org-{uuid4().hex[:8]}",
+                created_at=utc_now(),
+            )
+            db.add(org_row)
+            db.flush()
+
+        if body.parent_folder_id:
+            parent = db.scalar(select(Folder).where(Folder.id == body.parent_folder_id, Folder.tenant_id == tenant_id))
+            if not parent:
+                raise HTTPException(status_code=400, detail="Parent folder not found in this tenant")
+
+        new_folder = Folder(
+            id=uuid4(),
+            organization_id=org_row.id,
+            tenant_id=tenant_id,
+            parent_folder_id=body.parent_folder_id,
+            name=body.name,
+            description=body.description,
+            environment_name=body.environment_name or "DEV",
+            settings=body.settings or {"inheritance": True, "rbac_mode": "INHERITED"},
+            created_at=utc_now(),
+        )
+        db.add(new_folder)
+        db.flush()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="FOLDER_CREATED",
+            target_type="FOLDER",
+            target_id=str(new_folder.id),
+            outcome="SUCCESS",
+            details={
+                "folder_name": new_folder.name,
+                "tenant_id": str(tenant_id),
+                "parent_folder_id": str(body.parent_folder_id) if body.parent_folder_id else None,
+            },
+        )
+
+        return {
+            "id": str(new_folder.id),
+            "tenant_id": str(tenant_id),
+            "name": new_folder.name,
+            "description": new_folder.description,
+            "parent_folder_id": str(new_folder.parent_folder_id) if new_folder.parent_folder_id else None,
+            "environment_name": new_folder.environment_name,
+            "settings": new_folder.settings,
+            "created_at": new_folder.created_at.isoformat(),
+        }
+
+
+@router.patch("/tenants/{tenant_id}/folders/{folder_id}")
+def rename_tenant_folder(
+    tenant_id: UUID,
+    folder_id: UUID,
+    body: PlatformFolderUpdateIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        if body.name is not None:
+            folder.name = body.name
+        if body.description is not None:
+            folder.description = body.description
+        if body.settings is not None:
+            folder.settings = body.settings
+
+        return {
+            "id": str(folder.id),
+            "tenant_id": str(tenant_id),
+            "name": folder.name,
+            "description": folder.description,
+            "settings": folder.settings,
+        }
+
+
+@router.patch("/tenants/{tenant_id}/folders/{folder_id}/move")
+def move_tenant_folder(
+    tenant_id: UUID,
+    folder_id: UUID,
+    body: PlatformFolderMoveIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        if body.parent_folder_id == folder_id:
+            raise HTTPException(status_code=400, detail="A folder cannot be its own parent")
+
+        if body.parent_folder_id:
+            parent = db.scalar(select(Folder).where(Folder.id == body.parent_folder_id, Folder.tenant_id == tenant_id))
+            if not parent:
+                raise HTTPException(status_code=404, detail="Target parent folder not found")
+
+        folder.parent_folder_id = body.parent_folder_id
+        db.flush()
+
+        return {
+            "id": str(folder.id),
+            "parent_folder_id": str(folder.parent_folder_id) if folder.parent_folder_id else None,
+            "message": "Folder moved successfully",
+        }
+
+
+@router.delete("/tenants/{tenant_id}/folders/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tenant_folder(
+    tenant_id: UUID,
+    folder_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db, db.begin():
+        folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        child_count = db.scalar(select(func.count(Folder.id)).where(Folder.parent_folder_id == folder_id)) or 0
+        project_count = db.scalar(select(func.count(Project.id)).where(Project.folder_id == folder_id)) or 0
+
+        if child_count > 0 or project_count > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot delete folder with contents ({child_count} subfolders, {project_count} projects). Remove or reassign them first.",
+            )
+
+        db.delete(folder)
 
 
 @router.post("/fleet/environments/{env_id}/lifecycle")

@@ -39,32 +39,32 @@ def platform_env():
     with engine.begin() as conn:
         conn.execute(
             text(
-                "DELETE FROM public.workspace_activity WHERE tenant_id IN (SELECT id FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global'))"
+                "DELETE FROM public.workspace_activity WHERE tenant_id IN (SELECT id FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug NOT IN ('citibank-global', 'canada-life')))"
             )
         )
         conn.execute(
             text(
-                "DELETE FROM public.tenant_environments WHERE tenant_id IN (SELECT id FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global'))"
+                "DELETE FROM public.tenant_environments WHERE tenant_id IN (SELECT id FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug NOT IN ('citibank-global', 'canada-life')))"
             )
         )
         conn.execute(
             text(
-                "DELETE FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global') OR (organization_id = '9a1c6757-4268-42ab-9f98-38441eab424c' AND slug NOT IN ('citibank'))"
+                "DELETE FROM public.tenants WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug NOT IN ('citibank-global', 'canada-life')) OR (organization_id = '9a1c6757-4268-42ab-9f98-38441eab424c' AND slug NOT IN ('citibank', 'banking-operations'))"
             )
         )
         conn.execute(
             text(
-                "DELETE FROM public.platform_subscriptions WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global')"
+                "DELETE FROM public.platform_subscriptions WHERE organization_id IN (SELECT id FROM public.platform_organizations WHERE slug NOT IN ('citibank-global', 'canada-life'))"
             )
         )
         conn.execute(
             text(
-                "DELETE FROM public.platform_infrastructure_pools WHERE assigned_org_id IN (SELECT id FROM public.platform_organizations WHERE slug != 'citibank-global')"
+                "DELETE FROM public.platform_infrastructure_pools WHERE assigned_org_id IN (SELECT id FROM public.platform_organizations WHERE slug NOT IN ('citibank-global', 'canada-life'))"
             )
         )
         conn.execute(
             text(
-                "DELETE FROM public.platform_organizations WHERE slug != 'citibank-global'"
+                "DELETE FROM public.platform_organizations WHERE slug NOT IN ('citibank-global', 'canada-life')"
             )
         )
         conn.execute(
@@ -695,3 +695,77 @@ def test_tenant_deployment_models_and_residency(platform_env):
     assert mig_data["source_region"] == "ca-central-1"
     assert mig_data["target_region"] == "eu-west-1"
     assert mig_data["status"] == "REQUESTED"
+
+
+def test_scoped_overview_dependencies_and_folder_management(platform_env):
+    authenticate_as(platform_env["admin_user_id"])
+
+    # 1. Overview with explicit organization_id (Citibank Global)
+    citi_org_id = "9a1c6757-4268-42ab-9f98-38441eab424c"
+    overview_scoped = client.get(f"/api/v1/platform/administration/overview?organization_id={citi_org_id}")
+    assert overview_scoped.status_code == 200
+    ov_data = overview_scoped.json()
+    assert ov_data["organization_id"] == citi_org_id
+    assert ov_data["organization_name"] == "Citibank Global"
+    assert ov_data["total_tenants"] >= 1
+    assert "compliance_status" in ov_data
+
+    # 2. Dependencies check for Organization
+    dep_resp = client.get(f"/api/v1/platform/organizations/{citi_org_id}/dependencies")
+    assert dep_resp.status_code == 200
+    dep_data = dep_resp.json()
+    assert dep_data["organization_id"] == citi_org_id
+    assert dep_data["tenants_count"] >= 1
+    assert dep_data["can_delete"] is False
+    assert dep_data["deletion_blocker_reason"] is not None
+
+    # 3. Update Tenant Deployment model (configure Citibank to On-Premises)
+    citi_tenant_id = "242c817b-d701-4583-8e29-c22c99b381e6"
+    deploy_resp = client.patch(
+        f"/api/v1/platform/fleet/tenants/{citi_tenant_id}/deployment",
+        json={
+            "deployment_model": "on_premises",
+            "site_name": "NYC Data Center DC-01",
+            "jurisdiction": "United States - FedRAMP High",
+            "isolated_network": True,
+            "ai_inference_allowed": True,
+        },
+    )
+    assert deploy_resp.status_code == 200
+    deploy_data = deploy_resp.json()
+    assert deploy_data["deployment_model"] == "on_premises"
+    assert deploy_data["site_name"] == "NYC Data Center DC-01"
+
+    # 4. Folder Hierarchy Tree
+    folder_tree_resp = client.get(f"/api/v1/platform/tenants/{citi_tenant_id}/folders")
+    assert folder_tree_resp.status_code == 200
+    tree_data = folder_tree_resp.json()
+    assert tree_data["total_folders"] >= 1
+    assert len(tree_data["root_folders"]) >= 1
+
+    # 5. Create new folder & subfolder in tenant
+    new_root_resp = client.post(
+        f"/api/v1/platform/tenants/{citi_tenant_id}/folders",
+        json={"name": "Compliance & Audit", "description": "Automated reporting folder"},
+    )
+    assert new_root_resp.status_code == 201
+    new_root = new_root_resp.json()
+    root_id = new_root["id"]
+
+    subfolder_resp = client.post(
+        f"/api/v1/platform/tenants/{citi_tenant_id}/folders",
+        json={"name": "SOX 404 Submissions", "parent_folder_id": root_id},
+    )
+    assert subfolder_resp.status_code == 201
+    subfolder = subfolder_resp.json()
+    sub_id = subfolder["id"]
+
+    # 6. Delete non-empty folder must be blocked with 409
+    del_blocked = client.delete(f"/api/v1/platform/tenants/{citi_tenant_id}/folders/{root_id}")
+    assert del_blocked.status_code == 409
+
+    # 7. Delete child folder then parent folder
+    del_sub = client.delete(f"/api/v1/platform/tenants/{citi_tenant_id}/folders/{sub_id}")
+    assert del_sub.status_code == 204
+    del_root = client.delete(f"/api/v1/platform/tenants/{citi_tenant_id}/folders/{root_id}")
+    assert del_root.status_code == 204
