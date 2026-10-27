@@ -137,8 +137,10 @@ class OrganizationAdminUpdateIn(BaseModel):
 
 
 class OrganizationLogoUploadIn(BaseModel):
-    content_type: str = Field(pattern="^image/(png|jpeg|jpg|webp|svg\\+xml)$")
-    data_base64: str = Field(min_length=10)
+    content_type: str | None = None
+    media_type: str | None = None
+    data_base64: str | None = None
+    file_content: str | None = None
     filename: str | None = None
 
 
@@ -623,8 +625,9 @@ def update_platform_organization(
             diff["contact_email"] = {"old": org.contact_email, "new": body.contact_email}
             org.contact_email = body.contact_email
         if body.logo_url is not None:
-            diff["logo_url"] = {"old": org.logo_url, "new": body.logo_url}
-            org.logo_url = body.logo_url
+            new_logo = body.logo_url.strip() if body.logo_url and body.logo_url.strip() else None
+            diff["logo_url"] = {"old": org.logo_url, "new": new_logo}
+            org.logo_url = new_logo
         if body.status is not None:
             diff["status"] = {"old": org.status, "new": body.status.upper()}
             org.status = body.status.upper()
@@ -771,15 +774,24 @@ def upload_organization_logo(
         if not org:
             raise HTTPException(status_code=404, detail="Organization not found")
 
+        raw_b64 = body.data_base64 or body.file_content or ""
+        if not raw_b64:
+            raise HTTPException(status_code=400, detail="Missing base64 payload")
+
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+
+        content_type = body.content_type or body.media_type or "image/png"
+
         try:
-            raw_bytes = base64.b64decode(body.data_base64)
+            raw_bytes = base64.b64decode(raw_b64)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid base64 payload")
 
         if len(raw_bytes) > 2 * 1024 * 1024:
             raise HTTPException(status_code=400, detail="Logo file size exceeds maximum limit of 2 MB")
 
-        if "svg" in body.content_type.lower():
+        if "svg" in content_type.lower():
             svg_text = raw_bytes.decode("utf-8", errors="ignore").lower()
             dangerous_patterns = ["<script", "javascript:", "onload=", "onerror=", "onclick=", "<iframe", "<object"]
             for pat in dangerous_patterns:
@@ -791,9 +803,9 @@ def upload_organization_logo(
         asset = OrganizationAsset(
             organization_id=org_id,
             asset_type="LOGO",
-            content_type=body.content_type,
+            content_type=content_type,
             file_size_bytes=len(raw_bytes),
-            data_base64=body.data_base64,
+            data_base64=raw_b64,
             created_at=utc_now(),
         )
         db.add(asset)
@@ -812,10 +824,10 @@ def upload_organization_logo(
             target_type="ORGANIZATION",
             target_id=str(org_id),
             outcome="SUCCESS",
-            details={"asset_id": str(asset.id), "content_type": body.content_type, "size_bytes": len(raw_bytes)},
+            details={"asset_id": str(asset.id), "content_type": content_type, "size_bytes": len(raw_bytes)},
         )
 
-        return {"asset_id": str(asset.id), "logo_url": asset_url, "content_type": body.content_type}
+        return {"asset_id": str(asset.id), "logo_url": asset_url, "content_type": content_type}
 
 
 @router.delete("/organizations/{org_id}/logo")
@@ -853,7 +865,10 @@ def get_organization_asset(asset_id: UUID):
         if not asset:
             raise HTTPException(status_code=404, detail="Asset not found")
 
-        content = base64.b64decode(asset.data_base64)
+        b64_str = asset.data_base64
+        if "," in b64_str:
+            b64_str = b64_str.split(",", 1)[1]
+        content = base64.b64decode(b64_str)
         return Response(content=content, media_type=asset.content_type)
 
 

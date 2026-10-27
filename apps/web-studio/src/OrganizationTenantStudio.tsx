@@ -378,17 +378,23 @@ export default function OrganizationTenantStudio({
         const created = await r.json()
         if (newOrgLogoData && newOrgLogoData.startsWith('data:')) {
           try {
-            await fetch(`/api/v1/platform/organizations/${created.id}/logo`, {
+            const logoRes = await fetch(`/api/v1/platform/organizations/${created.id}/logo`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
               },
               body: JSON.stringify({
+                data_base64: newOrgLogoData,
+                content_type: newOrgLogoType || 'image/png',
                 file_content: newOrgLogoData,
                 media_type: newOrgLogoType || 'image/png',
               }),
             })
+            if (logoRes.ok) {
+              const ljson = await logoRes.json()
+              if (ljson.logo_url) created.logo_url = ljson.logo_url
+            }
           } catch {}
         }
         recordAuditEvent('ORGANIZATION_CREATED', 'ORGANIZATION', created.id || created.slug, {
@@ -424,12 +430,49 @@ export default function OrganizationTenantStudio({
       return
     }
     try {
+      let finalLogoUrl: string | null = editOrgLogoData
+
+      // 1. If user uploaded a new image file (data: URI), upload to managed asset storage
+      if (editOrgLogoData && editOrgLogoData.startsWith('data:')) {
+        try {
+          const logoRes = await fetch(`/api/v1/platform/organizations/${editingOrg.id}/logo`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              data_base64: editOrgLogoData,
+              content_type: editOrgLogoType || 'image/png',
+              file_content: editOrgLogoData,
+              media_type: editOrgLogoType || 'image/png',
+            }),
+          })
+          if (logoRes.ok) {
+            const logoJson = await logoRes.json()
+            if (logoJson.logo_url) {
+              finalLogoUrl = logoJson.logo_url
+            }
+          }
+        } catch (err) {
+          console.error('Failed to upload logo asset:', err)
+        }
+      } else if (!editOrgLogoData) {
+        // Logo was removed
+        try {
+          await fetch(`/api/v1/platform/organizations/${editingOrg.id}/logo`, {
+            method: 'DELETE',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+          finalLogoUrl = null
+        } catch {}
+      }
+
+      // 2. Patch organization details including the resolved logo_url
       const payload: any = {
         name: editOrgName.trim(),
         tier: editOrgTier,
-      }
-      if (editOrgLogoData && !editOrgLogoData.startsWith('data:')) {
-        payload.logo_url = editOrgLogoData
+        logo_url: finalLogoUrl,
       }
       const r = await fetch(`/api/v1/platform/organizations/${editingOrg.id}`, {
         method: 'PATCH',
@@ -441,39 +484,25 @@ export default function OrganizationTenantStudio({
       })
       if (r.ok) {
         const updated = await r.json()
-        if (!editOrgLogoData) {
-          try {
-            await fetch(`/api/v1/platform/organizations/${editingOrg.id}/logo`, {
-              method: 'DELETE',
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            })
-          } catch {}
-        } else if (editOrgLogoData.startsWith('data:')) {
-          try {
-            await fetch(`/api/v1/platform/organizations/${editingOrg.id}/logo`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              },
-              body: JSON.stringify({
-                file_content: editOrgLogoData,
-                media_type: editOrgLogoType || 'image/png',
-              }),
-            })
-          } catch {}
-        }
+        const resolvedLogo = updated.logo_url || finalLogoUrl
         recordAuditEvent('ORGANIZATION_UPDATED', 'ORGANIZATION', updated.id, {
           name: updated.name,
           tier: updated.tier,
+          logo_url: resolvedLogo,
         })
         loadOrganizationsList()
-        if (editingOrg.slug === orgDetails.slug) {
+        loadPlatformData()
+        window.dispatchEvent(
+          new CustomEvent('architectiq:org_updated', {
+            detail: { id: updated.id, name: updated.name, logo_url: resolvedLogo },
+          })
+        )
+        if (editingOrg.slug === orgDetails.slug || editingOrg.id === orgDetails.id) {
           setOrgDetails(prev => ({
             ...prev,
             name: updated.name,
             tier: updated.tier,
-            logo_url: updated.logo_url,
+            logo_url: resolvedLogo,
           }))
         }
         setEditingOrg(null)
@@ -749,7 +778,10 @@ export default function OrganizationTenantStudio({
       .then(r => (r.ok ? r.json() : null))
       .then(data => {
         if (!cancelled && Array.isArray(data) && data.length > 0) {
-          const realOrg = data.find(o => o.slug === 'citibank-global' || o.name.toLowerCase().includes('citibank')) || data[0]
+          const matchedOrg = (selectedOrgFilter && selectedOrgFilter !== 'ALL')
+            ? data.find(o => o.id === selectedOrgFilter)
+            : null
+          const realOrg = matchedOrg || data.find(o => o.slug === 'citibank-global' || o.name.toLowerCase().includes('citibank')) || data[0]
           setOrgDetails({
             id: realOrg.id || '',
             name: realOrg.name || 'Citibank Global',
@@ -5660,6 +5692,31 @@ export default function OrganizationTenantStudio({
                   </div>
                 </div>
 
+                <div style={{ marginTop: 8 }}>
+                  <input
+                    type="url"
+                    aria-label="New Organization Logo URL"
+                    placeholder="Or enter logo URL (e.g. https://...)"
+                    value={newOrgLogoData && !newOrgLogoData.startsWith('data:') ? newOrgLogoData : ''}
+                    onChange={e => {
+                      const val = e.target.value
+                      setNewOrgLogoData(val || null)
+                      setNewOrgLogoPreview(val || null)
+                      setNewOrgLogoType(null)
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.78rem',
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+
                 {newOrgLogoError && (
                   <div style={{ marginTop: 8, fontSize: '0.74rem', color: '#ef4444', fontWeight: 600 }}>
                     {newOrgLogoError}
@@ -6077,6 +6134,31 @@ export default function OrganizationTenantStudio({
                       </button>
                     )}
                   </div>
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <input
+                    type="url"
+                    aria-label="Organization Logo URL"
+                    placeholder="Or enter logo URL (e.g. https://...)"
+                    value={editOrgLogoData && !editOrgLogoData.startsWith('data:') ? editOrgLogoData : ''}
+                    onChange={e => {
+                      const val = e.target.value
+                      setEditOrgLogoData(val || null)
+                      setEditOrgLogoPreview(val || null)
+                      setEditOrgLogoType(null)
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.78rem',
+                      outline: 'none',
+                    }}
+                  />
                 </div>
 
                 {editOrgLogoError && (
