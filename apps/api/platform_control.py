@@ -234,6 +234,13 @@ class PlatformFolderMoveIn(BaseModel):
     parent_folder_id: UUID | None = None
 
 
+class FolderPermissionsIn(BaseModel):
+    inheritance: bool = True
+    rbac_mode: str = "INHERITED"
+    users: list[dict[str, Any]] = []
+    groups: list[dict[str, Any]] = []
+
+
 class EnvironmentLifecycleIn(BaseModel):
     action: str = Field(pattern="^(enable|suspend|disable)$")
     reason: str = Field(default="Lifecycle status update")
@@ -1896,7 +1903,7 @@ def move_tenant_folder(
     body: PlatformFolderMoveIn,
     identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
 ):
-    with SessionLocal() as db, db.begin():
+    with SessionLocal() as db:
         folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
@@ -1909,13 +1916,91 @@ def move_tenant_folder(
             if not parent:
                 raise HTTPException(status_code=404, detail="Target parent folder not found")
 
+            # Prevent hierarchy cycles: ensure target parent is not folder_id or any of its descendants
+            curr_parent_id = body.parent_folder_id
+            visited = set()
+            while curr_parent_id:
+                if curr_parent_id == folder_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot move folder into one of its own subfolders (hierarchy cycle detected)",
+                    )
+                visited.add(curr_parent_id)
+                p = db.scalar(select(Folder).where(Folder.id == curr_parent_id))
+                if p and p.parent_folder_id and p.parent_folder_id not in visited:
+                    curr_parent_id = p.parent_folder_id
+                else:
+                    break
+
         folder.parent_folder_id = body.parent_folder_id
-        db.flush()
+        db.commit()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="FOLDER_MOVED",
+            target_type="FOLDER",
+            target_id=str(folder_id),
+            outcome="SUCCESS",
+            details={
+                "folder_name": folder.name,
+                "tenant_id": str(tenant_id),
+                "new_parent_folder_id": str(body.parent_folder_id) if body.parent_folder_id else None,
+            },
+        )
 
         return {
             "id": str(folder.id),
             "parent_folder_id": str(folder.parent_folder_id) if folder.parent_folder_id else None,
             "message": "Folder moved successfully",
+        }
+
+
+@router.get("/tenants/{tenant_id}/folders/{folder_id}/dependencies")
+def get_folder_dependencies(
+    tenant_id: UUID,
+    folder_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        child_folders = db.scalars(select(Folder).where(Folder.parent_folder_id == folder_id)).all()
+        projects = db.scalars(select(Project).where(Project.folder_id == folder_id)).all()
+
+        child_count = len(child_folders)
+        project_count = len(projects)
+        can_delete = child_count == 0 and project_count == 0
+
+        reasons = []
+        if child_count > 0:
+            child_names = ", ".join([f"'{c.name}'" for c in child_folders[:3]])
+            if child_count > 3:
+                child_names += f" and {child_count - 3} more"
+            reasons.append(f"{child_count} subfolder(s) ({child_names})")
+        if project_count > 0:
+            proj_names = ", ".join([f"'{p.name}'" for p in projects[:3]])
+            if project_count > 3:
+                proj_names += f" and {project_count - 3} more"
+            reasons.append(f"{project_count} project(s) ({proj_names})")
+
+        blocker_reason = None
+        if not can_delete:
+            blocker_reason = f"Cannot delete folder '{folder.name}' because it contains " + " and ".join(reasons) + ". Reassign, move, or delete these dependent resources before deleting this folder."
+
+        return {
+            "folder_id": str(folder.id),
+            "folder_name": folder.name,
+            "can_delete": can_delete,
+            "subfolders_count": child_count,
+            "projects_count": project_count,
+            "subfolders": [{"id": str(c.id), "name": c.name} for c in child_folders],
+            "projects": [{"id": str(p.id), "name": p.name} for p in projects],
+            "deletion_blocker_reason": blocker_reason,
         }
 
 
@@ -1925,21 +2010,139 @@ def delete_tenant_folder(
     folder_id: UUID,
     identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
 ):
+    with SessionLocal() as db:
+        folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        child_folders = db.scalars(select(Folder).where(Folder.parent_folder_id == folder_id)).all()
+        projects = db.scalars(select(Project).where(Project.folder_id == folder_id)).all()
+
+        child_count = len(child_folders)
+        project_count = len(projects)
+
+        if child_count > 0 or project_count > 0:
+            reasons = []
+            if child_count > 0:
+                child_names = ", ".join([f"'{c.name}'" for c in child_folders[:3]])
+                if child_count > 3:
+                    child_names += f" and {child_count - 3} more"
+                reasons.append(f"{child_count} subfolder(s) ({child_names})")
+            if project_count > 0:
+                proj_names = ", ".join([f"'{p.name}'" for p in projects[:3]])
+                if project_count > 3:
+                    proj_names += f" and {project_count - 3} more"
+                reasons.append(f"{project_count} project(s) ({proj_names})")
+
+            detail_msg = f"Cannot delete folder '{folder.name}' because it contains " + " and ".join(reasons) + ". Reassign, move, or delete these dependent resources before deleting this folder."
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=detail_msg,
+            )
+
+        folder_name = folder.name
+        db.delete(folder)
+        db.commit()
+
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="FOLDER_DELETED",
+            target_type="FOLDER",
+            target_id=str(folder_id),
+            outcome="SUCCESS",
+            details={"folder_name": folder_name, "tenant_id": str(tenant_id)},
+        )
+
+
+@router.get("/tenants/{tenant_id}/folders/{folder_id}/permissions")
+def get_folder_permissions(
+    tenant_id: UUID,
+    folder_id: UUID,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
+    with SessionLocal() as db:
+        folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+        settings = dict(folder.settings or {})
+        inheritance = settings.get("inheritance", True)
+        rbac_mode = settings.get("rbac_mode", "INHERITED" if inheritance else "CUSTOM")
+        users = settings.get("users", [])
+        groups = settings.get("groups", [])
+
+        inherited_from = None
+        inherited_users = []
+        inherited_groups = []
+        if inheritance and folder.parent_folder_id:
+            parent = db.scalar(select(Folder).where(Folder.id == folder.parent_folder_id))
+            if parent:
+                inherited_from = parent.name
+                p_settings = parent.settings or {}
+                inherited_users = p_settings.get("users", [])
+                inherited_groups = p_settings.get("groups", [])
+        elif inheritance:
+            inherited_from = "Tenant Level Access Policy"
+            inherited_users = [
+                {"email": "admin@architectiq.io", "display_name": "Tenant Administrator", "role": "ADMIN", "is_inherited": True}
+            ]
+
+        return {
+            "folder_id": str(folder.id),
+            "folder_name": folder.name,
+            "inheritance": inheritance,
+            "rbac_mode": rbac_mode,
+            "inherited_from": inherited_from,
+            "users": users,
+            "groups": groups,
+            "effective_users": inherited_users if inheritance and not users else users,
+            "effective_groups": inherited_groups if inheritance and not groups else groups,
+        }
+
+
+@router.put("/tenants/{tenant_id}/folders/{folder_id}/permissions")
+def update_folder_permissions(
+    tenant_id: UUID,
+    folder_id: UUID,
+    body: FolderPermissionsIn,
+    identity: Annotated[VerifiedIdentity, Depends(require_platform_role)],
+):
     with SessionLocal() as db, db.begin():
         folder = db.scalar(select(Folder).where(Folder.id == folder_id, Folder.tenant_id == tenant_id))
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
 
-        child_count = db.scalar(select(func.count(Folder.id)).where(Folder.parent_folder_id == folder_id)) or 0
-        project_count = db.scalar(select(func.count(Project.id)).where(Project.folder_id == folder_id)) or 0
+        cur_settings = dict(folder.settings or {})
+        cur_settings["inheritance"] = body.inheritance
+        cur_settings["rbac_mode"] = body.rbac_mode
+        cur_settings["users"] = body.users
+        cur_settings["groups"] = body.groups
 
-        if child_count > 0 or project_count > 0:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Cannot delete folder with contents ({child_count} subfolders, {project_count} projects). Remove or reassign them first.",
-            )
+        folder.settings = cur_settings
+        db.flush()
 
-        db.delete(folder)
+        log_platform_audit(
+            db,
+            actor_id=UUID(identity.subject) if re.match(r"^[0-9a-f-]{36}$", identity.subject) else None,
+            actor_email=get_actor_email(identity),
+            actor_role=get_actor_role(identity),
+            action="FOLDER_PERMISSIONS_UPDATED",
+            target_type="FOLDER",
+            target_id=str(folder_id),
+            outcome="SUCCESS",
+            details={"inheritance": body.inheritance, "user_count": len(body.users), "group_count": len(body.groups)},
+        )
+
+        return {
+            "folder_id": str(folder.id),
+            "inheritance": body.inheritance,
+            "rbac_mode": body.rbac_mode,
+            "users": body.users,
+            "groups": body.groups,
+        }
 
 
 @router.post("/fleet/environments/{env_id}/lifecycle")

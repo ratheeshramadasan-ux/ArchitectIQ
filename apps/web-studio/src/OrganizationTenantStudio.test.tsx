@@ -38,6 +38,68 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
             ]),
         })
       }
+      if (url.includes('/dependencies')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              folder_id: 'f-1',
+              folder_name: 'Treasury Operations',
+              can_delete: false,
+              subfolders_count: 1,
+              projects_count: 2,
+              subfolders: [{ id: 'f-2', name: 'Reconciliation' }],
+              projects: [{ id: 'p-1', name: 'Daily SWIFT' }, { id: 'p-2', name: 'Cash Balancing' }],
+              deletion_blocker_reason: "Cannot delete folder 'Treasury Operations' because it contains 1 subfolder(s) ('Reconciliation') and 2 project(s) ('Daily SWIFT', 'Cash Balancing').",
+            }),
+        })
+      }
+      if (url.includes('/permissions')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              folder_id: 'f-1',
+              folder_name: 'Treasury Operations',
+              inheritance: true,
+              rbac_mode: 'INHERITED',
+              inherited_from: 'Tenant Root Policy',
+              users: [{ email: 'treasury.lead@citigroup.com', role: 'ADMIN', is_inherited: false }],
+              groups: [{ name: 'Treasury Operators', role: 'OPERATOR', is_inherited: false }],
+            }),
+        })
+      }
+      if (url.includes('/folders/tree') || url.includes('/folders')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              total_folders: 2,
+              root_folders: [
+                {
+                  id: 'f-1',
+                  name: 'Treasury Operations',
+                  tenant_id: 't-1',
+                  project_count: 2,
+                  children: [
+                    {
+                      id: 'f-2',
+                      name: 'Reconciliation',
+                      parent_folder_id: 'f-1',
+                      tenant_id: 't-1',
+                      project_count: 0,
+                      children: [],
+                    },
+                  ],
+                },
+              ],
+              flat_folders: [
+                { id: 'f-1', name: 'Treasury Operations' },
+                { id: 'f-2', name: 'Reconciliation', parent_folder_id: 'f-1' },
+              ],
+            }),
+        })
+      }
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve([]),
@@ -264,6 +326,42 @@ it('navigates to Folders & Subfolders Explorer and displays folder tree controls
     expect(screen.getByLabelText(/Filter by Organization/i)).toBeDefined()
     await waitFor(() => {
       expect(screen.getByText('Organization', { selector: 'th' })).toBeDefined()
+    })
+  })
+
+  it('renders context menu on right click of folder and handles governed deletion with dependencies', async () => {
+    render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
+    const foldersTab = screen.getByRole('button', { name: /Folders & Subfolders/i })
+    fireEvent.click(foldersTab)
+
+    // Wait for tree to load
+    await waitFor(() => {
+      expect(screen.getAllByText('Treasury Operations').length).toBeGreaterThanOrEqual(1)
+    })
+
+    const folderNode = screen.getAllByText('Treasury Operations')[0]
+    fireEvent.contextMenu(folderNode)
+
+    // Verify context menu options render
+    await waitFor(() => {
+      expect(screen.getByText('New Subfolder')).toBeDefined()
+      expect(screen.getByText('Rename Folder')).toBeDefined()
+      expect(screen.getByText('Move Folder')).toBeDefined()
+      expect(screen.getByText('Add / Remove Users')).toBeDefined()
+      expect(screen.getByText('Add / Remove Groups')).toBeDefined()
+      expect(screen.getByText('Delete Folder')).toBeDefined()
+    })
+
+    // Click Delete Folder from context menu
+    const deleteBtn = screen.getByText('Delete Folder')
+    fireEvent.click(deleteBtn)
+
+    // Verify Governed Deletion Modal renders with dependencies blocker
+    await waitFor(() => {
+      expect(screen.getByText(/Governed Folder Deletion/i)).toBeDefined()
+      expect(screen.getByText(/DELETION BLOCKED: DEPENDENCIES DETECTED/i)).toBeDefined()
+      expect(screen.getByText(/Dependent Subfolders \(1\):/i)).toBeDefined()
+      expect(screen.getByText(/Dependent Automation Projects \(2\):/i)).toBeDefined()
     })
   })
 })

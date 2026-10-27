@@ -38,6 +38,12 @@ import {
   Folder,
   FolderPlus,
   ChevronDown,
+  AlertTriangle,
+  Check,
+  Link2,
+  UserMinus,
+  ShieldAlert,
+  Move,
 } from 'lucide-react'
 import AccessDirectoryStudio from './AccessDirectoryStudio'
 import IamRolesStudio from './IamRolesStudio'
@@ -710,7 +716,40 @@ export default function OrganizationTenantStudio({
   const [movingFolderNode, setMovingFolderNode] = useState<any | null>(null)
   const [moveTargetParentId, setMoveTargetParentId] = useState<string>('')
   const [folderActionMsg, setFolderActionMsg] = useState<string | null>(null)
-  const [folderRbacInherited, setFolderRbacInherited] = useState(true)
+
+  // Drag and drop state
+  const [draggingFolder, setDraggingFolder] = useState<any | null>(null)
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
+  const [dragOverRoot, setDragOverRoot] = useState(false)
+
+  // Floating Context Menu state
+  const [folderContextMenu, setFolderContextMenu] = useState<{ x: number; y: number; folder: any } | null>(null)
+
+  // Governed Deletion State
+  const [folderDeleteTarget, setFolderDeleteTarget] = useState<any | null>(null)
+  const [folderDepReport, setFolderDepReport] = useState<any | null>(null)
+  const [showFolderDeleteModal, setShowFolderDeleteModal] = useState(false)
+  const [checkingFolderDep, setCheckingFolderDep] = useState(false)
+  const [deletingFolder, setDeletingFolder] = useState(false)
+
+  // Folder Permissions Modal State
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false)
+  const [permFolder, setPermFolder] = useState<any | null>(null)
+  const [permTab, setPermTab] = useState<'users' | 'groups'>('users')
+  const [permInheritance, setPermInheritance] = useState(true)
+  const [permInheritedFrom, setPermInheritedFrom] = useState<string | null>(null)
+  const [permUsers, setPermUsers] = useState<any[]>([])
+  const [permGroups, setPermGroups] = useState<any[]>([])
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserRole, setNewUserRole] = useState('OPERATOR')
+  const [newGroupName, setNewGroupName] = useState('')
+  const [newGroupRole, setNewGroupRole] = useState('OPERATOR')
+  const [loadingPerms, setLoadingPerms] = useState(false)
+  const [savingPerms, setSavingPerms] = useState(false)
+
+  // Current folder live permissions state (for right-pane display)
+  const [currentFolderPerms, setCurrentFolderPerms] = useState<any | null>(null)
+  const [loadingCurrentFolderPerms, setLoadingCurrentFolderPerms] = useState(false)
 
 
   // Audit Logs State
@@ -1178,22 +1217,279 @@ export default function OrganizationTenantStudio({
     } catch {}
   }
 
-  const handleDeleteFolder = async (folderId: string) => {
-    if (!folderId || !selectedFolderTenantId) return
+  // Helper to prevent hierarchy cycles
+  const isDescendantFolder = (nodes: any[], ancestorId: string, checkId: string): boolean => {
+    const findNode = (list: any[], id: string): any => {
+      for (const item of list) {
+        if (item.id === id) return item
+        if (item.children && item.children.length > 0) {
+          const found = findNode(item.children, id)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    const ancestor = findNode(nodes, ancestorId)
+    if (!ancestor || !ancestor.children) return false
+    const hasChild = (list: any[]): boolean => {
+      for (const c of list) {
+        if (c.id === checkId) return true
+        if (c.children && hasChild(c.children)) return true
+      }
+      return false
+    }
+    return hasChild(ancestor.children)
+  }
+
+  // Handle Drag & Drop move
+  const handleDropFolder = async (targetParentId: string | null) => {
+    if (!draggingFolder || !selectedFolderTenantId) return
+    const sourceId = draggingFolder.id
+    if (sourceId === targetParentId) {
+      setDraggingFolder(null)
+      setDragOverFolderId(null)
+      setDragOverRoot(false)
+      return
+    }
+    if (targetParentId && isDescendantFolder(folderTreeData, sourceId, targetParentId)) {
+      setFolderActionMsg('Hierarchy cycle prevented: Cannot move a folder into its own subfolder.')
+      setTimeout(() => setFolderActionMsg(null), 5000)
+      setDraggingFolder(null)
+      setDragOverFolderId(null)
+      setDragOverRoot(false)
+      return
+    }
     try {
-      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${folderId}`, {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${sourceId}/move`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ parent_folder_id: targetParentId }),
+      })
+      if (r.ok) {
+        loadTenantFolders(selectedFolderTenantId)
+      } else {
+        const err = await r.json()
+        setFolderActionMsg(err.detail || 'Failed to move folder.')
+        setTimeout(() => setFolderActionMsg(null), 5000)
+      }
+    } catch (err: any) {
+      setFolderActionMsg(err.message || 'Failed to move folder.')
+      setTimeout(() => setFolderActionMsg(null), 5000)
+    } finally {
+      setDraggingFolder(null)
+      setDragOverFolderId(null)
+      setDragOverRoot(false)
+    }
+  }
+
+  // Right-Click Context Menu Handler
+  const handleFolderContextMenu = (e: React.MouseEvent, node: any) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setSelectedFolderNode(node)
+    const menuWidth = 230
+    const menuHeight = 290
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 10)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 10)
+    setFolderContextMenu({ x, y, folder: node })
+  }
+
+  // Folder Permissions & Access Management
+  const loadFolderPermissions = async (folderId: string, tenantId: string = selectedFolderTenantId) => {
+    if (!folderId || !tenantId) return
+    setLoadingCurrentFolderPerms(true)
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${tenantId}/folders/${folderId}/permissions`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (r.ok) {
+        const data = await r.json()
+        setCurrentFolderPerms(data)
+      }
+    } catch {} finally {
+      setLoadingCurrentFolderPerms(false)
+    }
+  }
+
+  useEffect(() => {
+    if (selectedFolderNode && selectedFolderTenantId) {
+      loadFolderPermissions(selectedFolderNode.id, selectedFolderTenantId)
+    } else {
+      setCurrentFolderPerms(null)
+    }
+  }, [selectedFolderNode?.id, selectedFolderTenantId])
+
+  const openPermissionsModal = async (folder: any, tab: 'users' | 'groups' = 'users') => {
+    setPermFolder(folder)
+    setPermTab(tab)
+    setShowPermissionsModal(true)
+    setLoadingPerms(true)
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${folder.id}/permissions`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (r.ok) {
+        const data = await r.json()
+        setPermInheritance(data.inheritance !== false)
+        setPermInheritedFrom(data.inherited_from || null)
+        setPermUsers(data.users || [])
+        setPermGroups(data.groups || [])
+      }
+    } catch {} finally {
+      setLoadingPerms(false)
+    }
+  }
+
+  const handleSavePermissions = async () => {
+    if (!permFolder || !selectedFolderTenantId) return
+    setSavingPerms(true)
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${permFolder.id}/permissions`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          inheritance: permInheritance,
+          rbac_mode: permInheritance ? 'INHERITED' : 'CUSTOM',
+          users: permUsers,
+          groups: permGroups,
+        }),
+      })
+      if (r.ok) {
+        if (selectedFolderNode?.id === permFolder.id) {
+          loadFolderPermissions(permFolder.id, selectedFolderTenantId)
+        }
+        setShowPermissionsModal(false)
+      }
+    } catch {} finally {
+      setSavingPerms(false)
+    }
+  }
+
+  const handleToggleFolderInheritance = async (folder: any) => {
+    if (!folder || !selectedFolderTenantId) return
+    const curInheritance = folder.settings?.inheritance !== false
+    const nextInheritance = !curInheritance
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${folder.id}/permissions`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          inheritance: nextInheritance,
+          rbac_mode: nextInheritance ? 'INHERITED' : 'CUSTOM',
+          users: folder.settings?.users || [],
+          groups: folder.settings?.groups || [],
+        }),
+      })
+      if (r.ok) {
+        loadTenantFolders(selectedFolderTenantId)
+        if (selectedFolderNode?.id === folder.id) {
+          loadFolderPermissions(folder.id, selectedFolderTenantId)
+        }
+      }
+    } catch {}
+  }
+
+  const handleAddPermUser = () => {
+    if (!newUserEmail.trim()) return
+    const email = newUserEmail.trim().toLowerCase()
+    if (permUsers.some(u => u.email.toLowerCase() === email)) return
+    setPermUsers([...permUsers, { email, role: newUserRole, is_inherited: false }])
+    setNewUserEmail('')
+  }
+
+  const handleRemovePermUser = (email: string) => {
+    setPermUsers(permUsers.filter(u => u.email !== email))
+  }
+
+  const handleAddPermGroup = () => {
+    if (!newGroupName.trim()) return
+    const name = newGroupName.trim()
+    if (permGroups.some(g => g.name.toLowerCase() === name.toLowerCase())) return
+    setPermGroups([...permGroups, { name, role: newGroupRole, is_inherited: false }])
+    setNewGroupName('')
+  }
+
+  const handleRemovePermGroup = (name: string) => {
+    setPermGroups(permGroups.filter(g => g.name !== name))
+  }
+
+  // Governed Deletion Dependency Inspection
+  const checkAndInitiateFolderDeletion = async (folder: any) => {
+    if (!folder || !selectedFolderTenantId) return
+    setFolderDeleteTarget(folder)
+    setCheckingFolderDep(true)
+    setShowFolderDeleteModal(true)
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${folder.id}/dependencies`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (r.ok) {
+        const report = await r.json()
+        setFolderDepReport(report)
+      } else {
+        const err = await r.json()
+        setFolderDepReport({
+          folder_id: folder.id,
+          folder_name: folder.name,
+          can_delete: false,
+          deletion_blocker_reason: err.detail || 'Unable to inspect folder dependencies.',
+          subfolders_count: 0,
+          projects_count: 0,
+          subfolders: [],
+          projects: [],
+        })
+      }
+    } catch {
+      setFolderDepReport({
+        folder_id: folder.id,
+        folder_name: folder.name,
+        can_delete: false,
+        deletion_blocker_reason: 'Network error inspecting folder dependencies.',
+        subfolders_count: 0,
+        projects_count: 0,
+        subfolders: [],
+        projects: [],
+      })
+    } finally {
+      setCheckingFolderDep(false)
+    }
+  }
+
+  const confirmFolderDeletion = async () => {
+    if (!folderDeleteTarget || !selectedFolderTenantId) return
+    setDeletingFolder(true)
+    try {
+      const r = await fetch(`/api/v1/platform/tenants/${selectedFolderTenantId}/folders/${folderDeleteTarget.id}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       if (r.status === 409) {
         const err = await r.json()
-        setFolderActionMsg(err.detail || 'Cannot delete folder with contents.')
+        setFolderActionMsg(err.detail || 'Cannot delete folder with active dependencies.')
         setTimeout(() => setFolderActionMsg(null), 5000)
       } else if (r.ok) {
-        setSelectedFolderNode(null)
+        setShowFolderDeleteModal(false)
+        setFolderDeleteTarget(null)
+        setFolderDepReport(null)
+        if (selectedFolderNode?.id === folderDeleteTarget.id) {
+          setSelectedFolderNode(null)
+        }
         loadTenantFolders(selectedFolderTenantId)
       }
-    } catch {}
+    } catch (err: any) {
+      setFolderActionMsg(err.message || 'Deletion error.')
+    } finally {
+      setDeletingFolder(false)
+    }
   }
 
   // Handle Save Deployment Configuration (DEF-12)
@@ -2971,9 +3267,53 @@ export default function OrganizationTenantStudio({
                       maxHeight: 560,
                     }}
                   >
-                    <div style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'color-mix(in srgb, var(--foreground) 60%, transparent)', padding: '4px 6px' }}>
-                      Folder Hierarchy Tree
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 6px' }}>
+                      <span style={{ fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700, color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                        Folder Hierarchy Tree
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: 'color-mix(in srgb, var(--foreground) 50%, transparent)' }}>
+                        Right-click or drag
+                      </span>
                     </div>
+
+                    {/* Drag Root Drop Zone Target */}
+                    {draggingFolder && (
+                      <div
+                        onDragOver={e => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setDragOverRoot(true)
+                        }}
+                        onDragLeave={e => {
+                          e.stopPropagation()
+                          setDragOverRoot(false)
+                        }}
+                        onDrop={e => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDropFolder(null)
+                        }}
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: dragOverRoot ? '2px dashed #0284c7' : '2px dashed var(--border)',
+                          background: dragOverRoot ? 'rgba(2, 132, 199, 0.2)' : 'color-mix(in srgb, var(--card) 60%, transparent)',
+                          color: dragOverRoot ? '#0284c7' : 'var(--foreground)',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          textAlign: 'center',
+                          cursor: 'copy',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          transition: 'all 0.15s ease-in-out',
+                        }}
+                      >
+                        <Folder size={14} />
+                        <span>Drop here to move "{draggingFolder.name}" to Root Level</span>
+                      </div>
+                    )}
 
                     {loadingFolders ? (
                       <div style={{ padding: 24, textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', fontSize: '0.82rem' }}>
@@ -2990,11 +3330,43 @@ export default function OrganizationTenantStudio({
                             const isExpanded = folderExpandedIds[node.id] !== false
                             const isSelected = selectedFolderNode?.id === node.id
                             const hasChildren = Array.isArray(node.children) && node.children.length > 0
+                            const isDraggingThis = draggingFolder?.id === node.id
+                            const isDragOverThis = dragOverFolderId === node.id
 
                             return (
                               <div key={node.id} style={{ display: 'flex', flexDirection: 'column' }}>
                                 <div
+                                  draggable={true}
+                                  onDragStart={e => {
+                                    e.dataTransfer.setData('text/plain', node.id)
+                                    setDraggingFolder(node)
+                                  }}
+                                  onDragEnd={() => {
+                                    setDraggingFolder(null)
+                                    setDragOverFolderId(null)
+                                    setDragOverRoot(false)
+                                  }}
+                                  onDragOver={e => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    if (draggingFolder && draggingFolder.id !== node.id) {
+                                      setDragOverFolderId(node.id)
+                                    }
+                                  }}
+                                  onDragLeave={e => {
+                                    e.stopPropagation()
+                                    if (dragOverFolderId === node.id) {
+                                      setDragOverFolderId(null)
+                                    }
+                                  }}
+                                  onDrop={e => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleDropFolder(node.id)
+                                  }}
                                   onClick={() => setSelectedFolderNode(node)}
+                                  onContextMenu={e => handleFolderContextMenu(e, node)}
+                                  title="Right-click for options, drag to move"
                                   style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -3002,14 +3374,20 @@ export default function OrganizationTenantStudio({
                                     padding: '6px 8px',
                                     paddingLeft: depth * 14 + 6,
                                     borderRadius: 6,
-                                    background: isSelected
+                                    opacity: isDraggingThis ? 0.45 : 1,
+                                    background: isDragOverThis
+                                      ? 'rgba(2, 132, 199, 0.22)'
+                                      : isSelected
                                       ? 'color-mix(in srgb, var(--primary, #0284c7) 18%, transparent)'
                                       : 'transparent',
-                                    border: isSelected
+                                    border: isDragOverThis
+                                      ? '2px dashed #0284c7'
+                                      : isSelected
                                       ? '1px solid color-mix(in srgb, var(--primary, #0284c7) 40%, transparent)'
                                       : '1px solid transparent',
                                     cursor: 'pointer',
                                     marginBottom: 2,
+                                    transition: 'all 0.15s ease',
                                   }}
                                 >
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, overflow: 'hidden' }}>
@@ -3144,7 +3522,27 @@ export default function OrganizationTenantStudio({
                             </button>
 
                             <button
-                              onClick={() => handleDeleteFolder(selectedFolderNode.id)}
+                              onClick={() => openPermissionsModal(selectedFolderNode, 'users')}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border)',
+                                background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                                color: 'var(--foreground)',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <Shield size={13} style={{ color: '#BA9731' }} />
+                              <span>Access & Roles</span>
+                            </button>
+
+                            <button
+                              onClick={() => checkAndInitiateFolderDeletion(selectedFolderNode)}
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -3195,105 +3593,155 @@ export default function OrganizationTenantStudio({
 
                         {/* RBAC & Inheritance Governance (DEF-10) */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Shield size={15} style={{ color: '#BA9731' }} />
-                              Folder Permissions & Security Governance (RBAC)
-                            </h4>
-                            <div style={{ display: 'flex', gap: 6 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                            <div>
+                              <h4 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 700, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <Shield size={15} style={{ color: '#BA9731' }} />
+                                Folder Permissions & Security Governance (RBAC)
+                              </h4>
+                              {currentFolderPerms?.inherited_from && currentFolderPerms.inheritance !== false && (
+                                <div style={{ fontSize: '0.72rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)', marginTop: 2 }}>
+                                  Policy inherited from: <strong style={{ color: 'var(--foreground)' }}>{currentFolderPerms.inherited_from}</strong>
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                               <button
-                                onClick={() => setFolderRbacInherited(true)}
+                                onClick={() => handleToggleFolderInheritance(selectedFolderNode)}
                                 style={{
                                   padding: '4px 10px',
                                   borderRadius: 6,
                                   border: '1px solid var(--border)',
-                                  background: folderRbacInherited ? 'rgba(2, 132, 199, 0.15)' : 'transparent',
-                                  color: folderRbacInherited ? '#0284c7' : 'var(--foreground)',
+                                  background: (currentFolderPerms?.inheritance !== false) ? 'rgba(2, 132, 199, 0.15)' : 'transparent',
+                                  color: (currentFolderPerms?.inheritance !== false) ? '#0284c7' : 'var(--foreground)',
                                   fontSize: '0.72rem',
                                   fontWeight: 600,
                                   cursor: 'pointer',
                                 }}
                               >
-                                Inherited from Parent
+                                {currentFolderPerms?.inheritance !== false ? '✓ Inherited from Parent' : 'Inherit from Parent'}
                               </button>
                               <button
-                                onClick={() => setFolderRbacInherited(false)}
+                                onClick={() => handleToggleFolderInheritance(selectedFolderNode)}
                                 style={{
                                   padding: '4px 10px',
                                   borderRadius: 6,
                                   border: '1px solid var(--border)',
-                                  background: !folderRbacInherited ? 'rgba(2, 132, 199, 0.15)' : 'transparent',
-                                  color: !folderRbacInherited ? '#0284c7' : 'var(--foreground)',
+                                  background: (currentFolderPerms?.inheritance === false) ? 'rgba(2, 132, 199, 0.15)' : 'transparent',
+                                  color: (currentFolderPerms?.inheritance === false) ? '#0284c7' : 'var(--foreground)',
                                   fontSize: '0.72rem',
                                   fontWeight: 600,
                                   cursor: 'pointer',
                                 }}
                               >
-                                Custom Scoped Roles
+                                Custom Roles
+                              </button>
+                              <button
+                                onClick={() => openPermissionsModal(selectedFolderNode, 'users')}
+                                style={{
+                                  padding: '4px 10px',
+                                  borderRadius: 6,
+                                  border: '1px solid var(--primary, #0284c7)',
+                                  background: 'var(--primary, #0284c7)',
+                                  color: '#fff',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Manage Users / Groups
                               </button>
                             </div>
                           </div>
 
-                          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem' }}>
-                            <thead>
-                              <tr style={{ borderBottom: '1px solid var(--border)', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
-                                <th style={{ padding: '8px 10px' }}>Principal (User / Group)</th>
-                                <th style={{ padding: '8px 10px' }}>Role</th>
-                                <th style={{ padding: '8px 10px' }}>Inheritance</th>
-                                <th style={{ padding: '8px 10px' }}>Access Scope</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
-                                <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)' }}>
-                                  ratheesh.ramadasan@gmail.com
-                                </td>
-                                <td style={{ padding: '8px 10px' }}>
-                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700, fontSize: '0.7rem' }}>
-                                    Admin (Full Control)
-                                  </span>
-                                </td>
-                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                                  {folderRbacInherited ? 'Inherited from Root' : 'Direct Binding'}
-                                </td>
-                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                                  Read, Write, Execute, Delete
-                                </td>
-                              </tr>
-                              <tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
-                                <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)' }}>
-                                  Security & Compliance Auditor Group
-                                </td>
-                                <td style={{ padding: '8px 10px' }}>
-                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7', fontWeight: 700, fontSize: '0.7rem' }}>
-                                    Auditor
-                                  </span>
-                                </td>
-                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                                  Inherited from Tenant
-                                </td>
-                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                                  Read-Only Audit Trail
-                                </td>
-                              </tr>
-                              <tr style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
-                                <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)' }}>
-                                  Operations Automation Service Account
-                                </td>
-                                <td style={{ padding: '8px 10px' }}>
-                                  <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', fontWeight: 700, fontSize: '0.7rem' }}>
-                                    Operator
-                                  </span>
-                                </td>
-                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                                  Inherited from Root
-                                </td>
-                                <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                                  Workflow Trigger & Execution
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                          {loadingCurrentFolderPerms ? (
+                            <div style={{ padding: 16, textAlign: 'center', fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                              Loading folder access policies...
+                            </div>
+                          ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.78rem' }}>
+                              <thead>
+                                <tr style={{ borderBottom: '1px solid var(--border)', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                                  <th style={{ padding: '8px 10px' }}>Principal (User / Group)</th>
+                                  <th style={{ padding: '8px 10px' }}>Type</th>
+                                  <th style={{ padding: '8px 10px' }}>Role</th>
+                                  <th style={{ padding: '8px 10px' }}>Inheritance</th>
+                                  <th style={{ padding: '8px 10px' }}>Access Scope</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(() => {
+                                  const users = currentFolderPerms?.effective_users || currentFolderPerms?.users || []
+                                  const groups = currentFolderPerms?.effective_groups || currentFolderPerms?.groups || []
+                                  if (users.length === 0 && groups.length === 0) {
+                                    return (
+                                      <tr>
+                                        <td colSpan={5} style={{ padding: '20px 10px', textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                                          No custom principals configured for this folder. Standard Tenant Administrators retain full governance.
+                                        </td>
+                                      </tr>
+                                    )
+                                  }
+                                  return (
+                                    <>
+                                      {users.map((u: any, idx: number) => {
+                                        const role = (u.role || 'OPERATOR').toUpperCase()
+                                        const roleColor = role === 'ADMIN' ? '#10b981' : role === 'DEVELOPER' ? '#0284c7' : role === 'OPERATOR' ? '#a855f7' : '#64748b'
+                                        return (
+                                          <tr key={`user-${idx}`} style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
+                                            <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                              <Users size={13} style={{ color: '#0284c7' }} />
+                                              <span>{u.email}</span>
+                                            </td>
+                                            <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                              User
+                                            </td>
+                                            <td style={{ padding: '8px 10px' }}>
+                                              <span style={{ padding: '2px 8px', borderRadius: 6, background: `${roleColor}25`, color: roleColor, fontWeight: 700, fontSize: '0.7rem' }}>
+                                                {role}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                              {u.is_inherited ? 'Inherited' : 'Direct Assignment'}
+                                            </td>
+                                            <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                              {role === 'ADMIN' ? 'Read, Write, Execute, Delete' : role === 'DEVELOPER' ? 'Read, Write, Test' : role === 'OPERATOR' ? 'Trigger & Execute' : 'Read-Only'}
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                      {groups.map((g: any, idx: number) => {
+                                        const role = (g.role || 'OPERATOR').toUpperCase()
+                                        const roleColor = role === 'ADMIN' ? '#10b981' : role === 'DEVELOPER' ? '#0284c7' : role === 'OPERATOR' ? '#a855f7' : '#64748b'
+                                        return (
+                                          <tr key={`group-${idx}`} style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)' }}>
+                                            <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                              <Shield size={13} style={{ color: '#BA9731' }} />
+                                              <span>{g.name}</span>
+                                            </td>
+                                            <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                              Security Group
+                                            </td>
+                                            <td style={{ padding: '8px 10px' }}>
+                                              <span style={{ padding: '2px 8px', borderRadius: 6, background: `${roleColor}25`, color: roleColor, fontWeight: 700, fontSize: '0.7rem' }}>
+                                                {role}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                              {g.is_inherited ? 'Inherited' : 'Direct Assignment'}
+                                            </td>
+                                            <td style={{ padding: '8px 10px', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                                              {role === 'ADMIN' ? 'Read, Write, Execute, Delete' : role === 'DEVELOPER' ? 'Read, Write, Test' : role === 'OPERATOR' ? 'Trigger & Execute' : 'Read-Only'}
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </>
+                                  )
+                                })()}
+                              </tbody>
+                            </table>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -7081,6 +7529,751 @@ export default function OrganizationTenantStudio({
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Floating Portal Folder Right-Click Context Menu */}
+      {folderContextMenu && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99998,
+          }}
+          onClick={() => setFolderContextMenu(null)}
+          onContextMenu={e => {
+            e.preventDefault()
+            setFolderContextMenu(null)
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              top: folderContextMenu.y,
+              left: folderContextMenu.x,
+              zIndex: 99999,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
+              minWidth: 220,
+              padding: '6px 0',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div style={{ padding: '6px 14px 8px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Folder size={14} style={{ color: '#0284c7' }} />
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--foreground)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {folderContextMenu.folder.name}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                setCreateFolderParentId(folderContextMenu.folder.id)
+                setNewFolderName('')
+                setNewFolderDesc('')
+                setShowCreateFolderModal(true)
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <FolderPlus size={14} style={{ color: '#0284c7' }} /> New Subfolder
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingFolderNode(folderContextMenu.folder)
+                setEditFolderName(folderContextMenu.folder.name)
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Edit3 size={14} /> Rename Folder
+            </button>
+
+            <button
+              onClick={() => {
+                setMovingFolderNode(folderContextMenu.folder)
+                setMoveTargetParentId('')
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Move size={14} /> Move Folder
+            </button>
+
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+
+            <button
+              onClick={() => {
+                openPermissionsModal(folderContextMenu.folder, 'users')
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Users size={14} style={{ color: '#0284c7' }} /> Add / Remove Users
+            </button>
+
+            <button
+              onClick={() => {
+                openPermissionsModal(folderContextMenu.folder, 'groups')
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Shield size={14} style={{ color: '#BA9731' }} /> Add / Remove Groups
+            </button>
+
+            <button
+              onClick={() => {
+                handleToggleFolderInheritance(folderContextMenu.folder)
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: 'var(--foreground)', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Link2 size={14} />
+              <span>
+                {folderContextMenu.folder.settings?.inheritance !== false ? 'Inherit: ON (Click to Break)' : 'Inherit: OFF (Click to Enable)'}
+              </span>
+            </button>
+
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+
+            <button
+              onClick={() => {
+                checkAndInitiateFolderDeletion(folderContextMenu.folder)
+                setFolderContextMenu(null)
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.82rem', textAlign: 'left', cursor: 'pointer' }}
+            >
+              <Trash2 size={14} /> Delete Folder
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal: Governed Folder Deletion & Dependency Inspection */}
+      {showFolderDeleteModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.68)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 480,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: '0 24px 48px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {folderDepReport && !folderDepReport.can_delete ? (
+                  <ShieldAlert size={20} style={{ color: '#ef4444' }} />
+                ) : (
+                  <Trash2 size={20} style={{ color: '#ef4444' }} />
+                )}
+                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                  Governed Folder Deletion
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFolderDeleteModal(false)
+                  setFolderDeleteTarget(null)
+                  setFolderDepReport(null)
+                }}
+                style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div>
+              <div style={{ fontSize: '0.82rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                Target Folder:
+              </div>
+              <div style={{ fontSize: '0.98rem', fontWeight: 700, color: 'var(--foreground)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Folder size={16} style={{ color: '#0284c7' }} />
+                {folderDeleteTarget?.name}
+              </div>
+            </div>
+
+            {checkingFolderDep ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', fontSize: '0.84rem' }}>
+                <RefreshCw size={20} style={{ margin: '0 auto 8px auto', animation: 'spin 1.5s linear infinite' }} />
+                <div>Inspecting folder hierarchy and dependent assets...</div>
+              </div>
+            ) : folderDepReport && !folderDepReport.can_delete ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Blocked Alert Banner */}
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(239, 68, 68, 0.12)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', fontWeight: 700, fontSize: '0.84rem' }}>
+                    <AlertTriangle size={16} />
+                    <span>DELETION BLOCKED: DEPENDENCIES DETECTED</span>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--foreground)', lineHeight: 1.4 }}>
+                    {folderDepReport.deletion_blocker_reason}
+                  </div>
+                </div>
+
+                {/* Itemized Dependency Breakdown */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {folderDepReport.subfolders_count > 0 && (
+                    <div style={{ padding: '8px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', marginBottom: 4 }}>
+                        Dependent Subfolders ({folderDepReport.subfolders_count}):
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {folderDepReport.subfolders?.map((s: any) => (
+                          <span
+                            key={s.id}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: 'rgba(2, 132, 199, 0.15)',
+                              color: '#0284c7',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            📁 {s.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {folderDepReport.projects_count > 0 && (
+                    <div style={{ padding: '8px 12px', borderRadius: 8, background: 'color-mix(in srgb, var(--card) 60%, transparent)', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', marginBottom: 4 }}>
+                        Dependent Automation Projects ({folderDepReport.projects_count}):
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {folderDepReport.projects?.map((p: any) => (
+                          <span
+                            key={p.id}
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              background: 'rgba(168, 85, 247, 0.15)',
+                              color: '#a855f7',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            ⚡ {p.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', fontStyle: 'italic' }}>
+                  Safety Governance: You must move, reassign, or delete all dependent subfolders and projects before this folder can be deleted.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#10b981', fontWeight: 700, fontSize: '0.84rem' }}>
+                    <Check size={16} />
+                    <span>ZERO DEPENDENCIES DETECTED</span>
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--foreground)' }}>
+                    This folder contains 0 child subfolders and 0 active projects. It is safe to permanently delete.
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                  Are you sure you want to delete this folder? This action is logged in the platform audit trail.
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFolderDeleteModal(false)
+                  setFolderDeleteTarget(null)
+                  setFolderDepReport(null)
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                  color: 'var(--foreground)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                }}
+              >
+                {folderDepReport && !folderDepReport.can_delete ? 'Close' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                disabled={Boolean(!folderDepReport?.can_delete || checkingFolderDep || deletingFolder)}
+                onClick={confirmFolderDeletion}
+                title={folderDepReport && !folderDepReport.can_delete ? 'Cannot delete: folder contains active dependencies' : 'Confirm deletion'}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: folderDepReport?.can_delete ? 'pointer' : 'not-allowed',
+                  opacity: folderDepReport?.can_delete ? 1 : 0.45,
+                  fontSize: '0.82rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Trash2 size={14} />
+                <span>{deletingFolder ? 'Deleting...' : 'Confirm & Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Folder Permissions & Access Governance (RBAC) */}
+      {showPermissionsModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.68)',
+            backdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 540,
+              background: 'var(--card, #1e293b)',
+              border: '1px solid var(--border)',
+              borderRadius: 14,
+              padding: 24,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+              boxShadow: '0 24px 48px rgba(0,0,0,0.4)',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Shield size={20} style={{ color: '#BA9731' }} />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: 'var(--foreground)' }}>
+                    Folder Access & RBAC Governance
+                  </h3>
+                  <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 65%, transparent)', marginTop: 2 }}>
+                    Folder: <strong>{permFolder?.name}</strong>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPermissionsModal(false)}
+                style={{ background: 'transparent', border: 'none', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {loadingPerms ? (
+              <div style={{ padding: 36, textAlign: 'center', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', fontSize: '0.84rem' }}>
+                <RefreshCw size={20} style={{ margin: '0 auto 8px auto', animation: 'spin 1.5s linear infinite' }} />
+                <div>Loading folder access policies...</div>
+              </div>
+            ) : (
+              <>
+                {/* Inheritance Toggle Banner */}
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    background: permInheritance ? 'rgba(2, 132, 199, 0.12)' : 'color-mix(in srgb, var(--card) 60%, transparent)',
+                    border: permInheritance ? '1px solid rgba(2, 132, 199, 0.35)' : '1px solid var(--border)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--foreground)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Link2 size={15} style={{ color: permInheritance ? '#0284c7' : 'color-mix(in srgb, var(--foreground) 60%, transparent)' }} />
+                      <span>Inherit Permissions from Parent Hierarchy</span>
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)', marginTop: 2 }}>
+                      {permInheritance
+                        ? `Active policy inherited from: ${permInheritedFrom || 'Tenant Root Policy'}`
+                        : 'Custom scoped access enabled. Direct folder bindings apply.'}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setPermInheritance(!permInheritance)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: permInheritance ? '#0284c7' : 'color-mix(in srgb, var(--foreground) 10%, transparent)',
+                      color: permInheritance ? '#fff' : 'var(--foreground)',
+                      fontSize: '0.74rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {permInheritance ? 'Inheriting (ON)' : 'Custom (OFF)'}
+                  </button>
+                </div>
+
+            {/* Tab Navigation: Users vs Groups */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setPermTab('users')}
+                style={{
+                  padding: '8px 14px',
+                  border: 'none',
+                  borderBottom: permTab === 'users' ? '2px solid var(--primary, #0284c7)' : '2px solid transparent',
+                  background: 'transparent',
+                  color: permTab === 'users' ? 'var(--primary, #0284c7)' : 'color-mix(in srgb, var(--foreground) 70%, transparent)',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Users size={14} />
+                <span>Users ({permUsers.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPermTab('groups')}
+                style={{
+                  padding: '8px 14px',
+                  border: 'none',
+                  borderBottom: permTab === 'groups' ? '2px solid var(--primary, #0284c7)' : '2px solid transparent',
+                  background: 'transparent',
+                  color: permTab === 'groups' ? 'var(--primary, #0284c7)' : 'color-mix(in srgb, var(--foreground) 70%, transparent)',
+                  fontWeight: 700,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <Shield size={14} />
+                <span>Security Groups ({permGroups.length})</span>
+              </button>
+            </div>
+
+            {/* Users Tab Content */}
+            {permTab === 'users' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Add User Row */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="email"
+                    placeholder="user@architectiq.io"
+                    value={newUserEmail}
+                    onChange={e => setNewUserEmail(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddPermUser()
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '7px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.82rem',
+                    }}
+                  />
+                  <select
+                    value={newUserRole}
+                    onChange={e => setNewUserRole(e.target.value)}
+                    style={{
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="DEVELOPER">DEVELOPER</option>
+                    <option value="OPERATOR">OPERATOR</option>
+                    <option value="VIEWER">VIEWER</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddPermUser}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'var(--primary, #0284c7)',
+                      color: '#fff',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {/* Users List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+                  {permUsers.length === 0 ? (
+                    <div style={{ padding: 16, textAlign: 'center', fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                      No direct users assigned.
+                    </div>
+                  ) : (
+                    permUsers.map((u, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '7px 12px',
+                          borderRadius: 8,
+                          background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Users size={14} style={{ color: '#0284c7' }} />
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                            {u.email}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(2, 132, 199, 0.15)', color: '#0284c7' }}>
+                            {u.role}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePermUser(u.email)}
+                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 2 }}
+                        >
+                          <UserMinus size={14} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Groups Tab Content */}
+            {permTab === 'groups' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Add Group Row */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. Treasury Operations Group"
+                    value={newGroupName}
+                    onChange={e => setNewGroupName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleAddPermGroup()
+                      }
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '7px 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.82rem',
+                    }}
+                  />
+                  <select
+                    value={newGroupRole}
+                    onChange={e => setNewGroupRole(e.target.value)}
+                    style={{
+                      padding: '7px 10px',
+                      borderRadius: 8,
+                      border: '1px solid var(--border)',
+                      background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                      color: 'var(--foreground)',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="DEVELOPER">DEVELOPER</option>
+                    <option value="OPERATOR">OPERATOR</option>
+                    <option value="VIEWER">VIEWER</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddPermGroup}
+                    style={{
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: 'var(--primary, #0284c7)',
+                      color: '#fff',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Add
+                  </button>
+                </div>
+
+                {/* Groups List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto' }}>
+                  {permGroups.length === 0 ? (
+                    <div style={{ padding: 16, textAlign: 'center', fontSize: '0.78rem', color: 'color-mix(in srgb, var(--foreground) 60%, transparent)' }}>
+                      No direct groups assigned.
+                    </div>
+                  ) : (
+                    permGroups.map((g, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '7px 12px',
+                          borderRadius: 8,
+                          background: 'color-mix(in srgb, var(--card) 60%, transparent)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Shield size={14} style={{ color: '#BA9731' }} />
+                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--foreground)' }}>
+                            {g.name}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(186, 151, 49, 0.2)', color: '#BA9731' }}>
+                            {g.role}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePermGroup(g.name)}
+                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 2 }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+              </>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => setShowPermissionsModal(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'color-mix(in srgb, var(--foreground) 6%, transparent)',
+                  color: 'var(--foreground)',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={savingPerms}
+                onClick={handleSavePermissions}
+                style={{
+                  padding: '8px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: 'var(--primary, #0284c7)',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                }}
+              >
+                {savingPerms ? 'Saving...' : 'Save Permissions'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
