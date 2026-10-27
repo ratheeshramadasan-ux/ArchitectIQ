@@ -147,7 +147,7 @@ export default function OrganizationTenantStudio({
   }, [activeTab])
 
   // Inner card sub-tabs for Organization & Tenant
-  const [activeSubTab, setActiveSubTab] = useState<'organization' | 'tenants' | 'folders' | 'folder_strategy' | 'default_settings'>('organization')
+  const [activeSubTab, setActiveSubTab] = useState<'organization' | 'tenants' | 'folders' | 'default_settings'>('organization')
   const [selectedOrgFilter, setSelectedOrgFilter] = useState<string>('ALL')
 
   // Search & Filter
@@ -1862,8 +1862,7 @@ export default function OrganizationTenantStudio({
                   { id: 'organization', label: 'Organization', icon: Boxes },
                   { id: 'tenants', label: 'Tenants', icon: Building2 },
                   { id: 'folders', label: 'Folders & Subfolders', icon: FolderTree },
-                  { id: 'folder_strategy', label: 'Folder Strategy', icon: GitMerge },
-                  { id: 'default_settings', label: 'Default Settings', icon: Sliders },
+                  { id: 'default_settings', label: 'Settings', icon: Sliders },
                 ].map(tab => {
                   const Icon = tab.icon
                   const isAct = activeSubTab === tab.id
@@ -3312,119 +3311,128 @@ export default function OrganizationTenantStudio({
             )}
 
 
-            {/* Sub-Tab 3: Folder Strategy */}
-            {activeSubTab === 'folder_strategy' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--foreground)' }}>
-                  Folder Hierarchy & Environment Strategies
-                </h3>
-                <p style={{ margin: 0, fontSize: '0.84rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
-                  Configure how folders map across canonical environments.
-                </p>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-                  {/* Strategy 1 */}
-                  <div
-                    onClick={() => setSelectedStrategy('projects_contain_envs')}
-                    style={{
-                      padding: 18,
-                      borderRadius: 12,
-                      border: `2px solid ${selectedStrategy === 'projects_contain_envs' ? '#0284c7' : 'var(--border)'}`,
-                      background: selectedStrategy === 'projects_contain_envs' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--foreground)' }}>
-                        Strategy 1: Projects Contain Environments
-                      </div>
-                      <input
-                        type="radio"
-                        checked={selectedStrategy === 'projects_contain_envs'}
-                        onChange={() => setSelectedStrategy('projects_contain_envs')}
-                      />
-                    </div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', lineHeight: 1.5 }}>
-                      Workflows and automations live in a unified project folder and are promoted through DEV, TEST, UAT, and PROD bindings.
-                    </p>
-                    <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(2, 132, 199, 0.12)', fontSize: '0.76rem', color: '#0284c7', fontWeight: 600 }}>
-                      Recommended for Continuous Delivery and Enterprise Banking.
-                    </div>
+            {/* Sub-Tab 4: Settings (Folder Strategy & Provisioning Defaults) */}
+            {activeSubTab === 'default_settings' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 24, padding: '8px 0' }}>
+                {/* Section A: Folder Hierarchy & Environment Strategies */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <GitMerge size={18} style={{ color: 'var(--primary, #0284c7)' }} />
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                      Folder Hierarchy & Promotion Strategy
+                    </h3>
                   </div>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)' }}>
+                    Configure how folders and workspace hierarchies promote across canonical environments (DEV, TEST, UAT, PROD).
+                  </p>
 
-                  {/* Strategy 2 */}
-                  <div
-                    onClick={() => setSelectedStrategy('envs_contain_folders')}
-                    style={{
-                      padding: 18,
-                      borderRadius: 12,
-                      border: `2px solid ${selectedStrategy === 'envs_contain_folders' ? '#0284c7' : 'var(--border)'}`,
-                      background: selectedStrategy === 'envs_contain_folders' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--foreground)' }}>
-                        Strategy 2: Environments Contain Folders
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+                    {/* Strategy 1 */}
+                    <div
+                      onClick={() => setSelectedStrategy('projects_contain_envs')}
+                      style={{
+                        padding: 16,
+                        borderRadius: 12,
+                        border: `2px solid ${selectedStrategy === 'projects_contain_envs' ? '#0284c7' : 'var(--border)'}`,
+                        background: selectedStrategy === 'projects_contain_envs' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--foreground)' }}>
+                          Strategy 1: Projects Contain Environments
+                        </div>
+                        <input
+                          type="radio"
+                          name="folderStrategyGroup"
+                          checked={selectedStrategy === 'projects_contain_envs'}
+                          onChange={() => setSelectedStrategy('projects_contain_envs')}
+                        />
                       </div>
-                      <input
-                        type="radio"
-                        checked={selectedStrategy === 'envs_contain_folders'}
-                        onChange={() => setSelectedStrategy('envs_contain_folders')}
-                      />
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', lineHeight: 1.5 }}>
+                        Workflows and automations live in a unified project folder and are promoted through DEV, TEST, UAT, and PROD bindings.
+                      </p>
+                      <div style={{ padding: '8px 10px', borderRadius: 8, background: 'rgba(2, 132, 199, 0.12)', fontSize: '0.76rem', color: '#0284c7', fontWeight: 600 }}>
+                        Recommended for Continuous Delivery and Enterprise Banking.
+                      </div>
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', lineHeight: 1.5 }}>
-                      Each canonical tier maintains an independent folder structure.
-                    </p>
-                    <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--foreground) 8%, transparent)', fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', fontWeight: 600 }}>
-                      Used when strict physical isolation between environments is required.
+
+                    {/* Strategy 2 */}
+                    <div
+                      onClick={() => setSelectedStrategy('envs_contain_folders')}
+                      style={{
+                        padding: 16,
+                        borderRadius: 12,
+                        border: `2px solid ${selectedStrategy === 'envs_contain_folders' ? '#0284c7' : 'var(--border)'}`,
+                        background: selectedStrategy === 'envs_contain_folders' ? 'rgba(2, 132, 199, 0.08)' : 'color-mix(in srgb, var(--card) 40%, transparent)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--foreground)' }}>
+                          Strategy 2: Environments Contain Folders
+                        </div>
+                        <input
+                          type="radio"
+                          name="folderStrategyGroup"
+                          checked={selectedStrategy === 'envs_contain_folders'}
+                          onChange={() => setSelectedStrategy('envs_contain_folders')}
+                        />
+                      </div>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', lineHeight: 1.5 }}>
+                        Each canonical tier maintains an independent folder structure.
+                      </p>
+                      <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--foreground) 8%, transparent)', fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 75%, transparent)', fontWeight: 600 }}>
+                        Used when strict physical isolation between environments is required.
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Sub-Tab 4: Default Settings */}
-            {activeSubTab === 'default_settings' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '8px 0', maxWidth: 700 }}>
-                <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--foreground)' }}>
-                  Tenant Provisioning & Isolation Defaults
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--foreground)' }}>Automatic 5 Canonical Environments</div>
-                      <div style={{ fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                        Automatically provision DEV, TEST, UAT, CANARY, and PROD whenever a new tenant is created.
-                      </div>
-                    </div>
-                    <input type="checkbox" defaultChecked disabled style={{ width: 16, height: 16 }} />
+                {/* Section B: Tenant Provisioning & Isolation Defaults */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid var(--border)', paddingTop: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Sliders size={18} style={{ color: 'var(--primary, #0284c7)' }} />
+                    <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--foreground)' }}>
+                      Tenant Provisioning & Isolation Defaults
+                    </h3>
                   </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--foreground)' }}>Tenant Isolation Model</div>
-                      <div style={{ fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                        Enforce row-level security and tenant boundaries at the database layer.
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 700 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--foreground)' }}>Automatic 5 Canonical Environments</div>
+                        <div style={{ fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                          Automatically provision DEV, TEST, UAT, CANARY, and PROD whenever a new tenant is created.
+                        </div>
                       </div>
+                      <input type="checkbox" defaultChecked disabled style={{ width: 16, height: 16 }} />
                     </div>
-                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#10b981' }}>RLS Enforced</span>
-                  </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--foreground)' }}>Dual-Custody Break Glass Audit Trail</div>
-                      <div style={{ fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
-                        Record all emergency administrative elevations into the immutable platform audit ledger.
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--foreground)' }}>Tenant Isolation Model</div>
+                        <div style={{ fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                          Enforce row-level security and tenant boundaries at the database layer.
+                        </div>
                       </div>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#10b981' }}>RLS Enforced</span>
                     </div>
-                    <input type="checkbox" defaultChecked disabled style={{ width: 16, height: 16 }} />
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: 10, background: 'color-mix(in srgb, var(--card) 50%, transparent)', border: '1px solid var(--border)' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--foreground)' }}>Dual-Custody Break Glass Audit Trail</div>
+                        <div style={{ fontSize: '0.76rem', color: 'color-mix(in srgb, var(--foreground) 70%, transparent)' }}>
+                          Record all emergency administrative elevations into the immutable platform audit ledger.
+                        </div>
+                      </div>
+                      <input type="checkbox" defaultChecked disabled style={{ width: 16, height: 16 }} />
+                    </div>
                   </div>
                 </div>
               </div>

@@ -158,7 +158,7 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     expect(screen.queryByRole('heading', { name: /Create New Tenant/i })).toBeNull()
   })
 
-  it('switches between lower sub-tabs: Organization, Tenants, Folder Strategy, Default Settings', () => {
+  it('switches between lower sub-tabs: Organization, Tenants, Folders & Subfolders, Settings (with Folder Strategy)', () => {
     render(<OrganizationTenantStudio token="test-token" tenant="citibank" />)
 
     // Click Organization
@@ -172,15 +172,16 @@ describe('OrganizationTenantStudio — Enterprise Administration & Setup', () =>
     fireEvent.click(tenantsTab)
     expect(screen.getByRole('button', { name: /Create Tenant/i })).toBeDefined()
 
-    // Click Folder Strategy
-    const folderStrategyTab = screen.getByRole('button', { name: /Folder Strategy/i })
-    fireEvent.click(folderStrategyTab)
+    // Click Folders & Subfolders
+    const foldersTab = screen.getByRole('button', { name: /Folders & Subfolders/i })
+    fireEvent.click(foldersTab)
+    expect(screen.getByRole('button', { name: /New Root Folder/i })).toBeDefined()
+
+    // Click Settings (which includes Folder Strategy and Isolation Defaults)
+    const settingsTab = screen.getByRole('button', { name: /^Settings$/i })
+    fireEvent.click(settingsTab)
     expect(screen.getByText(/Strategy 1: Projects Contain Environments/i)).toBeDefined()
     expect(screen.getByText(/Strategy 2: Environments Contain Folders/i)).toBeDefined()
-
-    // Click Default Settings
-    const defaultSettingsTab = screen.getByRole('button', { name: /Default Settings/i })
-    fireEvent.click(defaultSettingsTab)
     expect(screen.getByText(/Automatic 5 Canonical Environments/i)).toBeDefined()
   })
 
